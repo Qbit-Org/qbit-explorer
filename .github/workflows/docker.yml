@@ -1,4 +1,4 @@
-name: Docker build on tag
+name: Docker images
 env:
   DOCKER_CLI_EXPERIMENTAL: enabled
   TAG_FMT: "^refs/tags/(((.?[0-9]+){3,4}))$"
@@ -11,18 +11,16 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+
       - v[0-9]+.[0-9]+.[0-9]+-*
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: read
 
 jobs:
   test-images:
-    # Always run on tag pushes and all pull requests
-    # A newer event (push or label) on the same pull request cancels this
-    # job's older run. The concurrency is job-level so that build and
-    # tag-latest are never cancelled while they push images, and each tag push
-    # gets its own group.
+    # Runs on every pull request and on v* tags. It builds and tests the images
+    # but never pushes them anywhere. A newer push to the same pull request
+    # cancels this job's older run, and each tag push gets its own group.
     concurrency:
       group: docker-test-images-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -44,15 +42,23 @@ jobs:
 
       - name: Set TAG from pushed tag or package.json
         run: |
+          FRONTEND_VERSION=$(jq -r '.version' frontend/package.json)
+          BACKEND_VERSION=$(jq -r '.version' backend/package.json)
+          if [ "$FRONTEND_VERSION" != "$BACKEND_VERSION" ]; then
+            echo "Error: Frontend version ($FRONTEND_VERSION) and backend version ($BACKEND_VERSION) do not match"
+            exit 1
+          fi
           if [ "${{ github.event_name }}" = "push" ]; then
             TAG="${GITHUB_REF/refs\/tags\//}"
+            # A release tag must name the version the images report
+            case "$TAG" in
+              "v${FRONTEND_VERSION}"|"v${FRONTEND_VERSION}"-*) ;;
+              *)
+                echo "Error: tag $TAG does not match package.json version $FRONTEND_VERSION"
+                exit 1
+                ;;
+            esac
           else
-            FRONTEND_VERSION=$(jq -r '.version' frontend/package.json)
-            BACKEND_VERSION=$(jq -r '.version' backend/package.json)
-            if [ "$FRONTEND_VERSION" != "$BACKEND_VERSION" ]; then
-              echo "Error: Frontend version ($FRONTEND_VERSION) and backend version ($BACKEND_VERSION) do not match"
-              exit 1
-            fi
             TAG="v${FRONTEND_VERSION}-${SHORT_SHA}"
           fi
           echo "TAG=${TAG}" >> $GITHUB_ENV
@@ -248,213 +254,3 @@ jobs:
         if: always() && hashFiles('docker-compose.test.yml') != ''
         run: |
           docker compose -f docker-compose.test.yml down -v
-
-  build:
-    needs: test-images
-    # Run on tag pushes, or on pull requests labelled "docker-push" whose head
-    # branch lives in this repository (after test-images passes). Fork pull
-    # requests never receive the Docker Hub secrets, so they skip this job.
-    if: |
-      needs.test-images.result == 'success' &&
-      (github.event_name == 'push' ||
-       (github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'docker-push')))
-    strategy:
-      matrix:
-        service:
-          - frontend
-          - backend
-    # A second publish of the same ref and service (another label on a
-    # docker-push pull request, or a re-run) waits for the running build
-    # instead of racing it to push the same tags. GitHub keeps only one pending
-    # job per concurrency group, so a newer pending publish replaces an older
-    # pending one. A running build is never cancelled.
-    concurrency:
-      group: docker-build-${{ github.ref }}-${{ matrix.service }}
-      cancel-in-progress: false
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 120
-    name: Build and push to DockerHub
-    env:
-      # the commit this job builds, tags and caches: the pull request head
-      # rather than its merge ref, or the pushed tag
-      BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-    outputs:
-      tag: ${{ matrix.service == 'frontend' && (steps.set-tag-push.outputs.tag || steps.set-tag-pr.outputs.tag) || '' }}
-    steps:
-      # Fail with a clear message instead of a login error when the repository
-      # has not been given the Docker Hub secrets. Only a boolean is exposed.
-      - name: Check Docker Hub secrets are configured
-        env:
-          DOCKER_SECRETS_CONFIGURED: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' && secrets.DOCKER_HUB_USER != '' }}
-        run: |
-          if [ "$DOCKER_SECRETS_CONFIGURED" != "true" ]; then
-            echo "::error::Set the DOCKER_USERNAME, DOCKER_PASSWORD and DOCKER_HUB_USER Actions secrets before publishing images."
-            exit 1
-          fi
-
-      - name: Replace the current swap file
-        shell: bash
-        run: |
-          sudo swapoff /mnt/swapfile || true
-          sudo rm -f /mnt/swapfile
-          sudo fallocate -l 16G /mnt/swapfile
-          sudo chmod 600 /mnt/swapfile
-          sudo mkswap /mnt/swapfile
-          sudo swapon /mnt/swapfile
-
-      - name: Show current memory and swap status
-        shell: bash
-        run: |
-          sudo free -h
-          echo
-          sudo swapon --show
-
-      - name: Mount a tmpfs over /var/lib/docker
-        shell: bash
-        run: |
-          if [ ! -d "/var/lib/docker" ]; then
-            echo "Directory '/var/lib/docker' not found"
-            exit 1
-          fi
-          sudo mount -t tmpfs -o size=12G tmpfs /var/lib/docker
-          sudo systemctl restart docker
-          sudo df -h | grep docker
-
-      # Only for tag pushes: use the Git tag as TAG
-      - name: Set TAG from pushed tag
-        if: github.event_name == 'push'
-        id: set-tag-push
-        run: |
-          TAG="${GITHUB_REF/refs\/tags\//}"
-          echo "TAG=${TAG}" >> $GITHUB_ENV
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=${BUILD_SHA:0:8}" >> $GITHUB_ENV
-
-
-      - name: Login to Docker for building
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Checkout project
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.BUILD_SHA }}
-          persist-credentials: false
-
-      # For PRs: use package.json version + short sha as TAG
-      - name: Set TAG from service package.json for pull requests
-        if: github.event_name == 'pull_request'
-        id: set-tag-pr
-        run: |
-          if [ "${{ matrix.service }}" = "frontend" ]; then
-            VERSION=$(jq -r '.version' frontend/package.json)
-          else
-            VERSION=$(jq -r '.version' backend/package.json)
-          fi
-          TAG="v${VERSION}-${SHORT_SHA}"
-          echo "TAG=${TAG}" >> $GITHUB_ENV
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-
-      - name: Show set environment variables
-        run: |
-          printf "      TAG: %s\n"  "$TAG"
-          printf " SHORT_SHA: %s\n" "$SHORT_SHA"
-
-      # sh -e as in test-images
-      - name: Init repo for Dockerization
-        run: sh -e docker/init.sh "$TAG"
-        env:
-          WGETRC: ${{ github.workspace }}/.github/wgetrc
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-        with:
-          platforms: linux/amd64,linux/arm64
-        id: qemu
-
-      - name: Setup Docker buildx action
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-        with:
-          platforms: linux/amd64,linux/arm64
-          driver-opts: |
-            network=host
-        id: buildx
-
-      - name: Available platforms
-        run: echo ${{ steps.buildx.outputs.platforms }}
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        id: cache
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ matrix.service }}-${{ env.BUILD_SHA }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-${{ matrix.service }}-
-
-      - name: Run Docker buildx for ${{ matrix.service }} against tag
-        id: docker-build
-        run: |
-          docker buildx build \
-          --cache-from "type=local,src=/tmp/.buildx-cache" \
-          --cache-to "type=local,dest=/tmp/.buildx-cache,mode=max" \
-          --platform linux/amd64,linux/arm64 \
-          --tag ${{ secrets.DOCKER_HUB_USER }}/${{ matrix.service }}:$TAG \
-          --build-context rustgbt=./rust \
-          --build-context backend=./backend \
-          --output "type=registry,push=true" \
-          --build-arg commitHash=$SHORT_SHA \
-          ./${{ matrix.service }}/
-
-  tag-latest:
-    needs: build
-    # Only for successful tag pushes (not PRs with docker-push label) and only for "plain" versions (no '-')
-    if: ${{ needs.build.result == 'success' && github.event_name == 'push' && !contains(github.ref_name, '-') }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 30
-    name: Tag release build as latest
-    strategy:
-      matrix:
-        service:
-          - frontend
-          - backend
-    # `latest` is shared by every release, so an update for a service waits for
-    # the running one instead of racing it. GitHub keeps only one pending job
-    # per concurrency group, so a newer pending update replaces an older
-    # pending one. A running update is never cancelled.
-    concurrency:
-      group: docker-tag-latest-${{ matrix.service }}
-      cancel-in-progress: false
-    steps:
-      - name: Set env variables
-        run: echo "TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-        with:
-          platforms: linux/amd64,linux/arm64
-
-      - name: Setup Docker buildx action
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-        with:
-          platforms: linux/amd64,linux/arm64
-          driver-opts: |
-            network=host
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Tag as latest for ${{ matrix.service }}
-        run: |
-          docker buildx imagetools create \
-            --tag ${{ secrets.DOCKER_HUB_USER }}/${{ matrix.service }}:latest \
-            ${{ secrets.DOCKER_HUB_USER }}/${{ matrix.service }}:$TAG

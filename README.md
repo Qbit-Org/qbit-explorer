@@ -61,7 +61,10 @@ Do not report security problems in public issues. Follow
 qbit-explorer is based on [mempool/mempool](https://github.com/mempool/mempool)
 [v3.3.1](https://github.com/mempool/mempool/releases/tag/v3.3.1), commit
 [`9332d9db97bcc7beed079acc8f79aa21c9b12a3b`](https://github.com/mempool/mempool/commit/9332d9db97bcc7beed079acc8f79aa21c9b12a3b).
-This repository does not include upstream's git history.
+The history keeps upstream's commits up to that release. Commit
+[`fd26d63a`](https://github.com/Qbit-Org/qbit-explorer/commit/fd26d63ad23c0c660cef6ab64807a6373a87c34a)
+adds the qbit changes on top of it, and the commits after it are this
+repository's pull requests.
 
 To bring in an upstream fix, add the upstream remote and cherry-pick the
 commit:
@@ -72,11 +75,10 @@ git fetch upstream
 git cherry-pick -x <upstream-commit>
 ```
 
-This works without shared history, because a cherry-pick applies the
-difference between the upstream commit and its parent. Expect conflicts where
-qbit has changed the same code. Upstream merges pull requests with merge
-commits, so to pick a whole pull request at once, cherry-pick its merge commit
-with `-m 1`. The `-x` flag records the upstream SHA in the commit message.
+Expect conflicts where qbit has changed the same code. Upstream merges pull
+requests with merge commits, so to pick a whole pull request at once,
+cherry-pick its merge commit with `-m 1`. The `-x` flag records the upstream
+SHA in the commit message.
 
 Upstream pull requests usually add or edit a `contributors/<name>.txt` file that
 signs upstream's contributor license agreement. qbit-explorer has no CLA (see

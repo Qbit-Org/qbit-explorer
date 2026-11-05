@@ -14,7 +14,7 @@ updates:
         update-types:
           - "patch"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     ignore:
       - dependency-name: "*"
@@ -48,7 +48,7 @@ updates:
         update-types:
           - "patch"
     schedule:
-      interval: daily
+      interval: weekly
     open-pull-requests-limit: 10
     ignore:
       - dependency-name: "*"
@@ -58,23 +58,33 @@ updates:
       # @angular/compiler-cli has to move with @angular/compiler
       - dependency-name: "@angular*"
 
+  # rust is this Dockerfile's only base image. Its Rust stays in step with
+  # rust/gbt/rust-toolchain, so minor versions move by hand, and Dependabot
+  # proposes only patch releases.
   - package-ecosystem: docker
     directory: "/docker/backend"
     schedule:
       interval: weekly
     ignore:
-      - dependency-name: "*"
+      - dependency-name: "rust"
         update-types:
-          ["version-update:semver-major", "version-update:semver-patch"]
+          ["version-update:semver-major", "version-update:semver-minor"]
 
+  # node (the build stage) gets minor releases. nginx gets patch releases,
+  # which carry its stable branch's security fixes. Its odd minor versions are
+  # the mainline branch and the even ones are stable, which Dependabot can't
+  # tell apart, so nginx moves to the next stable minor by hand.
   - package-ecosystem: docker
     directory: "/docker/frontend"
     schedule:
       interval: weekly
     ignore:
-      - dependency-name: "*"
+      - dependency-name: "node"
         update-types:
           ["version-update:semver-major", "version-update:semver-patch"]
+      - dependency-name: "nginx"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -84,3 +94,5 @@ updates:
       - dependency-name: "*"
         update-types:
           ["version-update:semver-major", "version-update:semver-patch"]
+      # Pinned to the commit upstream mempool/mempool uses; update by hand.
+      - dependency-name: "dtolnay/rust-toolchain"
