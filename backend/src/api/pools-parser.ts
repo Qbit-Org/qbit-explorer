@@ -2,10 +2,11 @@ import DB from '../database';
 import logger from '../logger';
 import config from '../config';
 import PoolsRepository from '../repositories/PoolsRepository';
-import { PoolTag } from '../mempool.interfaces';
+import { PoolMatchCoinbaseOutput, PoolTag } from '../mempool.interfaces';
+import { parseAuxPowParentCoinbase, QbitAuxPowParentCoinbase } from '../utils/qbit-auxpow';
+import { matchBlockMiner } from '../utils/pool-match';
 import diskCache from './disk-cache';
 import mining from './mining/mining';
-import transactionUtils from './transaction-utils';
 import BlocksRepository from '../repositories/BlocksRepository';
 import redisCache from './redis-cache';
 import blocks from './blocks';
@@ -22,12 +23,30 @@ class PoolsParser {
   };
 
   public setMiningPools(pools): void {
-    for (const pool of pools) {
+    const poolList = this.normalizeMiningPools(pools);
+    for (const pool of poolList) {
+      pool.addressMatchMode = pool.addressMatchMode || 'any';
+      if (!['any', 'full_reward'].includes(pool.addressMatchMode)) {
+        throw new Error(`Invalid addressMatchMode '${pool.addressMatchMode}' for mining pool ${pool.name}`);
+      }
       pool.regexes = pool.tags;
+      pool.parentRegexes = pool.parentTags || [];
+      pool.parentAddresses = pool.parentAddresses || [];
       pool.slug = pool.name.replace(/[^a-z0-9]/gi, '').toLowerCase();
       delete(pool.tags);
+      delete(pool.parentTags);
     }
-    this.miningPools = pools;
+    this.miningPools = poolList;
+  }
+
+  private normalizeMiningPools(pools): any[] {
+    if (Array.isArray(pools)) {
+      return pools;
+    }
+    if (pools && Array.isArray(pools.pools)) {
+      return pools.pools;
+    }
+    throw new Error('Invalid mining pools JSON: expected an array or an object with a pools array');
   }
 
   /**
@@ -35,7 +54,7 @@ class PoolsParser {
    * @param pools
    * @asyncUnsafe
    */
-  public async migratePoolsJson(): Promise<void> {
+  public async migratePoolsJson(definitionHash: string | null = null): Promise<void> {
     // We also need to wipe the backend cache to make sure we don't serve blocks with
     // the wrong mining pool (usually happen with unknown blocks)
     diskCache.setIgnoreBlocksCache();
@@ -43,9 +62,27 @@ class PoolsParser {
 
     await this.$insertUnknownPool();
 
-    let reindexUnknown = false;
-    let clearCache = false;
+    if (this.miningPools.length === 0 && config.DATABASE.ENABLED === true) {
+      const unknownPool = await PoolsRepository.$getUnknownPool();
+      await PoolsRepository.$replacePoolsWithUnknown(unknownPool.id, definitionHash);
+      mining.reindexHashrateRequested = true;
+      for (const block of blocks.getBlocks()) {
+        block.extras = block.extras || {};
+        block.extras.pool = {
+          id: unknownPool.uniqueId,
+          name: unknownPool.name,
+          slug: unknownPool.slug,
+          minerNames: null,
+        };
+      }
+      void diskCache.$saveCacheToDisk();
+      void redisCache.$updateBlocks(blocks.getBlocks());
+      logger.info(`Empty mining pool set imported; all blocks now attribute to Unknown`, logger.tags.mining);
+      return;
+    }
 
+    let clearCache = false;
+    const importedUniqueIds: number[] = [];
 
     for (const pool of this.miningPools) {
       if (!pool.id) {
@@ -53,17 +90,21 @@ class PoolsParser {
         continue;
       }
 
-      // One of the two fields 'addresses' or 'regexes' must be a non-empty array
-      if (!pool.addresses && !pool.regexes) {
-        logger.err(`Mining pool ${pool.name} must have at least one of the fields 'addresses' or 'regexes'. Skipping.`);
+      // One of the identifier fields ('addresses', 'regexes', or their
+      // AuxPoW parent-chain counterparts) must be a non-empty array
+      if (!pool.addresses && !pool.regexes && !pool.parentAddresses && !pool.parentRegexes) {
+        logger.err(`Mining pool ${pool.name} must have at least one of the fields 'addresses', 'regexes', 'parentAddresses' or 'parentRegexes'. Skipping.`);
         continue;
       }
 
       pool.addresses = pool.addresses || [];
       pool.regexes = pool.regexes || [];
+      pool.parentAddresses = pool.parentAddresses || [];
+      pool.parentRegexes = pool.parentRegexes || [];
 
-      if (pool.addresses.length === 0 && pool.regexes.length === 0) {
-        logger.err(`Mining pool ${pool.name} has no 'addresses' nor 'regexes' defined. Skipping.`);
+      if (pool.addresses.length === 0 && pool.regexes.length === 0 &&
+        pool.parentAddresses.length === 0 && pool.parentRegexes.length === 0) {
+        logger.err(`Mining pool ${pool.name} has no 'addresses', 'regexes', 'parentAddresses' nor 'parentRegexes' defined. Skipping.`);
         continue;
       }
 
@@ -75,19 +116,20 @@ class PoolsParser {
         logger.warn(`Mining pool ${pool.name} has no 'regexes' defined.`);
       }
 
+      importedUniqueIds.push(pool.id);
+
       const poolDB = await PoolsRepository.$getPoolByUniqueId(pool.id, false);
       if (!poolDB) {
         // New mining pool
         const slug = pool.name.replace(/[^a-z0-9]/gi, '').toLowerCase();
         logger.debug(`Inserting new mining pool ${pool.name}`);
         await PoolsRepository.$insertNewMiningPool(pool, slug);
-        reindexUnknown = true;
         clearCache = true;
       } else {
         if (poolDB.name !== pool.name) {
           // Pool has been renamed
           const newSlug = pool.name.replace(/[^a-z0-9]/gi, '').toLowerCase();
-          logger.warn(`Renaming ${poolDB.name} mining pool to ${pool.name}. Slug has been updated. Maybe you want to make a redirection from 'https://mempool.space/mining/pool/${poolDB.slug}' to 'https://mempool.space/mining/pool/${newSlug}`);
+          logger.warn(`Renaming ${poolDB.name} mining pool to ${pool.name}. Slug has been updated. Maybe you want to make a redirection from '/mining/pool/${poolDB.slug}' to '/mining/pool/${newSlug}'`);
           await PoolsRepository.$renameMiningPool(poolDB.id, newSlug, pool.name);
           clearCache = true;
         }
@@ -97,65 +139,94 @@ class PoolsParser {
           await PoolsRepository.$updateMiningPoolLink(poolDB.id, pool.link);
           clearCache = true;
         }
-        if (JSON.stringify(pool.addresses) !== poolDB.addresses ||
-          JSON.stringify(pool.regexes) !== poolDB.regexes) {
+        // $getPoolByUniqueId may return addresses/regexes as parsed arrays
+        // instead of raw JSON strings; normalize both sides before comparing.
+        // Parent-chain columns predating migration 109 can also be NULL.
+        const poolDBAddresses = PoolsParser.rawDefinitionJson(poolDB.addresses);
+        const poolDBRegexes = PoolsParser.rawDefinitionJson(poolDB.regexes);
+        const poolDBParentAddresses = PoolsParser.rawDefinitionJson(poolDB['parent_addresses']);
+        const poolDBParentRegexes = PoolsParser.rawDefinitionJson(poolDB['parent_regexes']);
+        const poolDBAddressMatchMode = poolDB['address_match_mode'] ?? poolDB.addressMatchMode ?? 'any';
+        if (JSON.stringify(pool.addresses) !== poolDBAddresses ||
+          JSON.stringify(pool.regexes) !== poolDBRegexes ||
+          JSON.stringify(pool.parentAddresses) !== poolDBParentAddresses ||
+          JSON.stringify(pool.parentRegexes) !== poolDBParentRegexes ||
+          pool.addressMatchMode !== poolDBAddressMatchMode) {
           // Pool addresses changed or coinbase tags changed
           logger.notice(`Updating addresses and/or coinbase tags for ${pool.name} mining pool.`);
-          await PoolsRepository.$updateMiningPoolTags(poolDB.id, pool.addresses, pool.regexes);
-          reindexUnknown = true;
+          await PoolsRepository.$updateMiningPoolTags(
+            poolDB.id,
+            pool.addresses,
+            pool.regexes,
+            pool.parentAddresses,
+            pool.parentRegexes,
+            pool.addressMatchMode
+          );
           clearCache = true;
           await this.$reindexBlocksForPool(poolDB.id);
         }
       }
     }
 
-    if (reindexUnknown) {
-      logger.notice(`Updating addresses and/or coinbase tags for unknown mining pool.`);
-      let unknownPool;
-      if (config.DATABASE.ENABLED === true) {
-        unknownPool = await PoolsRepository.$getUnknownPool();
-      } else {
-        unknownPool = this.unknownPool;
+    // Pools dropped from the definition set (e.g. Bitcoin pools left over in an
+    // upgraded database) must not remain matchable; reassign their blocks to
+    // Unknown and re-match them against the current definitions below. Only
+    // pools that actually made it through the import count as kept.
+    if (config.DATABASE.ENABLED === true) {
+      const keepUniqueIds = [0, ...importedUniqueIds];
+      const unknownPool = await PoolsRepository.$getUnknownPool();
+      const staleCount = await PoolsRepository.$deleteStalePools(keepUniqueIds, unknownPool.id, definitionHash);
+      if (staleCount > 0) {
+        clearCache = true;
       }
-      await this.$reindexBlocksForPool(unknownPool.id);
     }
 
-    // refresh the in-memory block cache with the reindexed data
+    // Always re-match Unknown blocks when a migration runs: migrations only
+    // run on definition changes, and a previous partial import may have
+    // committed pool rows without completing this re-index, which would
+    // otherwise never be retried once the rows look current.
+    logger.notice(`Re-indexing blocks assigned to the unknown mining pool.`);
+    let unknownPool;
+    if (config.DATABASE.ENABLED === true) {
+      unknownPool = await PoolsRepository.$getUnknownPool();
+    } else {
+      unknownPool = this.unknownPool;
+    }
+    const reassigned = await this.$reindexBlocksForPool(unknownPool.id);
+    if (reassigned > 0) {
+      clearCache = true;
+    }
+
+    // Every block's pool assignment is now consistent with the imported
+    // definitions (changed attributions were re-indexed above and unchanged
+    // ones still match), so stamp them all with the new definition hash —
+    // including paths like name/link-only changes that re-index nothing.
+    if (config.DATABASE.ENABLED === true) {
+      await BlocksRepository.$updateDefinitionHash(definitionHash);
+    }
+
+    // refresh the in-memory block cache (and its disk/redis copies) with the
+    // reindexed data
     if (clearCache) {
-      for (const block of blocks.getBlocks()) {
-        const reindexedBlock = await blocks.$indexBlock(block.id);
-        block.extras.pool = reindexedBlock.extras.pool;
-      }
-      // update persistent cache with the reindexed data
-      void diskCache.$saveCacheToDisk();
-      void redisCache.$updateBlocks(blocks.getBlocks());
+      await blocks.$refreshCachedBlocks();
     }
   }
 
-  public matchBlockMiner(scriptsig: string, addresses: string[], pools: PoolTag[]): PoolTag | undefined {
-    const asciiScriptSig = transactionUtils.hex2ascii(scriptsig);
+  public matchBlockMiner(
+    scriptsig: string,
+    addresses: string[],
+    pools: PoolTag[],
+    auxpowParentCoinbase?: QbitAuxPowParentCoinbase | null,
+    qbitCoinbaseOutputs?: PoolMatchCoinbaseOutput[]
+  ): PoolTag | undefined {
+    return matchBlockMiner(scriptsig, addresses, pools, auxpowParentCoinbase, qbitCoinbaseOutputs);
+  }
 
-    for (let i = 0; i < pools.length; ++i) {
-      if (addresses.length) {
-        const poolAddresses: string[] = typeof pools[i].addresses === 'string' ?
-          JSON.parse(pools[i].addresses) : pools[i].addresses;
-        for (let y = 0; y < poolAddresses.length; y++) {
-          if (addresses.indexOf(poolAddresses[y]) !== -1) {
-            return pools[i];
-          }
-        }
-      }
-
-      const regexes: string[] = typeof pools[i].regexes === 'string' ?
-        JSON.parse(pools[i].regexes) : pools[i].regexes;
-      for (let y = 0; y < regexes.length; ++y) {
-        const regex = new RegExp(regexes[y], 'i');
-        const match = asciiScriptSig.match(regex);
-        if (match !== null) {
-          return pools[i];
-        }
-      }
+  private static rawDefinitionJson(value: string | string[] | null | undefined): string {
+    if (value === null || value === undefined) {
+      return '[]';
     }
+    return typeof value === 'string' ? value : JSON.stringify(value);
   }
 
   /**
@@ -189,21 +260,19 @@ class PoolsParser {
   }
 
   /**
-   * re-index pool assignment for blocks previously associated with pool
+   * re-index pool assignment for blocks previously associated with pool;
+   * returns the number of blocks reassigned to a different pool
    *
    * @param pool local id of existing pool to reindex
    * @asyncUnsafe
    */
-  private async $reindexBlocksForPool(poolId: number): Promise<void> {
-    let firstKnownBlockPool = 130635; // https://mempool.space/block/0000000000000a067d94ff753eec72830f1205ad3a4c216a08a80c832e551a52
-    if (config.MEMPOOL.NETWORK === 'testnet') {
-      firstKnownBlockPool = 21106; // https://mempool.space/testnet/block/0000000070b701a5b6a1b965f6a38e0472e70b2bb31b973e4638dec400877581
-    } else if (['signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-      firstKnownBlockPool = 0;
-    }
+  private async $reindexBlocksForPool(poolId: number): Promise<number> {
+    // qbit pools can be tagged from genesis on every network; the upstream
+    // Bitcoin first-known-pool-block heights do not apply here.
+    const firstKnownBlockPool = 0;
 
     const [blocks]: any[] = await DB.query(`
-      SELECT height, hash, coinbase_raw, coinbase_addresses
+      SELECT height, hash, coinbase_raw, coinbase_addresses, coinbase_payouts, header
       FROM blocks
       WHERE pool_id = ?
       AND height >= ?
@@ -211,17 +280,40 @@ class PoolsParser {
     `, [poolId, firstKnownBlockPool]);
 
     let pools: PoolTag[] = [];
+    let unknownPool;
     if (config.DATABASE.ENABLED === true) {
       pools = await PoolsRepository.$getPools();
+      unknownPool = await PoolsRepository.$getUnknownPool();
     } else {
       pools = this.miningPools;
+      unknownPool = this.unknownPool;
     }
 
     let changed = 0;
     for (const block of blocks) {
+      // Do not fall back to legacy coinbase_address here: it is only the
+      // first output and cannot prove that one address received the full
+      // reward. Rows without the complete address set remain conservatively
+      // unmatched until the coinbase-address indexer fills them.
       const addresses = JSON.parse(block.coinbase_addresses) || [];
-      const newPool = this.matchBlockMiner(block.coinbase_raw, addresses, pools);
-      if (newPool && newPool.id !== poolId) {
+      // NULL marks rows indexed before exact positive payout evidence was
+      // persisted. Only those legacy rows use the census-verified singleton
+      // recipient fallback; all newly indexed rows replay the exact decision.
+      const payouts: PoolMatchCoinbaseOutput[] | undefined =
+        block.coinbase_payouts === null || block.coinbase_payouts === undefined
+        ? undefined
+        : JSON.parse(block.coinbase_payouts);
+      // Blocks that no longer match any definition fall back to Unknown, so a
+      // legacy pool row that collides with a vendored unique_id (and gets
+      // renamed/retagged on import) cannot keep foreign blocks attributed to it
+      const newPool = this.matchBlockMiner(
+        block.coinbase_raw,
+        addresses,
+        pools,
+        parseAuxPowParentCoinbase(block.header),
+        payouts
+      ) ?? unknownPool;
+      if (newPool.id !== poolId) {
         changed++;
         await BlocksRepository.$savePool(block.hash, newPool.id);
       }
@@ -231,6 +323,8 @@ class PoolsParser {
 
     // Re-index hashrates and difficulty adjustments later
     mining.reindexHashrateRequested = true;
+
+    return changed;
   }
 }
 

@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest a new feature or an improvement to the explorer.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For questions and help, ask in the [qbit Discord](https://discord.gg/xqC7MAk95Q) instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you think the explorer should solve it.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Alternatives and context
+      description: Other approaches you considered, related upstream mempool features, links, or mockups.
+    validations:
+      required: false

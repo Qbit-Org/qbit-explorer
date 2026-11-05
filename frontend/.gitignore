@@ -63,6 +63,11 @@ src/resources/assets-testnet.json
 src/resources/assets-testnet.minimal.json
 src/resources/pools.json
 src/resources/mining-pools/*
+!src/resources/mining-pools/qbitpool.svg
+!src/resources/mining-pools/luckypoolio.svg
+!src/resources/mining-pools/deezy.svg
+!src/resources/mining-pools/cornswap.svg
+!src/resources/mining-pools/himpool.svg
 src/resources/**/*.mp4
 src/resources/**/*.vtt
 src/resources/customize.js
@@ -77,4 +82,3 @@ cypress/screenshots
 
 # Base index
 src/index.html
-

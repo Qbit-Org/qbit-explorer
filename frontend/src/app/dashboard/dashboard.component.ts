@@ -1,7 +1,7 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, HostListener, Inject, OnDestroy, OnInit, PLATFORM_ID } from '@angular/core';
-import { combineLatest, EMPTY, fromEvent, interval, merge, Observable, of, Subject, Subscription, timer } from 'rxjs';
-import { catchError, delayWhen, distinctUntilChanged, filter, map, scan, share, shareReplay, startWith, switchMap, takeUntil, tap, throttleTime } from 'rxjs/operators';
-import { AuditStatus, BlockExtended, CurrentPegs, FederationAddress, FederationUtxo, OptimizedMempoolStats, PegsVolume, RecentPeg, TransactionStripped } from '@interfaces/node-api.interface';
+import { AfterViewInit, ChangeDetectionStrategy, Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { combineLatest, merge, Observable, of, Subject, Subscription } from 'rxjs';
+import { catchError, filter, map, scan, shareReplay, switchMap, tap } from 'rxjs/operators';
+import { BlockExtended, OptimizedMempoolStats, TransactionStripped } from '@interfaces/node-api.interface';
 import { MempoolInfo, ReplacementInfo } from '@interfaces/websocket.interface';
 import { ApiService } from '@app/services/api.service';
 import { StateService } from '@app/services/state.service';
@@ -48,31 +48,12 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
   mempoolStats$: Observable<MempoolStatsData>;
   transactionsWeightPerSecondOptions: any;
   isLoadingWebSocket$: Observable<boolean>;
-  liquidPegsMonth$: Observable<any>;
-  currentPeg$: Observable<CurrentPegs>;
-  auditStatus$: Observable<AuditStatus>;
-  auditUpdated$: Observable<boolean>;
-  liquidReservesMonth$: Observable<any>;
-  currentReserves$: Observable<CurrentPegs>;
-  recentPegsList$: Observable<RecentPeg[]>;
-  pegsVolume$: Observable<PegsVolume[]>;
-  federationAddresses$: Observable<FederationAddress[]>;
-  federationAddressesNumber$: Observable<number>;
-  federationUtxosNumber$: Observable<number>;
-  expiredUtxos$: Observable<FederationUtxo[]>;
-  emergencySpentUtxosStats$: Observable<any>;
-  fullHistory$: Observable<any>;
-  isLoad: boolean = true;
   filterSubscription: Subscription;
   mempoolInfoSubscription: Subscription;
   currencySubscription: Subscription;
   currency: string;
   incomingGraphHeight: number = 300;
-  lbtcPegGraphHeight: number = 360;
   webGlEnabled = true;
-  private lastPegBlockUpdate: number = 0;
-  private lastPegAmount: string = '';
-  private lastReservesBlockUpdate: number = 0;
 
   goggleResolution = 82;
   goggleCycle: { index: number, name: string, mode: FilterMode, filters: string[], gradient: GradientMode }[] = [
@@ -93,7 +74,6 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     private apiService: ApiService,
     private websocketService: WebsocketService,
     private seoService: SeoService,
-    @Inject(PLATFORM_ID) private platformId: object,
   ) {
     this.webGlEnabled = this.stateService.isBrowser && detectWebGL();
   }
@@ -255,167 +235,6 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
         shareReplay(1),
       );
 
-    if (this.stateService.network === 'liquid') {
-      this.auditStatus$ = this.stateService.blocks$.pipe(
-        takeUntil(this.destroy$),
-        throttleTime(40000),
-        delayWhen(_ => this.isLoad ? timer(0) : timer(2000)),
-        tap(() => this.isLoad = false),
-        switchMap(() => this.apiService.federationAuditSynced$()),
-        shareReplay(1)
-      );
-
-      this.currentPeg$ = this.auditStatus$.pipe(
-        switchMap(_ =>
-          this.apiService.liquidPegs$().pipe(
-            filter((currentPegs) => currentPegs.lastBlockUpdate >= this.lastPegBlockUpdate),
-            tap((currentPegs) => {
-              this.lastPegBlockUpdate = currentPegs.lastBlockUpdate;
-            })
-          )
-        ),
-        share()
-      );
-
-      this.auditUpdated$ = combineLatest([
-        this.auditStatus$,
-        this.currentPeg$
-      ]).pipe(
-        filter(([auditStatus, _]) => auditStatus.isAuditSynced === true),
-        map(([auditStatus, currentPeg]) => ({
-          lastBlockAudit: auditStatus.lastBlockAudit,
-          currentPegAmount: currentPeg.amount
-        })),
-        switchMap(({ lastBlockAudit, currentPegAmount }) => {
-          const blockAuditCheck = lastBlockAudit > this.lastReservesBlockUpdate;
-          const amountCheck = currentPegAmount !== this.lastPegAmount;
-          this.lastPegAmount = currentPegAmount;
-          return of(blockAuditCheck || amountCheck);
-        }),
-        share()
-      );
-
-      this.currentReserves$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ =>
-          this.apiService.liquidReserves$().pipe(
-            filter((currentReserves) => currentReserves.lastBlockUpdate >= this.lastReservesBlockUpdate),
-            tap((currentReserves) => {
-              this.lastReservesBlockUpdate = currentReserves.lastBlockUpdate;
-            })
-          )
-        ),
-        share()
-      );
-
-      this.recentPegsList$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ => this.apiService.recentPegsList$()),
-        share()
-      );
-
-      this.pegsVolume$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ => this.apiService.pegsVolume$()),
-        share()
-      );
-
-      this.federationAddresses$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ => this.apiService.federationAddresses$()),
-        share()
-      );
-
-      this.federationAddressesNumber$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ => this.apiService.federationAddressesNumber$()),
-        map(count => count.address_count),
-        share()
-      );
-
-      this.federationUtxosNumber$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ => this.apiService.federationUtxosNumber$()),
-        map(count => count.utxo_count),
-        share()
-      );
-
-      this.expiredUtxos$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ => this.apiService.expiredUtxos$()),
-        share()
-      );
-
-      this.emergencySpentUtxosStats$ = this.auditUpdated$.pipe(
-        filter(auditUpdated => auditUpdated === true),
-        throttleTime(40000),
-        switchMap(_ => this.apiService.emergencySpentUtxosStats$()),
-        share()
-      );
-
-      this.liquidPegsMonth$ = interval(60 * 60 * 1000)
-        .pipe(
-          startWith(0),
-          switchMap(() => this.apiService.listLiquidPegsMonth$()),
-          map((pegs) => {
-            const labels = pegs.map(stats => stats.date);
-            const series = pegs.map(stats => parseFloat(stats.amount) / 100000000);
-            series.reduce((prev, curr, i) => series[i] = prev + curr, 0);
-            return {
-              series,
-              labels
-            };
-          }),
-          share(),
-        );
-
-      this.liquidReservesMonth$ = interval(60 * 60 * 1000).pipe(
-        startWith(0),
-        switchMap(() => this.apiService.listLiquidReservesMonth$()),
-        map(reserves => {
-          const labels = reserves.map(stats => stats.date);
-          const series = reserves.map(stats => parseFloat(stats.amount) / 100000000);
-          return {
-            series,
-            labels
-          };
-        }),
-        share()
-      );
-
-      this.fullHistory$ = combineLatest([this.liquidPegsMonth$, this.currentPeg$, this.liquidReservesMonth$, this.currentReserves$])
-        .pipe(
-          map(([liquidPegs, currentPeg, liquidReserves, currentReserves]) => {
-            liquidPegs.series[liquidPegs.series.length - 1] = parseFloat(currentPeg.amount) / 100000000;
-
-            if (liquidPegs.series.length === liquidReserves?.series.length) {
-              liquidReserves.series[liquidReserves.series.length - 1] = parseFloat(currentReserves?.amount) / 100000000;
-            } else if (liquidPegs.series.length === liquidReserves?.series.length + 1) {
-              liquidReserves.series.push(parseFloat(currentReserves?.amount) / 100000000);
-              liquidReserves.labels.push(liquidPegs.labels[liquidPegs.labels.length - 1]);
-            } else {
-              liquidReserves = {
-                series: [],
-                labels: []
-              };
-            }
-
-            return {
-              liquidPegs,
-              liquidReserves
-            };
-          }),
-          share()
-        );
-    }
-
     this.currencySubscription = this.stateService.fiatCurrency$.subscribe((fiat) => {
       this.currency = fiat;
     });
@@ -449,15 +268,12 @@ export class DashboardComponent implements OnInit, OnDestroy, AfterViewInit {
     if (window.innerWidth >= 992) {
       this.incomingGraphHeight = 300;
       this.goggleResolution = 82;
-      this.lbtcPegGraphHeight = 360;
     } else if (window.innerWidth >= 768) {
       this.incomingGraphHeight = 215;
       this.goggleResolution = 80;
-      this.lbtcPegGraphHeight = 270;
     } else {
       this.incomingGraphHeight = 180;
       this.goggleResolution = 86;
-      this.lbtcPegGraphHeight = 270;
     }
   }
 }

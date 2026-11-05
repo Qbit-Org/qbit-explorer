@@ -1,315 +1,729 @@
-.sticky-header {
-  position: sticky;
-  position: -webkit-sticky;
-  top: 0;
+// qbit.org header replica. Colors and fonts arrive as --qbit-* custom
+// properties published by QbitDesignService from the vendored design contract
+// (src/resources/qbit-design/tokens.json). Media queries cannot read custom
+// properties, so the frozen tokens.header constants are mirrored here.
+$mobile-breakpoint: 919px; // tokens.header.mobileBreakpointPx
+$header-height: 58px; // tokens.header.heightPx
+$banner-height: 36px; // tokens.header.bannerHeightPx
+$header-max-width: 1280px; // tokens.header.maxWidthPx
+$subnav-height: 44px; // explorer-owned section bar; not a vendored token
+
+// tier-1 (banner + white bar) is NOT sticky: on qbit.org the whole header
+// scrolls away with the page. Only the explorer subnav pins (see .qbit-subnav).
+// The stacking context (previously a side effect of position:sticky) must
+// stay: page surfaces go up to z-index 99, and the mobile panel (z2) and
+// menu backdrop (z1) only beat them from inside this z-101 context
+.qbit-header {
+  position: relative;
+  // one above the pinned subnav (z-index 100, later in the DOM): the header
+  // scrolls away, so the two only overlap where a nav dropdown hangs into
+  // the subnav, and the dropdown must win there
+  z-index: 101;
+}
+
+.qbit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--qbit-banner-height, $banner-height);
+  padding: 0.5rem 1rem;
+  overflow: hidden;
+  background: var(--qbit-accent);
+  text-align: center;
+  text-decoration: none;
+  font-family: var(--qbit-font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+
+  &,
+  &:hover,
+  &:focus,
+  &:visited {
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .qbit-banner-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.qbit-bar-wrap {
+  position: relative;
+  z-index: 2; // above the fixed menu backdrop (z-index 1) within the
+  // header's z-100 stacking context
   width: 100%;
-  background-color: var(--bg);
-  z-index: 100;
+  background: var(--qbit-paper);
+  border-bottom: 1px solid rgba(16, 20, 18, 0.08);
 }
 
-li.nav-item.active {
-  background-color: var(--tertiary);
-}
-
-fa-icon {
-  font-size: 1.66em;
-}
-
-.navbar {
-  z-index: 100;
-  min-height: 64px;
-  width: 100%;
-  background-color: var(--nav-bg);
-}
-
-li.nav-item {
-  margin: auto 10px;
-  padding-left: 10px;
-  padding-right: 10px;
-  align-content: center;
-  .svg-wrapper {
-    height: 19.2px;
-    width: auto;
-    margin-bottom: 8px;
-  }
-  @media (max-width: 991px) {
-    margin: 0;
-    padding-left: 8px;
-    padding-right: 8px;
-    .svg-wrapper {
-      height: 25.6px;
-      width: auto;
-      margin-bottom: 0;
-    }
-    .nav-link {
-      padding: 12px 0;
-    }
-
-  }
-  @media (max-width: 429px) {
-    margin: 0;
-    padding-left: 6px;
-    padding-right: 6px;
-  }
-  @media (max-width: 369px) {
-    margin: 0;
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-}
-
-@media (min-width: 992px) {
-  .navbar {
-    padding: 0rem 2rem;
-  }
-  fa-icon {
-    font-size: 1.2em;
-  }
-  .dropdown-container {
-    margin-right: 16px;
-  }
-  li.nav-item {
-    margin: auto 0px;
-    padding: 10px;
-  }
-}
-
-.navbar-nav {
-  background: var(--nav-bg);
-  bottom: 0;
-  box-shadow: 0px 0px 15px 0px #000;
-  flex-direction: row;
-  left: 0;
+// exactly three desktop children (logo | nav | socials): space-between alone
+// seats the nav in the free space with equal logo→nav / nav→socials gaps,
+// matching the measured qbit.org row (computed margins all 0)
+.qbit-bar {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  position: fixed;
-  width: 100%;
-  @media (min-width: 992px) {
-    background: transparent;
-    box-shadow: none;
-    position: relative;
+  flex-wrap: nowrap;
+  column-gap: 1rem;
+  min-height: var(--qbit-header-height, $header-height);
+  max-width: var(--qbit-header-max-width, $header-max-width);
+  margin: 0 auto;
+  padding: 0.5rem 0.5rem 0.5rem 1.25rem;
+}
+
+.qbit-logo {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+
+  img {
+    display: block;
+    height: 32px;
     width: auto;
   }
-  a {
-    font-size: 0.8em;
-    @media (min-width: 370px) {
-      font-size: 0.9em;
-    }
-    @media (min-width: 430px) {
-      font-size: 1em;
+
+  @media (max-width: $mobile-breakpoint) {
+    img {
+      height: 28px;
     }
   }
 
-  li {
-    flex-grow: 1; /* Allows items to grow */
-    text-align: center; /* For text alignment */
-  }
-}
-
-
-.navbar-collapse {
-  justify-content: flex-end;
-  @media (min-width: 564px) {
-    flex-basis: auto;
-  }
-}
-
-@media (min-width: 992px) {
-  .navbar-collapse {
-    justify-content: space-between;
-  }
-}
-
-.navbar {
-  .dropdown {
-    .dropdown-toggle {
-      width: 62px;
-      height: 36px;
-      margin-top: 5px;
+  // qbit.org's root font drops to 15px ≤640px, shrinking its h-7 logo
+  @media (max-width: 640px) {
+    img {
+      height: 26px;
     }
   }
 }
 
-.navbar-brand {
+.qbit-links {
+  display: inline-flex;
+  align-items: center;
+  column-gap: 1.75rem;
+  font-family: var(--qbit-font-mono);
+  font-size: 13px;
+
+  @media (max-width: 1099.98px) {
+    column-gap: 1.25rem;
+  }
+
+  @media (max-width: $mobile-breakpoint) {
+    display: none;
+  }
+}
+
+.qbit-link {
+  color: rgb(7 17 11 / 74%);
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:visited {
+    color: rgb(7 17 11 / 74%);
+  }
+
+  &:hover,
+  &:focus {
+    color: #07110b;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.32em;
+  }
+
+  &.active,
+  &.active:visited,
+  &.active:hover,
+  &.active:focus {
+    color: var(--qbit-accent);
+  }
+}
+
+// qbit.org's header dropdowns (contract `items` groups): the trigger reads as
+// a .qbit-link, the panel is left-aligned under it with an icon per link
+.qbit-group {
   position: relative;
 }
 
-.navbar-brand.dual-logos {
-  justify-content: space-between;
-  @media (max-width: 767.98px) {
-    width: 100%;
+.qbit-group-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.qbit-group-chevron {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 150ms ease;
+
+  &.open {
+    transform: rotate(180deg);
   }
 }
 
-nav {
-  box-shadow: 0px 0px 15px 0px #000;
-}
-
-.connection-badge {
+// padding-top bridges the gap under the trigger so hover survives the move
+.qbit-group-panel {
   position: absolute;
-  top: 12px;
-  width: 100%;
+  top: 100%;
+  left: 0;
+  z-index: 3;
+  padding-top: 0.75rem;
+
+  &[hidden] {
+    display: none;
+  }
+
+  ul {
+    display: grid;
+    min-width: 11rem;
+    margin: 0;
+    padding: 0.375rem 0;
+    list-style: none;
+    border: 1px solid var(--qbit-line);
+    background: var(--qbit-paper);
+    box-shadow: 0 18px 44px rgb(7 17 11 / 12%);
+  }
 }
 
-.badge {
-  margin: 0 auto;
-  display: table;
-}
-
-.mainnet.active {
-  background-color: var(--tertiary);
-}
-
-.liquid.active {
-  background-color: var(--liquid);
-}
-
-.liquidtestnet.active {
-  background-color: var(--liquidtestnet);
-}
-
-.testnet.active {
-  background-color: var(--testnet);
-}
-
-.signet.active {
-  background-color: var(--signet);
-}
-
-.regtest.active {
-  background-color: var(--regtest);
-}
-
-.dropdown-divider {
-  border-top: 1px solid #121420;
-}
-
-.dropdown-toggle::after {
-  vertical-align: 0.1em;
-}
-
-.dropdown-item {
+.qbit-group-link {
   display: flex;
   align-items: center;
-}
+  gap: 0.625rem;
+  padding: 0.5rem 1rem;
+  font-family: var(--qbit-font-mono);
+  font-size: 13px;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  color: rgb(7 17 11 / 74%);
 
-@media (min-width: 991px) {
-  .search-form-container {
-    width: 100%;
-    max-width: 500px;
-    padding-left: 15px;
-  }
-}
-.navbar-dark .navbar-nav .nav-link {
-  color: var(--icon);
-}
-
-.subdomain_logo {
-  max-height: 35px;
-  overflow: clip;
-  max-width: 100%;
-  margin: auto;
-  align-self: center;
-  .rounded {
-    border-radius: 5px;
+  &:visited {
+    color: rgb(7 17 11 / 74%);
   }
 
-  &.custom_logo {
-    max-height: 48px;
-    margin-right: 1em;
-  }
- 
-  &.mobile_logo {
-    margin-right: 0;
+  &:hover,
+  &:focus {
+    color: #07110b;
+    background: var(--qbit-surface);
+    text-decoration: none;
   }
 
-  &.custom_logo.mobile_logo {
-    max-height: 42px;
+  &.active,
+  &.active:visited,
+  &.active:hover {
+    color: var(--qbit-accent);
   }
 }
 
-.subdomain_container {
-  max-width: 140px;
-  text-align: center;
-  align-self: center;
+.qbit-nav-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.vertical-line {
-  border-left: 1px solid #444;
-  height: 30px;
-  margin-left: 20px;
-  margin-right: 20px;
-  margin-top: 3px;
-}
+// mobile: each group is a heading over its indented links
+.qbit-mobile-group {
+  display: grid;
+  gap: 0.125rem;
 
-.logo-holder {
-  display: flex;
-  flex-direction: row;
-}
-
-.navbar-brand {
-  flex-direction: row;
-  display: flex;
-}
-
-.mempool-logo, app-svg-images {
-  align-self: center;
-  width: 140px;
-  height: 35px;
-}
-
-.beta {
-  display: inline;
-  position: absolute;
-  margin: 24px 0px 0px -15px;
-  font-size: 8px;
-  @media (max-width: 767.98px) {
-    margin: 30px 0px 0px -19px;
-    font-size: 7px;
-  }
-  @media (max-width: 3429px) {
-    margin: 25px 0px 0px -19px;
-    font-size: 7px;
-  }
-  @media (max-width: 369px) {
-    margin: 20px 0px 0px -19px;
-    font-size: 7px;
+  .qbit-mobile-eyebrow {
+    padding-top: 0.5rem;
   }
 }
 
-.beta-network {
-  font-size: 8px;
+.qbit-mobile-group-link {
+  gap: 0.625rem;
+  padding-left: 0.75rem;
 }
 
-.current-network-svg {
-  width: 20px;
-  height: 20px;
-  margin-right: 5px;
-}
+// qbit theming shared by the subnav search and the mobile panel search
+.qbit-subnav-search,
+.qbit-mobile-search {
+  ::ng-deep {
+    form {
+      margin: 0;
+    }
 
-:host-context(.rtl-layout) {
-  .current-network-svg {
-    width: 20px;
-    height: 20px;
-    margin-left: 5px;
-    margin-right: 0px;
+    .search-box-container {
+      min-width: 0;
+    }
+
+    .form-control {
+      background: var(--qbit-paper);
+      color: var(--qbit-ink);
+      border: 1px solid var(--qbit-line);
+      border-radius: 0; // qbit contract: square corners
+      text-overflow: ellipsis;
+
+      &::placeholder {
+        color: var(--qbit-muted);
+        opacity: 0.75;
+        text-overflow: ellipsis;
+      }
+
+      &:focus {
+        background: var(--qbit-paper);
+        color: var(--qbit-ink);
+        border-color: var(--qbit-accent);
+        box-shadow: none;
+      }
+    }
+
+    .btn-purple {
+      background-color: var(--qbit-accent);
+      border-color: var(--qbit-accent);
+      border-radius: 0; // qbit contract: square corners
+      color: #fff;
+
+      &:hover,
+      &:focus,
+      &.focus,
+      &:not(:disabled):not(.disabled):active {
+        background-color: var(--qbit-accent-hover);
+        border-color: var(--qbit-accent-hover);
+        color: #fff;
+        box-shadow: none;
+      }
+    }
   }
 }
 
-.profile_image_container {
-  width: 35px;
-  margin-right: 15px;
-  text-align: center;
-  align-self: center;
+.qbit-social {
+  display: inline-flex;
+  align-items: center;
+  column-gap: 0.35rem;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    min-width: 2.7rem;
+    color: var(--qbit-ink);
+    opacity: 0.8;
+    text-decoration: none;
+
+    &:hover,
+    &:focus {
+      color: var(--qbit-ink);
+      opacity: 1;
+    }
+  }
+
+  svg {
+    height: 1.35rem;
+    width: 1.35rem;
+    fill: currentColor;
+  }
+
+  @media (max-width: $mobile-breakpoint) {
+    display: none;
+  }
+}
+
+.qbit-hamburger {
+  display: none;
+  margin-left: auto;
+  height: 2.75rem;
+  width: 2.75rem;
+  padding: 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--qbit-ink);
   cursor: pointer;
-  .anon {
-    border: 1.5px solid lightgrey;
-    color: lightgrey;
-    border-radius: 5px;
+  align-items: center;
+  justify-content: center;
+
+  span {
+    display: block;
+    height: 2px;
+    width: 16px;
+    border-radius: 999px;
+    background: currentColor;
+
+    + span {
+      margin-top: 0.12rem;
+    }
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--qbit-accent);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: $mobile-breakpoint) {
+    display: inline-grid;
   }
 }
-.profile_image {
-  height: 35px;
-  border-radius: 5px;
+
+.qbit-mobile-panel {
+  display: none;
+
+  @media (max-width: $mobile-breakpoint) {
+    &.open {
+      display: grid;
+      gap: 0.9rem;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      // 100dvh minus banner + bar: the worst case is the page at scroll 0
+      // with both fully in view above the panel's anchor (the non-sticky
+      // header only ever sits higher up once scrolled, freeing more room),
+      // so the open panel never extends past the viewport bottom
+      max-height: calc(100dvh - var(--qbit-banner-height, $banner-height) - var(--qbit-header-height, $header-height));
+      overflow-y: auto;
+      overscroll-behavior: contain; // panel scroll must not chain to the body
+      background: var(--qbit-paper);
+      border-top: 1px solid rgb(16 20 18 / 8%);
+      box-shadow: 0 18px 44px rgb(7 17 11 / 12%);
+      padding: 0.9rem max(1.25rem, calc((100% - #{$header-max-width}) / 2 + 1.25rem)) 0.2rem max(1.25rem, calc((100% - #{$header-max-width}) / 2 + 1.25rem));
+    }
+  }
+}
+
+.qbit-mobile-links {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.qbit-mobile-link {
+  display: flex;
+  align-items: center;
+  min-height: 2.6rem;
+  border-bottom: 1px solid var(--qbit-line);
+  font-family: var(--qbit-font-mono);
+  font-weight: 600;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--qbit-ink);
+
+  &:visited {
+    color: var(--qbit-ink);
+  }
+
+  &:hover,
+  &:focus {
+    color: var(--qbit-accent);
+    text-decoration: none;
+  }
+
+  &.active,
+  &.active:visited {
+    color: var(--qbit-accent);
+  }
+}
+
+.qbit-mobile-explorer {
+  display: grid;
+  gap: 0.125rem;
+
+  // subordinate the section rows to the qbit site links above them, echoing
+  // the desktop hierarchy (tier-1 ink, sections muted); active keeps accent
+  .qbit-mobile-link {
+    font-size: 13px;
+    color: var(--qbit-muted);
+
+    &:visited {
+      color: var(--qbit-muted);
+    }
+
+    &:hover,
+    &:focus {
+      color: var(--qbit-accent);
+    }
+
+    &.active,
+    &.active:visited {
+      color: var(--qbit-accent);
+    }
+  }
+}
+
+.qbit-mobile-eyebrow {
+  padding-bottom: 0.25rem;
+  font-family: var(--qbit-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qbit-muted);
+}
+
+.qbit-mobile-networks {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1.1rem;
+  row-gap: 0.45rem;
+  align-items: center;
+  font-family: var(--qbit-font-mono);
+  font-size: 13px;
+
+  a {
+    color: var(--qbit-muted);
+    text-transform: uppercase;
+    text-decoration: none;
+
+    &:hover,
+    &:focus {
+      color: var(--qbit-ink);
+    }
+
+    &.active {
+      color: var(--qbit-accent);
+      font-weight: 600;
+    }
+  }
+}
+
+.qbit-mobile-social {
+  display: inline-flex;
+  justify-content: flex-start;
+
+  @media (max-width: $mobile-breakpoint) {
+    display: inline-flex;
+  }
+}
+
+// explorer section nav: slim second tier styled from the same design tokens;
+// the ONLY pinned chrome (tier-1 scrolls away like qbit.org), so it must
+// paint over passing content. Below the mobile breakpoint the sections live
+// in the hamburger panel instead (.qbit-mobile-explorer), unless
+// QBIT_SITE_CHROME is off and there is no such panel
+.qbit-subnav {
+  position: sticky;
+  position: -webkit-sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--qbit-paper);
+  border-bottom: 1px solid var(--qbit-line);
+
+  @media (max-width: $mobile-breakpoint) {
+    display: none;
+
+    // QBIT_SITE_CHROME=false has no header or hamburger panel, so this bar
+    // stays, with the search on a row of its own. Nothing pins on these widths
+    // otherwise, and anchors don't leave room for a bar this tall.
+    &.qbit-subnav-only {
+      display: block;
+      position: static;
+
+      .qbit-subnav-inner {
+        flex-wrap: wrap;
+        padding-bottom: 0.5rem;
+      }
+
+      .qbit-subnav-links {
+        flex: 1 1 100%;
+        min-height: $subnav-height;
+      }
+
+      .qbit-subnav-search {
+        flex: 1 1 0;
+      }
+    }
+  }
+}
+
+.qbit-subnav-inner {
+  display: flex;
+  align-items: center;
+  // 0.6rem seats the right cluster (badge | network | search); the links
+  // strip is fenced off from it by the badge's auto margin instead
+  column-gap: 0.6rem;
+  min-height: $subnav-height;
+  max-width: var(--qbit-header-max-width, $header-max-width);
+  margin: 0 auto;
+  // symmetric 1.25rem: the first label shares the logo's left rail; the solid
+  // search button lands on the optical right rail (tier-1's icon buttons get
+  // a ~12px discount from their internal padding, a solid block gets none)
+  padding: 0 1.25rem;
+}
+
+.qbit-subnav-links {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  column-gap: 1.5rem;
+  min-width: 0;
+  // narrow desktop windows: keep the single 44px row and let the strip pan;
+  // the search sits outside this scroll container so its suggestion dropdown
+  // is never clipped by it
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.qbit-subnav-link {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  // matching transparent top border keeps the label optically centered
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  font-family: var(--qbit-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--qbit-muted);
+  transition: color 150ms ease, border-color 150ms ease;
+
+  &:visited {
+    color: var(--qbit-muted);
+  }
+
+  &:hover,
+  &:focus {
+    color: var(--qbit-ink);
+    text-decoration: none;
+  }
+
+  &:focus-visible {
+    // same accent ring as the hamburger; inset so the pannable strip
+    // (overflow-x: auto) never clips it
+    outline: 2px solid var(--qbit-accent);
+    outline-offset: -2px;
+  }
+
+  &.active,
+  &.active:visited,
+  &.active:hover,
+  &.active:focus {
+    color: var(--qbit-accent);
+    border-bottom-color: var(--qbit-accent);
+  }
+}
+
+// tier-1 carries no connection signal anymore (pure replica, no logo
+// dimming): this badge is the sole offline/reconnecting indicator. The span
+// always renders (empty while connected) so its auto margin reliably
+// right-aligns the badge | network | search cluster in the 44px row
+.connection-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  white-space: nowrap;
+
+  .badge {
+    font-size: 9px;
+  }
+}
+
+// network selector, compacted to sit in the 44px section bar; ≤919px the
+// whole subnav is hidden and the mobile panel's networks group takes over
+.qbit-network-dropdown {
+  flex-shrink: 0;
+
+  .dropdown-toggle {
+    width: 56px;
+    height: 34px; // matches the subnav search input
+    background: var(--qbit-paper);
+    border: 1px solid var(--qbit-line);
+    border-radius: 0; // qbit contract: square corners
+    color: var(--qbit-ink);
+
+    &:hover,
+    &:focus,
+    &:not(:disabled):not(.disabled):active {
+      background: var(--qbit-surface);
+      border-color: var(--qbit-accent);
+      color: var(--qbit-ink);
+      box-shadow: none;
+    }
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+  }
+}
+
+.qbit-subnav-search {
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: 400px; // fits the full placeholder at 13px
+
+  // compact the embedded search form to fit the 44px section bar
+  ::ng-deep {
+    .form-control {
+      height: 34px;
+      font-size: 13px;
+      border-radius: 0; // qbit contract: square corners
+    }
+
+    .btn-purple {
+      height: 34px;
+      padding-top: 0.25rem;
+      padding-bottom: 0.25rem;
+      border-radius: 0; // qbit contract: square corners
+    }
+
+    // the suggestion panel is a fixed 410px — wider than this compact form —
+    // and the form hugs the container's right edge, so hang the panel from
+    // the input's right edge to keep it on-screen; 40px = 34px input + 6px,
+    // flush under the subnav's bottom hairline
+    .dropdown-menu {
+      top: 40px;
+      left: auto;
+      right: 0;
+      margin-top: 0;
+      border-radius: 0; // qbit contract: square corners
+    }
+  }
+}
+
+@media (min-width: ($mobile-breakpoint + 1px)) and (max-width: 1199.98px) {
+  .qbit-subnav-links {
+    column-gap: 1rem;
+  }
+
+  .qbit-subnav-link {
+    font-size: 12px;
+  }
+
+  .qbit-subnav-search {
+    min-width: 140px;
+  }
+}
+
+.qbit-menu-backdrop {
+  display: none;
+
+  @media (max-width: $mobile-breakpoint) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1; // under .qbit-bar-wrap (z-index 2) in the root stacking context
+    border: 0;
+    padding: 0;
+    background: rgb(255 255 255 / 55%);
+    cursor: default;
+  }
 }
 
 main {
@@ -317,13 +731,48 @@ main {
   transition-property: max-width;
 }
 
-// empty sidenav
+// mobile-only stand-in for the subnav's connection badge (the subnav is
+// hidden below the breakpoint); exists in the DOM only while disconnected
+// fixed bottom toast: out of document flow (so it can never add scroll slack
+// or shift the chrome mid-outage) and visible at any scroll depth, unlike the
+// header region it used to sit under
+.qbit-mobile-connection {
+  display: none;
+
+  @media (max-width: $mobile-breakpoint) {
+    display: flex;
+    justify-content: center;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 99;
+    padding: 0.25rem 0;
+    background: var(--qbit-surface);
+    border-top: 1px solid var(--qbit-line);
+
+    .badge {
+      font-size: 9px;
+    }
+  }
+}
+
+// empty sidenav to push the footer down the screen. Height subtracts ALL the
+// in-flow chrome above it (the non-sticky banner + bar still occupy document
+// flow even though they scroll away) so short pages never get forced scroll
+// slack; top pins below whatever is sticky (nothing on mobile, the 44px
+// section bar on desktop)
 .empty-sidenav {
   z-index: 1;
   background-color: transparent;
   width: 0px;
-  height: calc(100vh - 65px);
+  height: calc(100vh - #{$banner-height} - #{$header-height});
   position: sticky;
-  top: 65px;
+  top: 0;
   padding-bottom: 20px;
+
+  @media (min-width: ($mobile-breakpoint + 1px)) {
+    height: calc(100vh - #{$banner-height} - #{$header-height} - #{$subnav-height});
+    top: #{$subnav-height};
+  }
 }

@@ -1,0 +1,20 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.cadence-lane-badge {
+  white-space: nowrap;
+  text-shadow: none;
+}
+
+.lane-code,
+.chain-id {
+  margin-left: 0.2rem;
+}
+
+.chain-id-warning {
+  white-space: nowrap;
+}

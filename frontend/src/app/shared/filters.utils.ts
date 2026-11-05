@@ -36,11 +36,13 @@ export const TransactionFlags = {
   p2wpkh:                                             0b00010000_00000000n,
   p2wsh:                                              0b00100000_00000000n,
   p2tr:                                               0b01000000_00000000n,
+  p2mr:                                               0b10000000_00000000n,
   // behavior
   cpfp_parent:                               0b00000001_00000000_00000000n,
   cpfp_child:                                0b00000010_00000000_00000000n,
   replacement:                               0b00000100_00000000_00000000n,
   acceleration:                              0b00001000_00000000_00000000n,
+  anchor:                                    0b00010000_00000000_00000000n,
   // data
   op_return:                        0b00000001_00000000_00000000_00000000n,
   fake_pubkey:                      0b00000010_00000000_00000000_00000000n,
@@ -93,6 +95,8 @@ export const TransactionFilters: { [key: string]: Filter } = {
     p2wpkh: { key: 'p2wpkh', label: 'P2WPKH', flag: TransactionFlags.p2wpkh, important: true, tooltip: false, },
     p2wsh: { key: 'p2wsh', label: 'P2WSH', flag: TransactionFlags.p2wsh, important: true, tooltip: false, },
     p2tr: { key: 'p2tr', label: 'Taproot', flag: TransactionFlags.p2tr, important: true, tooltip: false, },
+    p2mr: { key: 'p2mr', label: 'P2MR', flag: TransactionFlags.p2mr, important: true, tooltip: false, },
+    anchor: { key: 'anchor', label: 'Anchor', flag: TransactionFlags.anchor, important: true, tooltip: false, },
     /* behavior */
     cpfp_parent: { key: 'cpfp_parent', label: 'Paid for by child', flag: TransactionFlags.cpfp_parent, important: true, tooltip: true, txPage: false, },
     cpfp_child: { key: 'cpfp_child', label: 'Pays for parent', flag: TransactionFlags.cpfp_child, important: true, tooltip: true, txPage: false, },
@@ -118,7 +122,7 @@ export const TransactionFilters: { [key: string]: Filter } = {
 
 export const FilterGroups: { label: string, filters: Filter[]}[] = [
   { label: $localize`:@@885666551418fd59011ceb09d5c481095940193b:Features`, filters: ['rbf', 'no_rbf', 'v1', 'v2', 'v3', 'nonstandard'] },
-  { label: $localize`Address Types`, filters: ['p2pk', 'p2ms', 'p2pkh', 'p2sh', 'p2wpkh', 'p2wsh', 'p2tr'] },
+  { label: $localize`Address Types`, filters: ['p2pk', 'p2ms', 'p2pkh', 'p2sh', 'p2wpkh', 'p2wsh', 'p2tr', 'p2mr', 'anchor'] },
   { label: $localize`Behavior`, filters: ['cpfp_parent', 'cpfp_child', 'replacement', 'acceleration'] },
   { label: $localize`Data`, filters: ['op_return', 'fake_pubkey', 'fake_scripthash', 'inscription', 'annex'] },
   { label: $localize`Heuristics`, filters: ['coinjoin', 'consolidation', 'batch_payout'] },

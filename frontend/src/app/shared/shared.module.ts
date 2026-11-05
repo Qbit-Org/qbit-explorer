@@ -60,29 +60,15 @@ import { AddressGroupComponent } from '@components/address-group/address-group.c
 import { SearchFormComponent } from '@components/search-form/search-form.component';
 import { AddressLabelsComponent } from '@components/address-labels/address-labels.component';
 import { FooterComponent } from '@components/footer/footer.component';
-import { AssetComponent } from '@components/asset/asset.component';
-import { AssetsComponent } from '@components/assets/assets.component';
-import { AssetsNavComponent } from '@components/assets/assets-nav/assets-nav.component';
 import { StatusViewComponent } from '@components/status-view/status-view.component';
-import { ServerHealthComponent } from '@components/server-health/server-health.component';
-import { ServerStatusComponent } from '@components/server-health/server-status.component';
 import { FeesBoxComponent } from '@components/fees-box/fees-box.component';
-import { DifficultyComponent } from '@components/difficulty/difficulty.component';
-import { DifficultyTooltipComponent } from '@components/difficulty/difficulty-tooltip.component';
-import { DifficultyMiningComponent } from '@components/difficulty-mining/difficulty-mining.component';
 import { BalanceWidgetComponent } from '@components/balance-widget/balance-widget.component';
 import { AddressTransactionsWidgetComponent } from '@components/address-transactions-widget/address-transactions-widget.component';
 import { RbfTimelineComponent } from '@components/rbf-timeline/rbf-timeline.component';
-import { AccelerationTimelineComponent } from '@components/acceleration-timeline/acceleration-timeline.component';
 import { RbfTimelineTooltipComponent } from '@components/rbf-timeline/rbf-timeline-tooltip.component';
-import { AccelerationTimelineTooltipComponent } from '@components/acceleration-timeline/acceleration-timeline-tooltip.component';
 import { PushTransactionComponent } from '@components/push-transaction/push-transaction.component';
 import { TestTransactionsComponent } from '@components/test-transactions/test-transactions.component';
-import { AssetsFeaturedComponent } from '@components/assets/assets-featured/assets-featured.component';
-import { AssetGroupComponent } from '@components/assets/asset-group/asset-group.component';
-import { AssetCirculationComponent } from '@components/asset-circulation/asset-circulation.component';
 import { AmountShortenerPipe } from '@app/shared/pipes/amount-shortener.pipe';
-import { DifficultyAdjustmentsTable } from '@components/difficulty-adjustments-table/difficulty-adjustments-table.components';
 import { BlocksList } from '@components/blocks-list/blocks-list.component';
 import { RbfList } from '@components/rbf-list/rbf-list.component';
 import { StaleList } from '@components/stale-list/stale-list.component';
@@ -103,15 +89,11 @@ import { SearchResultsComponent } from '@components/search-form/search-results/s
 import { TimestampComponent } from '@app/shared/components/timestamp/timestamp.component';
 import { ConfirmationsComponent } from '@app/shared/components/confirmations/confirmations.component';
 import { ToggleComponent } from '@app/shared/components/toggle/toggle.component';
-import { GeolocationComponent } from '@app/shared/components/geolocation/geolocation.component';
 import { TestnetAlertComponent } from '@app/shared/components/testnet-alert/testnet-alert.component';
 import { GlobalFooterComponent } from '@app/shared/components/global-footer/global-footer.component';
 import { MempoolErrorComponent } from '@app/shared/components/mempool-error/mempool-error.component';
-import { AccelerationsListComponent } from '@components/acceleration/accelerations-list/accelerations-list.component';
-import { PendingStatsComponent } from '@components/acceleration/pending-stats/pending-stats.component';
-import { AccelerationStatsComponent } from '@components/acceleration/acceleration-stats/acceleration-stats.component';
-import { AccelerationSparklesComponent } from '@components/acceleration/sparkles/acceleration-sparkles.component';
 import { OrdDataComponent } from '@components/ord-data/ord-data.component';
+import { CadenceLaneBadgeComponent } from '@app/shared/components/cadence-lane-badge/cadence-lane-badge.component';
 
 import { BlockViewComponent } from '@components/block-view/block-view.component';
 import { EightBlocksComponent } from '@components/eight-blocks/eight-blocks.component';
@@ -123,12 +105,7 @@ import { ClockComponent } from '@components/clock/clock.component';
 import { CalculatorComponent } from '@components/calculator/calculator.component';
 import { BitcoinsatoshisPipe } from '@app/shared/pipes/bitcoinsatoshis.pipe';
 import { HttpErrorComponent } from '@app/shared/components/http-error/http-error.component';
-import { TwitterWidgetComponent } from '@components/twitter-widget/twitter-widget.component';
-import { SimpleProofWidgetComponent } from '@components/simpleproof-widget/simpleproof-widget.component';
-import { SimpleProofCuboWidgetComponent } from '@components/simpleproof-widget/simpleproof-cubo-widget.component';
-import { FaucetComponent } from '@components/faucet/faucet.component';
 import { TwitterLogin } from '@components/twitter-login/twitter-login.component';
-import { BitcoinInvoiceComponent } from '@components/bitcoin-invoice/bitcoin-invoice.component';
 
 import { OnlyVsizeDirective, OnlyWeightDirective } from '@app/shared/components/weight-directives/weight-directives';
 import { GithubLogin } from '@components/github-login.component/github-login.component';
@@ -185,29 +162,15 @@ import { GithubLogin } from '@components/github-login.component/github-login.com
     SearchFormComponent,
     AddressLabelsComponent,
     FooterComponent,
-    AssetComponent,
-    AssetsComponent,
     StatusViewComponent,
-    ServerHealthComponent,
-    ServerStatusComponent,
     FeesBoxComponent,
-    DifficultyComponent,
-    DifficultyMiningComponent,
-    DifficultyTooltipComponent,
     BalanceWidgetComponent,
     AddressTransactionsWidgetComponent,
     RbfTimelineComponent,
-    AccelerationTimelineComponent,
     RbfTimelineTooltipComponent,
-    AccelerationTimelineTooltipComponent,
     PushTransactionComponent,
     TestTransactionsComponent,
-    AssetsNavComponent,
-    AssetsFeaturedComponent,
-    AssetGroupComponent,
-    AssetCirculationComponent,
     AmountShortenerPipe,
-    DifficultyAdjustmentsTable,
     BlocksList,
     RbfList,
     StaleList,
@@ -228,7 +191,6 @@ import { GithubLogin } from '@components/github-login.component/github-login.com
     TimestampComponent,
     ConfirmationsComponent,
     ToggleComponent,
-    GeolocationComponent,
     TestnetAlertComponent,
     GlobalFooterComponent,
     CalculatorComponent,
@@ -243,19 +205,11 @@ import { GithubLogin } from '@components/github-login.component/github-login.com
     OnlyVsizeDirective,
     OnlyWeightDirective,
     MempoolErrorComponent,
-    AccelerationsListComponent,
-    AccelerationStatsComponent,
-    PendingStatsComponent,
-    AccelerationSparklesComponent,
     OrdDataComponent,
+    CadenceLaneBadgeComponent,
     HttpErrorComponent,
-    TwitterWidgetComponent,
-    SimpleProofWidgetComponent,
-    SimpleProofCuboWidgetComponent,
-    FaucetComponent,
     TwitterLogin,
     GithubLogin,
-    BitcoinInvoiceComponent,
   ],
   imports: [
     CommonModule,
@@ -337,29 +291,15 @@ import { GithubLogin } from '@components/github-login.component/github-login.com
     SearchFormComponent,
     AddressLabelsComponent,
     FooterComponent,
-    AssetComponent,
-    AssetsComponent,
     StatusViewComponent,
-    ServerHealthComponent,
-    ServerStatusComponent,
     FeesBoxComponent,
-    DifficultyComponent,
-    DifficultyMiningComponent,
-    DifficultyTooltipComponent,
     BalanceWidgetComponent,
     AddressTransactionsWidgetComponent,
     RbfTimelineComponent,
-    AccelerationTimelineComponent,
     RbfTimelineTooltipComponent,
-    AccelerationTimelineTooltipComponent,
     PushTransactionComponent,
     TestTransactionsComponent,
-    AssetsNavComponent,
-    AssetsFeaturedComponent,
-    AssetGroupComponent,
-    AssetCirculationComponent,
     AmountShortenerPipe,
-    DifficultyAdjustmentsTable,
     BlocksList,
     StaleList,
     StratumList,
@@ -379,23 +319,15 @@ import { GithubLogin } from '@components/github-login.component/github-login.com
     TimestampComponent,
     ConfirmationsComponent,
     ToggleComponent,
-    GeolocationComponent,
     TestnetAlertComponent,
     PreviewTitleComponent,
     GlobalFooterComponent,
     MempoolErrorComponent,
-    AccelerationsListComponent,
-    AccelerationStatsComponent,
-    PendingStatsComponent,
-    AccelerationSparklesComponent,
     OrdDataComponent,
+    CadenceLaneBadgeComponent,
     HttpErrorComponent,
-    TwitterWidgetComponent,
-    SimpleProofWidgetComponent,
-    SimpleProofCuboWidgetComponent,
     TwitterLogin,
     GithubLogin,
-    BitcoinInvoiceComponent,
     BitcoinsatoshisPipe,
 
     MempoolBlockOverviewComponent,

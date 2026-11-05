@@ -1,439 +1,403 @@
-# Docker Installation
+# Docker
 
-This directory contains the Dockerfiles used to build and release the official images, as well as a `docker-compose.yml` to configure environment variables and other settings.
+This directory contains the Dockerfiles and start scripts for the qbit explorer
+images, and a sample `docker-compose.yml` that runs them with MariaDB.
 
-If you are looking to use these Docker images to deploy your own instance of Mempool, note that they only containerize Mempool's frontend and backend. You will still need to deploy and configure Bitcoin Core and an Electrum Server separately, along with any other utilities specific to your use case (e.g., a reverse proxy, etc). Such configuration is mostly beyond the scope of the Mempool project, so please only proceed if you know what you're doing.
+The images contain only the explorer frontend (nginx serving the Angular build)
+and the backend (the Node.js API). You run the rest yourself:
 
-See a video guide of this installation method by k3tan [on BitcoinTV.com](https://bitcointv.com/w/8fpAx6rf5CQ16mMhospwjg).
+- [`qbitd`](https://github.com/Qbit-Org/qbit), unpruned, with `txindex=1` and
+  RPC enabled.
+- Optionally [qbit-electrs](https://github.com/Qbit-Org/qbit-electrs), which
+  adds address lookups through its REST API.
+- A reverse proxy with TLS if the explorer is public.
 
-Jump to a section in this doc:
-- [Configure with Bitcoin Core Only](#configure-with-bitcoin-core-only)
-- [Configure with Bitcoin Core + Electrum Server](#configure-with-bitcoin-core--electrum-server)
-- [Further Configuration](#further-configuration)
+Jump to a section:
 
-## Configure with Bitcoin Core Only
+- [Images](#images)
+- [Run with Docker Compose](#run-with-docker-compose)
+- [Configuration reference](#configuration-reference)
 
-_Note: address lookups require an Electrum Server and will not work with this configuration. [Add an Electrum Server](#configure-with-bitcoin-core--electrum-server) to your backend for full functionality._
+## Images
 
-The default Docker configuration assumes you have the following configuration in your `bitcoin.conf` file:
+[`.github/workflows/docker.yml`](../.github/workflows/docker.yml) builds
+`linux/amd64` and `linux/arm64` images and pushes them to Docker Hub as
+`<namespace>/frontend` and `<namespace>/backend`. `<namespace>` is the Docker
+Hub account stored in the repository's `DOCKER_HUB_USER` Actions secret.
 
-```ini
-txindex=1
-server=1
-rpcuser=mempool
-rpcpassword=mempool
+| Trigger | Tags pushed |
+| --- | --- |
+| Git tag `vX.Y.Z` | `vX.Y.Z` and `latest` |
+| Git tag `vX.Y.Z-<suffix>` | `vX.Y.Z-<suffix>` |
+| Pull request from a branch of this repository, labelled `docker-push` | `v<package.json version>-<first 8 characters of the head commit>` |
+
+Every pull request also builds both images and starts them with
+`docker-compose.yml`, without pushing, to check that all three containers
+become healthy.
+
+### Build the images yourself
+
+These steps mirror the `test-images` job in `docker.yml`:
+
+```bash
+git clone https://github.com/Qbit-Org/qbit-explorer.git
+cd qbit-explorer
+docker/init.sh
+docker buildx build --load \
+  --build-arg commitHash="$(git rev-parse --short=8 HEAD)" \
+  --tag qbit-explorer-frontend:local ./frontend/
+docker buildx build --load \
+  --build-context rustgbt=./rust --build-context backend=./backend \
+  --build-arg commitHash="$(git rev-parse --short=8 HEAD)" \
+  --tag qbit-explorer-backend:local ./backend/
 ```
 
-If you want to use different credentials, specify them in the `docker-compose.yml` file:
+Run `docker/init.sh` from the repository root. It copies `docker/backend`,
+`docker/frontend`, `nginx.conf` and `nginx-mempool.conf` into the build
+contexts (the copies are git-ignored), and downloads the GeoLite2 databases
+from [mempool/geoip-data](https://github.com/mempool/geoip-data) at a pinned
+commit. The frontend image build also needs network access: it downloads
+mining pool logos from
+[mempool/mining-pool-logos](https://github.com/mempool/mining-pool-logos),
+which include the logos for the AuxPoW parent pools the explorer recognises.
+
+## Run with Docker Compose
+
+`docker-compose.yml` runs the frontend (`web`), the backend (`api`) and MariaDB
+(`db`). It has no default images, so choose them in `docker/.env` first:
+
+```bash
+cd docker
+cp .env.example .env
+```
+
+Then set `QBIT_EXPLORER_FRONTEND_IMAGE` and `QBIT_EXPLORER_BACKEND_IMAGE` in
+`.env`: `<namespace>/frontend:<tag>` and `<namespace>/backend:<tag>` for
+published images, or `qbit-explorer-frontend:local` and
+`qbit-explorer-backend:local` for the images built above. Until both are set,
+Compose stops with `required variable ... is missing a value`. Compose reads
+`.env` from `docker/` on every command, so `docker compose ps`, `logs` and
+`down` work in any shell without exporting anything. Variables exported in your shell take
+precedence over `.env`, and `.env` is git-ignored.
+
+Every container runs as UID/GID 1000. The backend cache lives in `docker/data` and the database in
+`docker/mysql/data`, so UID 1000 must be able to write to both.
+
+> **Always set `MEMPOOL_BACKEND`.** The backend image defaults to `electrum`, a
+> value inherited from upstream mempool. The sample compose file sets `none`,
+> and most qbit setups use `esplora` with qbit-electrs (see below).
+
+### qbitd only
+
+In this mode the explorer reads everything from qbitd RPC. Address lookups need
+qbit-electrs, so they don't work here.
+
+Configure `qbit.conf`:
+
+```ini
+server=1
+txindex=1
+rpcuser=mempool
+rpcpassword=mempool
+
+# qbitd accepts RPC only on localhost unless both rpcbind and rpcallowip are
+# set. Bind to the address the containers use (CORE_RPC_HOST below) and allow
+# the Docker subnets. Never expose the RPC port to the internet.
+rpcbind=127.0.0.1
+rpcbind=172.17.0.1
+rpcallowip=127.0.0.1
+rpcallowip=172.16.0.0/12
+```
+
+Set the RPC address and credentials for the `api` service in
+`docker-compose.yml`. `CORE_RPC_HOST` must be an address of the Docker host that
+the containers can reach. The `172.27.0.1` in the file is a placeholder; the
+host's `docker0` address, usually `172.17.0.1`, is a common choice.
 
 ```yaml
   api:
     environment:
       MEMPOOL_BACKEND: "none"
-      CORE_RPC_HOST: "172.27.0.1"
-      CORE_RPC_PORT: "8332"
-      CORE_RPC_USERNAME: "customuser"
-      CORE_RPC_PASSWORD: "custompassword"
-      CORE_RPC_TIMEOUT: "60000"
+      CORE_RPC_HOST: "172.17.0.1"
+      CORE_RPC_PORT: "8352"
+      CORE_RPC_USERNAME: "mempool"
+      CORE_RPC_PASSWORD: "mempool"
 ```
 
-The IP address in the example above refers to Docker's default gateway IP address so that the container can hit the `bitcoind` instance running on the host machine. If your setup is different, update it accordingly.
-
-Make sure `bitcoind` is running and synced.
-
-Now, run:
+Once qbitd is running and synced, start the stack from `docker/`:
 
 ```bash
-docker-compose up
+docker compose up -d
 ```
 
-Your Mempool instance should be running at http://localhost. The graphs will be populated as new transactions are detected.
+The explorer listens on port 80 of the host, at http://localhost.
 
-## Configure with Bitcoin Core + Electrum Server
+### qbitd and qbit-electrs
 
-First, configure `bitcoind` as specified above, and make sure your Electrum Server is running and synced. See [this FAQ](https://mempool.space/docs/faq#address-lookup-issues) if you need help picking an Electrum Server implementation.
+[qbit-electrs](https://github.com/Qbit-Org/qbit-electrs) serves an
+Esplora-compatible REST API, on port 3000 by default for mainnet. It must
+listen (`--http-addr`) on an address the containers can reach. Point the
+backend at it:
 
-Then, set the following variables in `docker-compose.yml` so Mempool can connect to your Electrum Server:
+```yaml
+  api:
+    environment:
+      MEMPOOL_BACKEND: "esplora"
+      ESPLORA_REST_API_URL: "http://172.17.0.1:3000"
+```
+
+`MEMPOOL_BACKEND` accepts `none` (qbitd only), `esplora` (the qbit-electrs REST
+API) and `electrum` (an Electrum protocol server). qbit deployments normally use
+`none` or `esplora`.
+
+qbit-electrs also serves the Electrum protocol, over plain TCP, on port 50001
+for mainnet, 40001 for testnet4 and 60401 for regtest. It listens on localhost
+unless `--electrum-rpc-addr` says otherwise. The image's Electrum defaults
+(`ELECTRUM_PORT` 50001, `ELECTRUM_TLS_ENABLED` false) match qbit-electrs on
+mainnet. To use `MEMPOOL_BACKEND: "electrum"` on testnet4 or regtest, set
+`ELECTRUM_PORT` to that network's port. Keep `ELECTRUM_TLS_ENABLED` false,
+because qbit-electrs has no TLS:
 
 ```yaml
   api:
     environment:
       MEMPOOL_BACKEND: "electrum"
-      ELECTRUM_HOST: "172.27.0.1"
-      ELECTRUM_PORT: "50002"
+      ELECTRUM_HOST: "172.17.0.1"
+      ELECTRUM_PORT: "50001" # 40001 on testnet4, 60401 on regtest
       ELECTRUM_TLS_ENABLED: "false"
 ```
 
-Eligible values for `MEMPOOL_BACKEND`:
-  - "electrum" if you're using [romanz/electrs](https://github.com/romanz/electrs) or [cculianu/Fulcrum](https://github.com/cculianu/Fulcrum)
-  - "esplora" if you're using [Blockstream/electrs](https://github.com/Blockstream/electrs)
-  - "none" if you're not using any Electrum Server
+### Networks
 
-Of course, if your Docker host IP address is different, update accordingly.
+The bundled nginx configuration sends `/api` and `/ws` to a single backend, so
+one stack serves one network. For testnet4 or regtest, set `ROOT_NETWORK` so the
+frontend serves that network at `/`.
 
-With `bitcoind` and Electrum Server set up, run Mempool with:
+| Network | qbitd RPC | qbit-electrs REST | `api` environment | `web` environment |
+| --- | --- | --- | --- | --- |
+| mainnet | 8352 | 3000 | defaults | defaults |
+| testnet4 | 48352 | 3004 | `MEMPOOL_NETWORK: "testnet4"`, `CORE_RPC_PORT: "48352"` | `MAINNET_ENABLED: "false"`, `TESTNET4_ENABLED: "true"`, `ROOT_NETWORK: "testnet4"` |
+| regtest | 18452 | 3002 | `MEMPOOL_NETWORK: "regtest"`, `CORE_RPC_PORT: "18452"` | `MAINNET_ENABLED: "false"`, `REGTEST_ENABLED: "true"`, `ROOT_NETWORK: "regtest"` |
 
-```bash
-docker-compose up
-```
+The block weight (2,000,000) and target spacing (60 seconds) defaults already
+match qbit on every network. Leave `MEMPOOL_RUST_GBT` at its default of
+`false`: the Rust block-template builder in `rust/gbt` still applies Bitcoin's
+witness scale factor of 4, which would show projected-block fee rates four
+times too high on qbit.
 
-## Further Configuration
+## Configuration reference
 
-Optionally, you can override any other backend settings from `mempool-config.json`.
+### How settings reach the services
 
-Below we list all settings from `mempool-config.json` and the corresponding overrides you can make in the `api` > `environment` section of `docker-compose.yml`. 
+- **Backend:** at container start, `docker/backend/start.sh` reads the variables
+  below, writes them into `/backend/mempool-config.json` and starts the API. An
+  unset or empty variable takes the image default shown here. The built-in
+  defaults in `backend/src/config.ts` apply only to keys missing from that file,
+  so the image defaults are the ones that take effect. Some differ from the
+  built-in defaults, for example `MEMPOOL_BACKEND`, `ESPLORA_REQUEST_TIMEOUT`,
+  `SYSLOG_ENABLED` and `MAXMIND_ENABLED`.
+- **Frontend:** `docker/frontend/entrypoint.sh` writes `FRONTEND_HTTP_PORT` and
+  the backend address into the nginx configuration, then renders the browser
+  configuration (`config.js`) from the variables below. `MAINNET_EXPLORER_URL`
+  and `TESTNET4_EXPLORER_URL` keep an explicitly empty value, which hides that
+  link. Every other variable falls back to its default when unset or empty.
 
-<br/>
+### Backend (`api`)
 
-`mempool-config.json`:
-```json
-  "MEMPOOL": {
-    "NETWORK": "mainnet",
-    "BACKEND": "electrum",
-    "ENABLED": true,
-    "HTTP_PORT": 8999,
-    "SPAWN_CLUSTER_PROCS": 0,
-    "API_URL_PREFIX": "/api/v1/",
-    "POLL_RATE_MS": 2000,
-    "CACHE_DIR": "./cache",
-    "CLEAR_PROTECTION_MINUTES": 20,
-    "RECOMMENDED_FEE_PERCENTILE": 50,
-    "BLOCK_WEIGHT_UNITS": 4000000,
-    "INITIAL_BLOCKS_AMOUNT": 8,
-    "MEMPOOL_BLOCKS_AMOUNT": 8,
-    "BLOCKS_SUMMARIES_INDEXING": false,
-    "USE_SECOND_NODE_FOR_MINFEE": false,
-    "EXTERNAL_ASSETS": [],
-    "STDOUT_LOG_MIN_PRIORITY": "info",
-    "INDEXING_BLOCKS_AMOUNT": false,
-    "AUTOMATIC_POOLS_UPDATE": false,
-    "POOLS_JSON_URL": "https://raw.githubusercontent.com/mempool/mining-pools/master/pools-v2.json",
-    "POOLS_JSON_TREE_URL": "https://api.github.com/repos/mempool/mining-pools/git/trees/master",
-    "POOLS_UPDATE_DELAY": 604800,
-    "CPFP_INDEXING": false,
-    "MAX_BLOCKS_BULK_QUERY": 0,
-    "DISK_CACHE_BLOCK_INTERVAL": 6,
-    "PRICE_UPDATES_PER_HOUR": 1
-  },
-```
+`MEMPOOL_NETWORK` is `mainnet`, `testnet4` or `regtest` for qbit.
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      MEMPOOL_NETWORK: ""
-      MEMPOOL_BACKEND: ""
-      BACKEND_HTTP_PORT: ""
-      MEMPOOL_SPAWN_CLUSTER_PROCS: ""
-      MEMPOOL_API_URL_PREFIX: ""
-      MEMPOOL_POLL_RATE_MS: ""
-      MEMPOOL_CACHE_DIR: ""
-      MEMPOOL_CLEAR_PROTECTION_MINUTES: ""
-      MEMPOOL_RECOMMENDED_FEE_PERCENTILE: ""
-      MEMPOOL_BLOCK_WEIGHT_UNITS: ""
-      MEMPOOL_INITIAL_BLOCKS_AMOUNT: ""
-      MEMPOOL_MEMPOOL_BLOCKS_AMOUNT: ""
-      MEMPOOL_BLOCKS_SUMMARIES_INDEXING: ""
-      MEMPOOL_USE_SECOND_NODE_FOR_MINFEE: ""
-      MEMPOOL_EXTERNAL_ASSETS: ""
-      MEMPOOL_STDOUT_LOG_MIN_PRIORITY: ""
-      MEMPOOL_INDEXING_BLOCKS_AMOUNT: ""
-      MEMPOOL_AUTOMATIC_POOLS_UPDATE: ""
-      MEMPOOL_POOLS_JSON_URL: ""
-      MEMPOOL_POOLS_JSON_TREE_URL: ""
-      MEMPOOL_POOLS_UPDATE_DELAY: ""
-      MEMPOOL_CPFP_INDEXING: ""
-      MEMPOOL_MAX_BLOCKS_BULK_QUERY: ""
-      MEMPOOL_DISK_CACHE_BLOCK_INTERVAL: ""
-      MEMPOOL_PRICE_UPDATES_PER_HOUR: ""
-      ...
-```
+**MEMPOOL**
 
-`CPFP_INDEXING` enables indexing CPFP (Child Pays For Parent) information for the last `INDEXING_BLOCKS_AMOUNT` blocks.
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `MEMPOOL_NETWORK` | `MEMPOOL.NETWORK` | `mainnet` |
+| `MEMPOOL_BACKEND` | `MEMPOOL.BACKEND` | `electrum` |
+| `MEMPOOL_ENABLED` | `MEMPOOL.ENABLED` | `true` |
+| `MEMPOOL_OFFICIAL` | `MEMPOOL.OFFICIAL` | `false` |
+| `BACKEND_HTTP_PORT` | `MEMPOOL.HTTP_PORT` | `8999` |
+| `MEMPOOL_SPAWN_CLUSTER_PROCS` | `MEMPOOL.SPAWN_CLUSTER_PROCS` | `0` |
+| `MEMPOOL_UNIX_SOCKET_PATH` | `MEMPOOL.UNIX_SOCKET_PATH` | (empty) |
+| `MEMPOOL_API_URL_PREFIX` | `MEMPOOL.API_URL_PREFIX` | `/api/v1/` |
+| `MEMPOOL_POLL_RATE_MS` | `MEMPOOL.POLL_RATE_MS` | `2000` |
+| `MEMPOOL_CACHE_DIR` | `MEMPOOL.CACHE_DIR` | `./cache` |
+| `MEMPOOL_CACHE_ENABLED` | `MEMPOOL.CACHE_ENABLED` | `true` |
+| `MEMPOOL_CLEAR_PROTECTION_MINUTES` | `MEMPOOL.CLEAR_PROTECTION_MINUTES` | `20` |
+| `MEMPOOL_RECOMMENDED_FEE_PERCENTILE` | `MEMPOOL.RECOMMENDED_FEE_PERCENTILE` | `50` |
+| `MEMPOOL_BLOCK_WEIGHT_UNITS` | `MEMPOOL.BLOCK_WEIGHT_UNITS` | `2000000` |
+| `MEMPOOL_BLOCK_TARGET_SPACING_SECONDS` | `MEMPOOL.BLOCK_TARGET_SPACING_SECONDS` | `60` |
+| `MEMPOOL_INITIAL_BLOCKS_AMOUNT` | `MEMPOOL.INITIAL_BLOCKS_AMOUNT` | `8` |
+| `MEMPOOL_MEMPOOL_BLOCKS_AMOUNT` | `MEMPOOL.MEMPOOL_BLOCKS_AMOUNT` | `8` |
+| `MEMPOOL_INDEXING_BLOCKS_AMOUNT` | `MEMPOOL.INDEXING_BLOCKS_AMOUNT` | `11000` |
+| `MEMPOOL_BLOCKS_SUMMARIES_INDEXING` | `MEMPOOL.BLOCKS_SUMMARIES_INDEXING` | `false` |
+| `MEMPOOL_GOGGLES_INDEXING` | `MEMPOOL.GOGGLES_INDEXING` | `false` |
+| `MEMPOOL_USE_SECOND_NODE_FOR_MINFEE` | `MEMPOOL.USE_SECOND_NODE_FOR_MINFEE` | `false` |
+| `MEMPOOL_EXTERNAL_ASSETS` | `MEMPOOL.EXTERNAL_ASSETS` | `[]` |
+| `MEMPOOL_EXTERNAL_MAX_RETRY` | `MEMPOOL.EXTERNAL_MAX_RETRY` | `1` |
+| `MEMPOOL_EXTERNAL_RETRY_INTERVAL` | `MEMPOOL.EXTERNAL_RETRY_INTERVAL` | `0` |
+| `MEMPOOL_USER_AGENT` | `MEMPOOL.USER_AGENT` | `mempool` |
+| `MEMPOOL_STDOUT_LOG_MIN_PRIORITY` | `MEMPOOL.STDOUT_LOG_MIN_PRIORITY` | `info` |
+| `MEMPOOL_AUTOMATIC_POOLS_UPDATE` | `MEMPOOL.AUTOMATIC_POOLS_UPDATE` | `false` |
+| `MEMPOOL_POOLS_JSON_URL` | `MEMPOOL.POOLS_JSON_URL` | (empty) |
+| `MEMPOOL_POOLS_JSON_TREE_URL` | `MEMPOOL.POOLS_JSON_TREE_URL` | (empty) |
+| `MEMPOOL_POOLS_UPDATE_DELAY` | `MEMPOOL.POOLS_UPDATE_DELAY` | `604800` |
+| `MEMPOOL_AUDIT` | `MEMPOOL.AUDIT` | `false` |
+| `MEMPOOL_RUST_GBT` | `MEMPOOL.RUST_GBT` | `false` |
+| `MEMPOOL_LIMIT_GBT` | `MEMPOOL.LIMIT_GBT` | `false` |
+| `MEMPOOL_CPFP_INDEXING` | `MEMPOOL.CPFP_INDEXING` | `false` |
+| `MEMPOOL_MAX_BLOCKS_BULK_QUERY` | `MEMPOOL.MAX_BLOCKS_BULK_QUERY` | `0` |
+| `MEMPOOL_DISK_CACHE_BLOCK_INTERVAL` | `MEMPOOL.DISK_CACHE_BLOCK_INTERVAL` | `6` |
+| `MEMPOOL_MAX_PUSH_TX_SIZE_WEIGHT` | `MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT` | `400000` |
+| `MEMPOOL_ALLOW_UNREACHABLE` | `MEMPOOL.ALLOW_UNREACHABLE` | `true` |
+| `MEMPOOL_PRICE_UPDATES_PER_HOUR` | `MEMPOOL.PRICE_UPDATES_PER_HOUR` | `1` |
+| `MEMPOOL_MAX_TRACKED_ADDRESSES` | `MEMPOOL.MAX_TRACKED_ADDRESSES` | `1` |
 
-<br/>
+**CORE_RPC** (qbitd)
 
-`mempool-config.json`:
-```json
-  "CORE_RPC": {
-    "HOST": "127.0.0.1",
-    "PORT": 8332,
-    "USERNAME": "mempool",
-    "PASSWORD": "mempool",
-    "TIMEOUT": 60000,
-    "COOKIE": false,
-    "COOKIE_PATH": ""
-  },
-```
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `CORE_RPC_HOST` | `CORE_RPC.HOST` | `127.0.0.1` |
+| `CORE_RPC_PORT` | `CORE_RPC.PORT` | `8352` |
+| `CORE_RPC_USERNAME` | `CORE_RPC.USERNAME` | `mempool` |
+| `CORE_RPC_PASSWORD` | `CORE_RPC.PASSWORD` | `mempool` |
+| `CORE_RPC_TIMEOUT` | `CORE_RPC.TIMEOUT` | `60000` |
+| `CORE_RPC_COOKIE` | `CORE_RPC.COOKIE` | `false` |
+| `CORE_RPC_COOKIE_PATH` | `CORE_RPC.COOKIE_PATH` | (empty) |
+| `CORE_RPC_DEBUG_LOG_PATH` | `CORE_RPC.DEBUG_LOG_PATH` | (empty) |
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      CORE_RPC_HOST: ""
-      CORE_RPC_PORT: ""
-      CORE_RPC_USERNAME: ""
-      CORE_RPC_PASSWORD: ""
-      CORE_RPC_TIMEOUT: 60000
-      CORE_RPC_COOKIE: false
-      CORE_RPC_COOKIE_PATH: ""
-      ...
-```
+**ESPLORA** (qbit-electrs REST API)
 
-<br/>
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `ESPLORA_REST_API_URL` | `ESPLORA.REST_API_URL` | `http://127.0.0.1:3000` |
+| `ESPLORA_UNIX_SOCKET_PATH` | `ESPLORA.UNIX_SOCKET_PATH` | (empty) |
+| `ESPLORA_BATCH_QUERY_BASE_SIZE` | `ESPLORA.BATCH_QUERY_BASE_SIZE` | `1000` |
+| `ESPLORA_RETRY_UNIX_SOCKET_AFTER` | `ESPLORA.RETRY_UNIX_SOCKET_AFTER` | `30000` |
+| `ESPLORA_REQUEST_TIMEOUT` | `ESPLORA.REQUEST_TIMEOUT` | `5000` |
+| `ESPLORA_FALLBACK_TIMEOUT` | `ESPLORA.FALLBACK_TIMEOUT` | `5000` |
+| `ESPLORA_FALLBACK` | `ESPLORA.FALLBACK` | `[]` |
+| `ESPLORA_MAX_BEHIND_TIP` | `ESPLORA.MAX_BEHIND_TIP` | `2` |
 
-`mempool-config.json`:
-```json
-  "ELECTRUM": {
-    "HOST": "127.0.0.1",
-    "PORT": 50002,
-    "TLS_ENABLED": true
-  },
-```
+**ELECTRUM**
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      ELECTRUM_HOST: ""
-      ELECTRUM_PORT: ""
-      ELECTRUM_TLS_ENABLED: ""
-      ...
-```
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `ELECTRUM_HOST` | `ELECTRUM.HOST` | `127.0.0.1` |
+| `ELECTRUM_PORT` | `ELECTRUM.PORT` | `50001` |
+| `ELECTRUM_TLS_ENABLED` | `ELECTRUM.TLS_ENABLED` | `false` |
 
-<br/>
+**SECOND_CORE_RPC** (optional second qbitd)
 
-`mempool-config.json`:
-```json
-  "ESPLORA": {
-    "REST_API_URL": "http://127.0.0.1:3000",
-    "UNIX_SOCKET_PATH": "/tmp/esplora-socket",
-    "RETRY_UNIX_SOCKET_AFTER": 30000
-  },
-```
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `SECOND_CORE_RPC_HOST` | `SECOND_CORE_RPC.HOST` | `127.0.0.1` |
+| `SECOND_CORE_RPC_PORT` | `SECOND_CORE_RPC.PORT` | `8352` |
+| `SECOND_CORE_RPC_USERNAME` | `SECOND_CORE_RPC.USERNAME` | `mempool` |
+| `SECOND_CORE_RPC_PASSWORD` | `SECOND_CORE_RPC.PASSWORD` | `mempool` |
+| `SECOND_CORE_RPC_TIMEOUT` | `SECOND_CORE_RPC.TIMEOUT` | `60000` |
+| `SECOND_CORE_RPC_COOKIE` | `SECOND_CORE_RPC.COOKIE` | `false` |
+| `SECOND_CORE_RPC_COOKIE_PATH` | `SECOND_CORE_RPC.COOKIE_PATH` | (empty) |
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      ESPLORA_REST_API_URL: ""
-      ESPLORA_UNIX_SOCKET_PATH: ""
-      ESPLORA_RETRY_UNIX_SOCKET_AFTER: ""
-      ...
-```
+**DATABASE**
 
-<br/>
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `DATABASE_ENABLED` | `DATABASE.ENABLED` | `true` |
+| `DATABASE_HOST` | `DATABASE.HOST` | `127.0.0.1` |
+| `DATABASE_SOCKET` | `DATABASE.SOCKET` | (empty) |
+| `DATABASE_PORT` | `DATABASE.PORT` | `3306` |
+| `DATABASE_DATABASE` | `DATABASE.DATABASE` | `mempool` |
+| `DATABASE_USERNAME` | `DATABASE.USERNAME` | `mempool` |
+| `DATABASE_PASSWORD` | `DATABASE.PASSWORD` | `mempool` |
+| `DATABASE_TIMEOUT` | `DATABASE.TIMEOUT` | `180000` |
+| `DATABASE_PID_DIR` | `DATABASE.PID_DIR` | (empty) |
+| `DATABASE_POOL_SIZE` | `DATABASE.POOL_SIZE` | `100` |
 
-`mempool-config.json`:
-```json
-  "SECOND_CORE_RPC": {
-    "HOST": "127.0.0.1",
-    "PORT": 8332,
-    "USERNAME": "mempool",
-    "PASSWORD": "mempool",
-    "TIMEOUT": 60000,
-    "COOKIE": false,
-    "COOKIE_PATH": ""
-  },
-```
+**SYSLOG**
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      SECOND_CORE_RPC_HOST: ""
-      SECOND_CORE_RPC_PORT: ""
-      SECOND_CORE_RPC_USERNAME: ""
-      SECOND_CORE_RPC_PASSWORD: ""
-      SECOND_CORE_RPC_TIMEOUT: ""
-      SECOND_CORE_RPC_COOKIE: false
-      SECOND_CORE_RPC_COOKIE_PATH: ""
-      ...
-```
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `SYSLOG_ENABLED` | `SYSLOG.ENABLED` | `false` |
+| `SYSLOG_HOST` | `SYSLOG.HOST` | `127.0.0.1` |
+| `SYSLOG_PORT` | `SYSLOG.PORT` | `514` |
+| `SYSLOG_MIN_PRIORITY` | `SYSLOG.MIN_PRIORITY` | `info` |
+| `SYSLOG_FACILITY` | `SYSLOG.FACILITY` | `local7` |
 
-<br/>
+**STATISTICS**
 
-`mempool-config.json`:
-```json
-  "DATABASE": {
-    "ENABLED": true,
-    "HOST": "127.0.0.1",
-    "PORT": 3306,
-    "DATABASE": "mempool",
-    "USERNAME": "mempool",
-    "PASSWORD": "mempool"
-  },
-```
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `STATISTICS_ENABLED` | `STATISTICS.ENABLED` | `true` |
+| `STATISTICS_TX_PER_SECOND_SAMPLE_PERIOD` | `STATISTICS.TX_PER_SECOND_SAMPLE_PERIOD` | `150` |
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      DATABASE_ENABLED: ""
-      DATABASE_HOST: ""
-      DATABASE_PORT: ""
-      DATABASE_DATABASE: ""
-      DATABASE_USERNAME: ""
-      DATABASE_PASSWORD: ""
-      DATABASE_TIMEOUT: ""
-      ...
-```
+**SOCKS5PROXY**
 
-<br/>
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `SOCKS5PROXY_ENABLED` | `SOCKS5PROXY.ENABLED` | `false` |
+| `SOCKS5PROXY_USE_ONION` | `SOCKS5PROXY.USE_ONION` | `true` |
+| `SOCKS5PROXY_HOST` | `SOCKS5PROXY.HOST` | `localhost` |
+| `SOCKS5PROXY_PORT` | `SOCKS5PROXY.PORT` | `9050` |
+| `SOCKS5PROXY_USERNAME` | `SOCKS5PROXY.USERNAME` | (empty) |
+| `SOCKS5PROXY_PASSWORD` | `SOCKS5PROXY.PASSWORD` | (empty) |
 
-`mempool-config.json`:
-```json
-  "SYSLOG": {
-    "ENABLED": true,
-    "HOST": "127.0.0.1",
-    "PORT": 514,
-    "MIN_PRIORITY": "info",
-    "FACILITY": "local7"
-  },
-```
+**MAXMIND** (GeoIP; the image bundles the GeoLite2 databases)
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      SYSLOG_ENABLED: ""
-      SYSLOG_HOST: ""
-      SYSLOG_PORT: ""
-      SYSLOG_MIN_PRIORITY: ""
-      SYSLOG_FACILITY: ""
-      ...
-```
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `MAXMIND_ENABLED` | `MAXMIND.ENABLED` | `true` |
+| `MAXMIND_GEOLITE2_CITY` | `MAXMIND.GEOLITE2_CITY` | `/backend/GeoIP/GeoLite2-City.mmdb` |
+| `MAXMIND_GEOLITE2_ASN` | `MAXMIND.GEOLITE2_ASN` | `/backend/GeoIP/GeoLite2-ASN.mmdb` |
+| `MAXMIND_GEOIP2_ISP` | `MAXMIND.GEOIP2_ISP` | (empty) |
 
-<br/>
+**REDIS**
 
-`mempool-config.json`:
-```json
-  "STATISTICS": {
-    "ENABLED": true,
-    "TX_PER_SECOND_SAMPLE_PERIOD": 150
-  },
-```
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `REDIS_ENABLED` | `REDIS.ENABLED` | `false` |
+| `REDIS_UNIX_SOCKET_PATH` | `REDIS.UNIX_SOCKET_PATH` | (empty) |
+| `REDIS_BATCH_QUERY_BASE_SIZE` | `REDIS.BATCH_QUERY_BASE_SIZE` | `5000` |
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      STATISTICS_ENABLED: ""
-      STATISTICS_TX_PER_SECOND_SAMPLE_PERIOD: ""
-      ...
-```
+**FIAT_PRICE**
 
-<br/>
+| Variable | `mempool-config.json` key | Image default |
+| --- | --- | --- |
+| `FIAT_PRICE_ENABLED` | `FIAT_PRICE.ENABLED` | `true` |
+| `FIAT_PRICE_PAID` | `FIAT_PRICE.PAID` | `false` |
+| `FIAT_PRICE_API_KEY` | `FIAT_PRICE.API_KEY` | (empty) |
 
-`mempool-config.json`:
-```json
-  "SOCKS5PROXY": {
-    "ENABLED": false,
-    "HOST": "127.0.0.1",
-    "PORT": "9050",
-    "USERNAME": "",
-    "PASSWORD": ""
-  }
-```
+`start.sh` also reads upstream mempool settings that qbit doesn't use:
+Lightning (`LIGHTNING_*`, `LND_*`, `CLIGHTNING_SOCKET`), mempool.space services
+and replication (`MEMPOOL_SERVICES_*`, `REPLICATION_*`,
+`EXTERNAL_DATA_SERVER_*`) and Stratum job tracking (`STRATUM_*`). Their
+defaults disable them, so leave them unset.
 
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      SOCKS5PROXY_ENABLED: ""
-      SOCKS5PROXY_HOST: ""
-      SOCKS5PROXY_PORT: ""
-      SOCKS5PROXY_USERNAME: ""
-      SOCKS5PROXY_PASSWORD: ""
-      ...
-```
+### Frontend (`web`)
 
-<br/>
-
-`mempool-config.json`:
-```json
-  "LIGHTNING": {
-    "ENABLED": false
-    "BACKEND": "lnd"
-    "TOPOLOGY_FOLDER": ""
-    "STATS_REFRESH_INTERVAL": 600
-    "GRAPH_REFRESH_INTERVAL": 600
-    "LOGGER_UPDATE_INTERVAL": 30
-  }
-```
-
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      LIGHTNING_ENABLED: false
-      LIGHTNING_BACKEND: "lnd"
-      LIGHTNING_TOPOLOGY_FOLDER: ""
-      LIGHTNING_STATS_REFRESH_INTERVAL: 600
-      LIGHTNING_GRAPH_REFRESH_INTERVAL: 600
-      LIGHTNING_LOGGER_UPDATE_INTERVAL: 30
-      ...
-```
-
-<br/>
-
-`mempool-config.json`:
-```json
-  "LND": {
-    "TLS_CERT_PATH": ""
-    "MACAROON_PATH": ""
-    "REST_API_URL": "https://localhost:8080"
-    "TIMEOUT": 10000
-  }
-```
-
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      LND_TLS_CERT_PATH: ""
-      LND_MACAROON_PATH: ""
-      LND_REST_API_URL: "https://localhost:8080"
-      LND_TIMEOUT: 10000
-      ...
-```
-
-<br/>
-
-`mempool-config.json`:
-```json
-  "CLIGHTNING": {
-    "SOCKET": ""
-  }
-```
-
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      CLIGHTNING_SOCKET: ""
-      ...
-```
-
-<br/>
-
-`mempool-config.json`:
-```json
-  "MAXMIND": {
-    "ENABLED": true,
-    "GEOLITE2_CITY": "/usr/local/share/GeoIP/GeoLite2-City.mmdb",
-    "GEOLITE2_ASN": "/usr/local/share/GeoIP/GeoLite2-ASN.mmdb",
-    "GEOIP2_ISP": "/usr/local/share/GeoIP/GeoIP2-ISP.mmdb"
-  }
-```
-
-Corresponding `docker-compose.yml` overrides:
-```yaml
-  api:
-    environment:
-      MAXMIND_ENABLED: true,
-      MAXMIND_GEOLITE2_CITY: "/backend/GeoIP/GeoLite2-City.mmdb",
-      MAXMIND_GEOLITE2_ASN": "/backend/GeoIP/GeoLite2-ASN.mmdb",
-      MAXMIND_GEOIP2_ISP": "/backend/GeoIP/GeoIP2-ISP.mmdb"
-      ...
-```
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `FRONTEND_HTTP_PORT` | `8080` | Port nginx listens on inside the container |
+| `BACKEND_MAINNET_HTTP_HOST` | `127.0.0.1` | Backend host that nginx proxies `/api` and `/ws` to (`api` in the compose file) |
+| `BACKEND_MAINNET_HTTP_PORT` | `8999` | Backend port for that proxy |
+| `MAINNET_ENABLED` | `true` | Serve qbit mainnet |
+| `TESTNET4_ENABLED` | `false` | Serve qbit testnet4 |
+| `REGTEST_ENABLED` | `false` | Serve regtest |
+| `TESTNET_ENABLED`, `SIGNET_ENABLED` | `false` | Upstream Bitcoin networks; leave off |
+| `ROOT_NETWORK` | (empty) | Network served at `/`; empty means mainnet |
+| `QBIT_SITE_CHROME` | `true` | Shows qbit.org's header, banner and footer. Set it to `false` to remove them; the frontend then doesn't contact qbit.org |
+| `MAINNET_EXPLORER_URL` | `https://mempool.qbit.org` | Mainnet link shown when this instance doesn't serve mainnet; set it empty to hide the link |
+| `TESTNET4_EXPLORER_URL` | `https://mempool-testnet.qbit.org` | The same for testnet4 |
+| `BLOCK_WEIGHT_UNITS` | `2000000` | qbit maximum block weight |
+| `BLOCK_TARGET_SPACING_SECONDS` | `60` | qbit target block spacing |
+| `MEMPOOL_BLOCKS_AMOUNT` | `8` | Projected mempool blocks to show |
+| `KEEP_BLOCKS_AMOUNT` | `8` | Recent blocks to keep in the blockchain view |
+| `ITEMS_PER_PAGE` | `10` | Page size for lists |
+| `BASE_MODULE` | `mempool` | Frontend module; keep `mempool` |
+| `MINING_DASHBOARD` | `true` | Mining dashboard and pool pages |
+| `AUDIT` | `false` | Block audit views; needs `MEMPOOL_AUDIT=true` on the backend |
+| `MAINNET_BLOCK_AUDIT_START_HEIGHT`, `TESTNET4_BLOCK_AUDIT_START_HEIGHT`, `REGTEST_BLOCK_AUDIT_START_HEIGHT`, `TESTNET_BLOCK_AUDIT_START_HEIGHT`, `SIGNET_BLOCK_AUDIT_START_HEIGHT` | `0` | First height with block audit data, per network |
+| `MAINNET_TX_FIRST_SEEN_START_HEIGHT`, `TESTNET4_TX_FIRST_SEEN_START_HEIGHT`, `REGTEST_TX_FIRST_SEEN_START_HEIGHT`, `TESTNET_TX_FIRST_SEEN_START_HEIGHT`, `SIGNET_TX_FIRST_SEEN_START_HEIGHT` | `0` | First height from which confirmed transactions show a first-seen time, per network; `0` turns it off |
+| `MEMPOOL_WEBSITE_URL` | (empty) | Base URL for links to addresses on other networks |
+| `HISTORICAL_PRICE` | `false` | Historical fiat prices |
+| `ADDITIONAL_CURRENCIES` | `false` | Extra fiat currencies |
+| `NGINX_PROTOCOL`, `NGINX_HOSTNAME`, `NGINX_PORT` | `http`, `localhost`, `8999` | API address for server-side rendering only; the browser uses relative URLs |
+| `ACCELERATOR`, `ACCELERATOR_BUTTON`, `PUBLIC_ACCELERATIONS`, `SERVICES_API`, `STRATUM_ENABLED` | off or empty | Upstream mempool.space services; leave them off |

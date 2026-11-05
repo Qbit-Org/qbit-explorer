@@ -1,26 +1,33 @@
 import { defineConfig } from 'cypress';
+import { execFileSync } from 'child_process';
+import { readFileSync } from 'fs';
+
+// Set by sourcing the smoke.env that backend/scripts/qbit-regtest-harness.sh writes
+function harnessEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is not set: start the regtest harness and source its smoke.env`);
+  }
+  return value;
+}
 
 export default defineConfig({
-  projectId: 'ry4br7',
   videosFolder: 'cypress/videos',
   screenshotsFolder: 'cypress/screenshots',
-  fixturesFolder: 'cypress/fixtures',
   video: false,
   retries: {
-    runMode: 3,
+    runMode: 1,
     openMode: 0,
   },
   chromeWebSecurity: false,
+  defaultCommandTimeout: 15000,
   e2e: {
     setupNodeEvents(on: any, config: any) {
-      const fs = require('fs');
-      const CONFIG_FILE = 'mempool-frontend-config.json';
-      if (fs.existsSync(CONFIG_FILE)) {
-        const contents = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-        config.env.BASE_MODULE = contents.BASE_MODULE ? contents.BASE_MODULE : 'mempool';
-      } else {
-        config.env.BASE_MODULE = 'mempool';
-      }
+      on('task', {
+        regtestSeed: () => JSON.parse(readFileSync(harnessEnv('QBIT_REGTEST_SEED'), 'utf8')),
+        qbitCli: (args: string[]) => execFileSync(harnessEnv('QBIT_CLI'), [...harnessEnv('QBIT_CLI_ARGS').split(' '), ...args], { encoding: 'utf8' }).trim(),
+        auxpowPayload: (template: string) => execFileSync('python3', ['-I', '../backend/scripts/qbit-regtest-auxpow.py'], { input: template, encoding: 'utf8' }).trim(),
+      });
       return config;
     },
     baseUrl: 'http://localhost:4200',

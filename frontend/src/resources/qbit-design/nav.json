@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "banner": {
+    "text": "Qbit Wallet is live — add it to Chrome",
+    "href": "/wallet"
+  },
+  "links": [
+    {
+      "label": "Home",
+      "href": "/",
+      "external": false
+    },
+    {
+      "label": "Architecture",
+      "href": "/architecture",
+      "external": false,
+      "icon": "layers"
+    },
+    {
+      "label": "White Paper",
+      "href": "/whitepaper",
+      "external": false,
+      "icon": "file"
+    },
+    {
+      "label": "Consensus",
+      "href": "/consensus",
+      "external": false,
+      "icon": "shield"
+    },
+    {
+      "label": "P2MR Spec",
+      "href": "/p2mr",
+      "external": false,
+      "icon": "key"
+    },
+    {
+      "label": "Metrics",
+      "href": "/metrics",
+      "external": false,
+      "icon": "chart"
+    },
+    {
+      "label": "Mempool",
+      "href": "https://mempool.qbit.org",
+      "external": true,
+      "icon": "blocks"
+    },
+    {
+      "label": "Wallet",
+      "href": "/wallet",
+      "external": false
+    },
+    {
+      "label": "Pool",
+      "href": "/pool",
+      "external": false
+    },
+    {
+      "label": "Ecosystem",
+      "href": "/ecosystem",
+      "external": false
+    }
+  ],
+  "items": [
+    {
+      "label": "Home",
+      "href": "/",
+      "external": false
+    },
+    {
+      "label": "Docs",
+      "links": [
+        {
+          "label": "Architecture",
+          "href": "/architecture",
+          "external": false,
+          "icon": "layers"
+        },
+        {
+          "label": "White Paper",
+          "href": "/whitepaper",
+          "external": false,
+          "icon": "file"
+        },
+        {
+          "label": "Consensus",
+          "href": "/consensus",
+          "external": false,
+          "icon": "shield"
+        },
+        {
+          "label": "P2MR Spec",
+          "href": "/p2mr",
+          "external": false,
+          "icon": "key"
+        }
+      ]
+    },
+    {
+      "label": "Stats",
+      "links": [
+        {
+          "label": "Metrics",
+          "href": "/metrics",
+          "external": false,
+          "icon": "chart"
+        },
+        {
+          "label": "Mempool",
+          "href": "https://mempool.qbit.org",
+          "external": true,
+          "icon": "blocks"
+        }
+      ]
+    },
+    {
+      "label": "Wallet",
+      "href": "/wallet",
+      "external": false
+    },
+    {
+      "label": "Pool",
+      "href": "/pool",
+      "external": false
+    },
+    {
+      "label": "Ecosystem",
+      "href": "/ecosystem",
+      "external": false
+    }
+  ],
+  "social": {
+    "github": "https://github.com/Qbit-Org",
+    "x": "https://x.com/QbitDotOrg",
+    "discord": "https://discord.gg/xqC7MAk95Q"
+  }
+}

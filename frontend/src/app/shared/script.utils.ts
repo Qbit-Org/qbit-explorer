@@ -131,6 +131,7 @@ const opcodes = {
   OP_CHECKSEQUENCEVERIFY: 178,
   OP_CSV: 178,
   OP_NOP4: 179,
+  OP_CHECKSIGPQC: 179,
   OP_NOP5: 180,
   OP_NOP6: 181,
   OP_NOP7: 182,
@@ -171,7 +172,7 @@ export const ScriptTemplates: { [type: string]: (...args: any) => ScriptTemplate
   ln_anchor: () => ({ type: 'ln_anchor', label: 'Lightning Anchor' }),
   ln_anchor_swept: () => ({ type: 'ln_anchor_swept', label: 'Swept Lightning Anchor' }),
   multisig: (m: number, n: number) => ({ type: 'multisig', m, n, label: $localize`:@@address-label.multisig:Multisig ${m}:multisigM: of ${n}:multisigN:` }),
-  anchor: () => ({ type: 'anchor', label: 'anchor' }),
+  anchor: () => ({ type: 'anchor', label: 'Anchor' }),
 };
 
 export class ScriptInfo {

@@ -4,7 +4,6 @@ import { Router, ActivatedRoute, NavigationEnd } from '@angular/router';
 import { filter, map, switchMap } from 'rxjs/operators';
 import { combineLatest } from 'rxjs';
 import { StateService } from '@app/services/state.service';
-import { LanguageService } from '@app/services/language.service';
 
 @Injectable({
   providedIn: 'root'
@@ -12,6 +11,8 @@ import { LanguageService } from '@app/services/language.service';
 export class OpenGraphService {
   network = '';
   defaultImageUrl = '';
+  defaultImageWidth = '';
+  defaultImageHeight = '';
   previewLoadingEvents = {}; // pending count per event type
   previewLoadingCount = 0; // number of unique events pending
   sessionId = 1;
@@ -20,13 +21,14 @@ export class OpenGraphService {
     private ngZone: NgZone,
     private metaService: Meta,
     private stateService: StateService,
-    private LanguageService: LanguageService,
     private router: Router,
     private activatedRoute: ActivatedRoute,
   ) {
-    // save og:image tag from original template
+    // save og:image tags from original template
     const initialOgImageTag = metaService.getTag('property=\'og:image\'');
-    this.defaultImageUrl = initialOgImageTag?.content || 'https://mempool.space/resources/previews/mempool-space-preview.jpg';
+    this.defaultImageUrl = initialOgImageTag?.content || 'https://mempool.qbit.org/resources/previews/qbit-social-preview.png';
+    this.defaultImageWidth = metaService.getTag('property=\'og:image:width\'')?.content || '1200';
+    this.defaultImageHeight = metaService.getTag('property=\'og:image:height\'')?.content || '675';
     this.router.events.pipe(
       filter(event => event instanceof NavigationEnd),
       map(() => this.activatedRoute),
@@ -50,28 +52,25 @@ export class OpenGraphService {
     };
   }
 
+  // upstream points routes flagged with data.ogImage at a
+  // /render/<lang>/preview<url> screenshot from its unfurler. This explorer
+  // ships no unfurler, so that URL falls through to the app's index.html
+  // rather than an image, and these routes keep qbit.org's default card too
   setOgImage() {
-    const lang = this.LanguageService.getLanguage();
-    const ogImageUrl = `${window.location.protocol}//${window.location.host}/render/${lang}/preview${this.router.url}`;
-    this.metaService.updateTag({ property: 'og:image', content: ogImageUrl });
-    this.metaService.updateTag({ name: 'twitter:image', content: ogImageUrl });
-    this.metaService.updateTag({ property: 'og:image:width', content: '1200' });
-    this.metaService.updateTag({ property: 'og:image:height', content: '600' });
+    this.clearOgImage();
   }
 
   clearOgImage() {
     this.metaService.updateTag({ property: 'og:image', content: this.defaultImageUrl });
     this.metaService.updateTag({ name: 'twitter:image', content: this.defaultImageUrl });
-    this.metaService.updateTag({ property: 'og:image:width', content: '1000' });
-    this.metaService.updateTag({ property: 'og:image:height', content: '500' });
+    this.metaService.updateTag({ property: 'og:image:width', content: this.defaultImageWidth });
+    this.metaService.updateTag({ property: 'og:image:height', content: this.defaultImageHeight });
   }
 
-  setManualOgImage(imageFilename) {
-    const ogImage = `${window.location.protocol}//${window.location.host}/resources/previews/${imageFilename}`;
-    this.metaService.updateTag({ property: 'og:image', content: ogImage });
-    this.metaService.updateTag({ property: 'og:image:width', content: '2000' });
-    this.metaService.updateTag({ property: 'og:image:height', content: '1000' });
-    this.metaService.updateTag({ name: 'twitter:image', content: ogImage });
+  // upstream's per-page preview cards are mempool.space-branded, so the
+  // filename is ignored and these pages keep qbit.org's default card
+  setManualOgImage(_imageFilename: string): void {
+    this.clearOgImage();
   }
 
   /// register an event that needs to resolve before we can take a screenshot

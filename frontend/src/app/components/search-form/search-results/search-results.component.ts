@@ -22,17 +22,30 @@ export class SearchResultsComponent implements OnChanges {
     ) { }
 
   ngOnInit() {
-    this.networkName = this.stateService.network.charAt(0).toUpperCase() + this.stateService.network.slice(1);
+    this.networkName = this.getNetworkName(this.stateService.network);
+  }
+
+  private getNetworkName(network: string): string {
+    switch (network) {
+      case '':
+        return 'qbit';
+      case 'testnet':
+        return 'qbit Testnet3';
+      case 'testnet4':
+        return 'qbit Testnet4';
+      case 'signet':
+        return 'qbit Signet';
+      case 'regtest':
+        return 'qbit Regtest';
+      default:
+        return network.charAt(0).toUpperCase() + network.slice(1);
+    }
   }
 
   ngOnChanges() {
     this.activeIdx = 0;
     if (this.results) {
-      this.resultsFlattened = [...(this.results.hashQuickMatch ? [this.results.searchText] : []), ...this.results.addresses, ...this.results.pools, ...this.results.nodes, ...this.results.channels, ...this.results.otherNetworks];
-      // If searchText is a public key corresponding to a node, select it by default
-      if (this.results.publicKey && this.results.nodes.length > 0) {
-        this.activeIdx = 1;
-      }
+      this.resultsFlattened = [...(this.results.hashQuickMatch ? [this.results.searchText] : []), ...this.results.addresses, ...this.results.pools, ...this.results.otherNetworks];
     }
   }
 
@@ -54,6 +67,11 @@ export class SearchResultsComponent implements OnChanges {
         this.prev();
         break;
       case 'Enter':
+        if (!this.results) {
+          // no typeahead state yet (e.g. a form seeded by the responsive
+          // mirror): let the native form submission handle the query
+          return;
+        }
         event.preventDefault();
         if (this.resultsFlattened[this.activeIdx]?.isNetworkAvailable === false) {
           return;

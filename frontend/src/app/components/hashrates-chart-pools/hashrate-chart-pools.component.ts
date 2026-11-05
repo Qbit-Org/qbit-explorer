@@ -11,6 +11,7 @@ import { MiningService } from '@app/services/mining.service';
 import { download } from '@app/shared/graphs.utils';
 import { ActivatedRoute } from '@angular/router';
 import { StateService } from '@app/services/state.service';
+import { expectedBlocksForTimespan as getExpectedBlocksForTimespan } from '@app/shared/block-target.utils';
 
 interface Hashrate {
   timestamp: number;
@@ -73,7 +74,7 @@ export class HashrateChartPoolsComponent implements OnInit {
     let firstRun = true;
 
     this.seoService.setTitle($localize`:@@mining.pools-historical-dominance:Pools Historical Dominance`);
-    this.seoService.setDescription($localize`:@@meta.descriptions.bitcoin.graphs.hashrate-pools:See Bitcoin mining pool dominance visualized over time: see how top mining pools' share of total hashrate has fluctuated over time.`);
+    this.seoService.setDescription($localize`:@@meta.descriptions.bitcoin.graphs.hashrate-pools:See qbit mining pool dominance visualized over time: see how top mining pools' share of total hashrate has fluctuated over time.`);
     this.miningWindowPreference = this.miningService.getDefaultTimespan('6m');
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
     this.radioGroupForm.controls.dateSpan.setValue(this.miningWindowPreference);
@@ -119,6 +120,10 @@ export class HashrateChartPoolsComponent implements OnInit {
         }),
         share()
       );
+  }
+
+  expectedBlocksForTimespan(timespan: string): number {
+    return getExpectedBlocksForTimespan(timespan, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
   }
 
   applyHashrates(): any[] {

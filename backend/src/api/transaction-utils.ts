@@ -1,16 +1,16 @@
 import { TransactionExtended, MempoolTransactionExtended, TransactionMinerInfo } from '../mempool.interfaces';
 import { IEsploraApi } from './bitcoin/esplora-api.interface';
-import { Common } from './common';
 import bitcoinApi, { bitcoinCoreApi } from './bitcoin/bitcoin-api-factory';
 import * as bitcoinjs from 'bitcoinjs-lib';
 import logger from '../logger';
 import config from '../config';
 import pLimit from '../utils/p-limit';
+import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '../utils/weight-units';
 
 class TransactionUtils {
   constructor() { }
 
-  public stripCoinbaseTransaction(tx: TransactionExtended): TransactionMinerInfo {
+  public stripCoinbaseTransaction(tx: IEsploraApi.Transaction): TransactionMinerInfo {
     return {
       vin: [{
         scriptsig: tx.vin[0].scriptsig || tx.vin[0]['coinbase']
@@ -57,12 +57,6 @@ class TransactionUtils {
       transaction  = await bitcoinApi.$getRawTransaction(txId, false, addPrevouts, lazyPrevouts);
     }
 
-    if (Common.isLiquid()) {
-      if (!isFinite(Number(transaction.fee))) {
-        transaction.fee = Object.values(transaction.fee || {}).reduce((total, output) => total + output, 0);
-      }
-    }
-
     if (addMempoolData || !transaction?.status?.confirmed) {
       return this.extendMempoolTransaction(transaction);
     } else {
@@ -86,15 +80,7 @@ class TransactionUtils {
         .map(r => (r as PromiseFulfilledResult<MempoolTransactionExtended>).value);
     } else {
       const transactions = await bitcoinApi.$getMempoolTransactions(txids);
-      return transactions.map(transaction => {
-        if (Common.isLiquid()) {
-          if (!isFinite(Number(transaction.fee))) {
-            transaction.fee = Object.values(transaction.fee || {}).reduce((total, output) => total + output, 0);
-          }
-        }
-
-        return this.extendMempoolTransaction(transaction);
-      });
+      return transactions.map(transaction => this.extendMempoolTransaction(transaction));
     }
   }
 
@@ -104,9 +90,9 @@ class TransactionUtils {
       // @ts-ignore
       return transaction;
     }
-    const feePerVbytes = (transaction.fee || 0) / (transaction.weight / 4);
+    const feePerVbytes = feeRatePerVsize(transaction.fee, transaction.weight);
     const transactionExtended: TransactionExtended = Object.assign({
-      vsize: transaction.weight / 4,
+      vsize: weightToFractionalVsize(transaction.weight),
       feePerVsize: feePerVbytes,
       effectiveFeePerVsize: feePerVbytes,
     }, transaction);
@@ -117,11 +103,11 @@ class TransactionUtils {
   }
 
   public extendMempoolTransaction(transaction: IEsploraApi.Transaction): MempoolTransactionExtended {
-    const vsize = Math.ceil(transaction.weight / 4);
-    const fractionalVsize = (transaction.weight / 4);
-    const sigops = Common.isLiquid() ? 0 : (transaction.sigops != null ? transaction.sigops : this.countSigops(transaction));
+    const vsize = weightToVsize(transaction.weight);
+    const fractionalVsize = weightToFractionalVsize(transaction.weight);
+    const sigops = transaction.sigops != null ? transaction.sigops : this.countSigops(transaction);
     // https://github.com/bitcoin/bitcoin/blob/e9262ea32a6e1d364fb7974844fadc36f931f8c6/src/policy/policy.cpp#L295-L298
-    const adjustedVsize = Math.max(fractionalVsize, sigops *  5); // adjusted vsize = Max(weight, sigops * bytes_per_sigop) / witness_scale_factor
+    const adjustedVsize = Math.max(fractionalVsize, sigopsToAdjustedVsize(sigops)); // adjusted vsize = Max(weight, sigops * bytes_per_sigop) / witness_scale_factor
     const feePerVbytes = (transaction.fee || 0) / fractionalVsize;
     const adjustedFeePerVsize = (transaction.fee || 0) / adjustedVsize;
     const effectiveFeePerVsize = transaction['effectiveFeePerVsize'] || adjustedFeePerVsize || feePerVbytes;
@@ -157,19 +143,19 @@ class TransactionUtils {
     }
 
     let sigops = 0;
-    // count OP_CHECKSIG and OP_CHECKSIGVERIFY
-    sigops += (script.match(/OP_CHECKSIG/g)?.length || 0);
+    // count OP_CHECKSIG and OP_CHECKSIGVERIFY (qbitd's GetSigOpCount skips OP_CHECKSIGPQC and OP_CHECKSIGADD)
+    sigops += (script.match(/OP_CHECKSIG(?:VERIFY)?\b/g)?.length || 0);
 
     // count OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY
     if (isRawScript) {
       // in scriptPubKey or scriptSig, always worth 20
       sigops += 20 * (script.match(/OP_CHECKMULTISIG/g)?.length || 0);
     } else {
-      // in redeem scripts and witnesses, worth N if preceded by OP_N, 20 otherwise
-      const matches = script.matchAll(/(?:OP_(?:PUSHNUM_)?(\d+))? OP_CHECKMULTISIG/g);
+      // in redeem scripts and witnesses, worth N if preceded by OP_1 to OP_16, 20 otherwise
+      const matches = script.matchAll(/(?:OP_(?:PUSHNUM_)?(\d+) )?OP_CHECKMULTISIG/g);
       for (const match of matches) {
         const n = parseInt(match[1]);
-        if (Number.isInteger(n)) {
+        if (n >= 1 && n <= 16) {
           sigops += n;
         } else {
           sigops += 20;
@@ -177,7 +163,7 @@ class TransactionUtils {
       }
     }
 
-    return witness ? sigops : (sigops * 4);
+    return witness ? sigops : (sigops * WITNESS_SCALE_FACTOR);
   }
 
   public countSigops(transaction: IEsploraApi.Transaction): number {
@@ -284,7 +270,8 @@ class TransactionUtils {
       vin.inner_witnessscript_asm = this.convertScriptSigAsm(witnessScript);
     }
 
-    if (vin.prevout.scriptpubkey_type === 'v1_p2tr' && vin.witness) {
+    // P2MR shares taproot's script-path witness layout
+    if ((vin.prevout.scriptpubkey_type === 'v1_p2tr' || vin.prevout.scriptpubkey_type === 'v2_p2mr') && vin.witness) {
       const witnessScript = this.witnessToP2TRScript(vin.witness);
       if (witnessScript !== null) {
         vin.inner_witnessscript_asm = this.convertScriptSigAsm(witnessScript);
@@ -338,6 +325,8 @@ class TransactionUtils {
           b.push('OP_CLTV');
         } else if (op === 0xb2) {
           b.push('OP_CSV');
+        } else if (op === 0xb3) {
+          b.push('OP_CHECKSIGPQC');
         } else if (op === 0xba) {
           b.push('OP_CHECKSIGADD');
         } else {
@@ -473,6 +462,7 @@ class TransactionUtils {
       'witness_v0_keyhash': 'v0_p2wpkh',
       'witness_v0_scripthash': 'v0_p2wsh',
       'witness_v1_taproot': 'v1_p2tr',
+      'witness_v2_p2mr': 'v2_p2mr',
       'nonstandard': 'nonstandard',
       'multisig': 'multisig',
       'anchor': 'anchor',

@@ -19,7 +19,7 @@ import {
   distinctUntilChanged
 } from 'rxjs/operators';
 import { Transaction } from '@interfaces/electrs.interface';
-import { of, merge, Subscription, Observable, Subject, from, throwError, combineLatest, BehaviorSubject, timer } from 'rxjs';
+import { of, merge, Subscription, Observable, Subject, from, throwError, combineLatest, BehaviorSubject } from 'rxjs';
 import { StateService } from '@app/services/state.service';
 import { CacheService } from '@app/services/cache.service';
 import { WebsocketService } from '@app/services/websocket.service';
@@ -35,11 +35,11 @@ import { LiquidUnblinding } from '@components/transaction/liquid-ublinding';
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
 import { PriceService } from '@app/services/price.service';
 import { isFeatureActive } from '@app/bitcoin.utils';
-import { ServicesApiServices } from '@app/services/services-api.service';
 import { EnterpriseService } from '@app/services/enterprise.service';
 import { ZONE_SERVICE } from '@app/injection-tokens';
 import { MiningService, MiningStats } from '@app/services/mining.service';
 import { ETA, EtaService } from '@app/services/eta.service';
+import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize } from '@app/shared/weight-units';
 
 export interface Pool {
   id: number;
@@ -160,7 +160,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
   taprootEnabled: boolean;
   hasEffectiveFeeRate: boolean;
   accelerateCtaType: 'alert' | 'button' = 'button';
-  acceleratorAvailable: boolean = this.stateService.env.ACCELERATOR_BUTTON && this.stateService.network === '';
+  acceleratorAvailable: boolean = false;
   eligibleForAcceleration: boolean = false;
   forceAccelerationSummary = false;
   hideAccelerationSummary = false;
@@ -207,7 +207,6 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
     private websocketService: WebsocketService,
     private audioService: AudioService,
     private apiService: ApiService,
-    private servicesApiService: ServicesApiServices,
     private seoService: SeoService,
     private priceService: PriceService,
     private storageService: StorageService,
@@ -246,7 +245,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
     this.stateService.networkChanged$.subscribe(
       (network) => {
         this.network = network;
-        this.acceleratorAvailable = this.stateService.env.ACCELERATOR_BUTTON && this.stateService.network === '';
+        this.acceleratorAvailable = false;
       }
     );
 
@@ -360,7 +359,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
         if (tx.fee === undefined) {
           this.tx.fee = 0;
         }
-        this.tx.feePerVsize = tx.fee / (tx.weight / 4);
+        this.tx.feePerVsize = feeRatePerVsize(tx.fee, tx.weight);
         this.isLoadingTx = false;
         this.error = undefined;
         this.waitingForTransaction = false;
@@ -376,56 +375,6 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
         });
         this.txChanged$.next(true);
       }
-    });
-
-    this.fetchAccelerationSubscription = this.fetchAcceleration$.pipe(
-      filter(() => this.stateService.env.ACCELERATOR === true),
-      tap(() => {
-        this.accelerationInfo = null;
-        this.setIsAccelerated();
-      }),
-      switchMap((blockHeight: number) => {
-        if (this.stateService.network === '' && this.stateService.env.ACCELERATOR && blockHeight >= 819500 ) {
-          return this.servicesApiService.getAccelerationDataForTxid$(this.txId).pipe(
-            switchMap((accelerationData: Acceleration) => {
-              if (this.tx.acceleration && !accelerationData) { // If the just mined transaction was accelerated, but services backend did not return any acceleration data, retry
-                return throwError(() => 'retry');
-              }
-              return of(accelerationData);
-            }),
-            retry({
-              count: 3,
-              delay: (error) => {
-                if (error === 'retry') {
-                  return timer(2000);
-                }
-                return throwError(() => error);
-              }
-            }),
-            catchError(() => {
-              return of(null);
-            })
-          );
-        } else {
-          return of(null);
-        }
-      }),
-      filter((acceleration: Acceleration) => !!acceleration),
-    ).subscribe((acceleration: Acceleration) => {
-      if (acceleration.txid === this.txId && (acceleration.status === 'completed' || acceleration.status === 'completed_provisional') && acceleration.pools.includes(acceleration.minedByPoolUniqueId)) {
-        const boostCost = acceleration.boostCost || acceleration.bidBoost;
-        acceleration.acceleratedFeeRate = Math.max(acceleration.effectiveFee, acceleration.effectiveFee + boostCost) / acceleration.effectiveVsize;
-        acceleration.boost = boostCost;
-        this.tx.acceleratedAt = acceleration.added;
-        this.accelerationInfo = acceleration;
-      }
-      if (acceleration.txid === this.txId && (acceleration.status === 'failed' || acceleration.status === 'failed_provisional')) {
-        this.accelerationCanceled = true;
-        this.tx.acceleratedAt = acceleration.added;
-        this.accelerationInfo = acceleration;
-      }
-      this.waitingForAccelerationInfo = false;
-      this.setIsAccelerated();
     });
 
     this.miningSubscription = this.fetchMiningInfo$.pipe(
@@ -630,7 +579,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
           this.seoService.setTitle(
             $localize`:@@bisq.transaction.browser-title:Transaction: ${this.txId}:INTERPOLATION:`
           );
-          const network = this.stateService.network === 'liquid' || this.stateService.network === 'liquidtestnet' ? 'Liquid' : 'Bitcoin';
+          const network = this.stateService.network === 'liquid' || this.stateService.network === 'liquidtestnet' ? 'Liquid' : 'qbit';
           const seoDescription = seoDescriptionNetwork(this.stateService.network);
           this.seoService.setDescription($localize`:@@meta.description.bitcoin.transaction:Get real-time status, addresses, fees, script info, and more for ${network}${seoDescription} transaction with txid ${this.txId}.`);
           this.resetTransaction();
@@ -690,9 +639,9 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
           }
           if (this.tx.sigops != null) {
             this.sigops = this.tx.sigops;
-            this.adjustedVsize = Math.max(this.tx.weight / 4, this.sigops * 5);
+            this.adjustedVsize = Math.max(weightToFractionalVsize(this.tx.weight), sigopsToAdjustedVsize(this.sigops));
           }
-          this.tx.feePerVsize = tx.fee / (tx.weight / 4);
+          this.tx.feePerVsize = feeRatePerVsize(tx.fee, tx.weight);
           this.txChanged$.next(true);
           this.isLoadingTx = false;
           this.error = undefined;
@@ -733,7 +682,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
                 bestDescendant: tx.bestDescendant,
               });
               const hasRelatives = !!(tx.ancestors?.length || tx.bestDescendant || tx.descendants);
-              this.hasEffectiveFeeRate = hasRelatives || (tx.effectiveFeePerVsize && tx.effectiveFeePerVsize !== (this.tx.fee / (this.tx.weight / 4)) && tx.effectiveFeePerVsize !== (tx.fee / Math.ceil(tx.weight / 4)));
+              this.hasEffectiveFeeRate = hasRelatives || (tx.effectiveFeePerVsize && tx.effectiveFeePerVsize !== feeRatePerVsize(this.tx.fee, this.tx.weight) && tx.effectiveFeePerVsize !== (tx.fee / weightToVsize(tx.weight)));
             } else {
               this.fetchCpfp$.next(this.tx.txid);
             }
@@ -822,7 +771,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       }
 
       const txFeePerVSize =
-        this.tx.effectiveFeePerVsize || this.tx.fee / (this.tx.weight / 4);
+        this.tx.effectiveFeePerVsize || feeRatePerVsize(this.tx.fee, this.tx.weight);
 
       let found = false;
       this.txInBlockIndex = 0;
@@ -934,9 +883,9 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       const totalFees =
         this.tx.fee +
         relatives.reduce((prev, val) => prev + val.fee, 0);
-      this.tx.effectiveFeePerVsize = totalFees / (totalWeight / 4);
+      this.tx.effectiveFeePerVsize = totalFees / weightToFractionalVsize(totalWeight);
     } else {
-      this.tx.effectiveFeePerVsize = cpfpInfo.effectiveFeePerVsize || this.tx.effectiveFeePerVsize || this.tx.feePerVsize || (this.tx.fee / (this.tx.weight / 4));
+      this.tx.effectiveFeePerVsize = cpfpInfo.effectiveFeePerVsize || this.tx.effectiveFeePerVsize || this.tx.feePerVsize || feeRatePerVsize(this.tx.fee, this.tx.weight);
     }
     if (cpfpInfo.acceleration) {
       this.tx.acceleration = cpfpInfo.acceleration;
@@ -965,7 +914,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       this.adjustedVsize = this.cpfpInfo.adjustedVsize;
     }
     this.hasCpfp =!!(this.cpfpInfo && relatives.length);
-    this.hasEffectiveFeeRate = hasRelatives || (this.tx.effectiveFeePerVsize && this.tx.effectiveFeePerVsize !== (this.tx.fee / (this.tx.weight / 4)) && this.tx.effectiveFeePerVsize !== (this.tx.fee / Math.ceil(this.tx.weight / 4)));
+    this.hasEffectiveFeeRate = hasRelatives || (this.tx.effectiveFeePerVsize && this.tx.effectiveFeePerVsize !== feeRatePerVsize(this.tx.fee, this.tx.weight) && this.tx.effectiveFeePerVsize !== (this.tx.fee / weightToVsize(this.tx.weight)));
   }
 
   setIsAccelerated(initialState: boolean = false) {
@@ -1232,7 +1181,6 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
     this.transactionTimesSubscription.unsubscribe();
     this.fetchRbfSubscription.unsubscribe();
     this.fetchCachedTxSubscription.unsubscribe();
-    this.fetchAccelerationSubscription.unsubscribe();
     this.txReplacedSubscription.unsubscribe();
     this.txRbfInfoSubscription.unsubscribe();
     this.queryParamsSubscription.unsubscribe();

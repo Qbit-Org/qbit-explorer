@@ -6,6 +6,12 @@ import { ActivatedRoute } from '@angular/router';
 import { faqData, restApiDocsData, wsApiDocsData, electrumApiDocsData } from '@app/docs/api-docs/api-docs-data';
 import { FaqTemplateDirective } from '@app/docs/faq-template/faq-template.component';
 
+// renamed or removed doc fragments, so old links still open the matching entry
+const renamedFragments = new Map<string, string>([
+  ['how-do-mempool-goggles-work', 'how-do-transaction-filters-work'],
+  ['host-my-own-instance-raspberry-pi', 'host-my-own-instance-server'],
+]);
+
 @Component({
   selector: 'app-api-docs',
   templateUrl: './api-docs.component.html',
@@ -33,10 +39,8 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
   runningElectrs: boolean;
   auditEnabled: boolean;
   mobileViewport: boolean = false;
-  showMobileEnterpriseUpsell: boolean = true;
   timeLtrSubscription: Subscription;
   timeLtr: boolean = this.stateService.timeLtr.value;
-  isMempoolSpaceBuild = this.stateService.isMempoolSpaceBuild;
 
   @ViewChildren(FaqTemplateDirective) faqTemplates: QueryList<FaqTemplateDirective>;
   dict = {};
@@ -57,12 +61,13 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
   ngAfterViewInit() {
     const that = this;
     setTimeout( () => {
-      if( this.route.snapshot.fragment ) {
-        this.openEndpointContainer( this.route.snapshot.fragment );
-        if (document.getElementById( this.route.snapshot.fragment )) {
+      const fragment = renamedFragments.get( this.route.snapshot.fragment ) ?? this.route.snapshot.fragment;
+      if( fragment ) {
+        this.openEndpointContainer( fragment );
+        if (document.getElementById( fragment )) {
           const vOffset = ( window.innerWidth <= 992 ) ? 100 : 60;
           window.scrollTo({
-            top: document.getElementById( this.route.snapshot.fragment ).offsetTop - vOffset
+            top: document.getElementById( fragment ).offsetTop - vOffset
           });
         }
       }
@@ -81,10 +86,6 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
       tap((network: string) => {
         if (this.env.BASE_MODULE === 'mempool' && network !== '' && this.env.ROOT_NETWORK === '') {
           this.baseNetworkUrl = `/${network}`;
-        } else if (this.env.BASE_MODULE === 'liquid') {
-          if (!['', 'liquid'].includes(network)) {
-            this.baseNetworkUrl = `/${network}`;
-          }
         }
         return network;
       })
@@ -102,7 +103,7 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
     this.electrumDocs = electrumApiDocsData;
 
     this.network$.pipe(takeUntil(this.destroy$)).subscribe((network) => {
-      this.active = (network === 'liquid' || network === 'liquidtestnet') ? 2 : 0;
+      this.active = 0;
       switch( network ) {
         case '':
           this.electrsPort = 50002; break;
@@ -114,10 +115,6 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
           this.electrsPort = 40002; break;
         case 'signet':
           this.electrsPort = 60602; break;
-        case 'liquid':
-          this.electrsPort = 51002; break;
-        case 'liquidtestnet':
-          this.electrsPort = 51302; break;
       }
     });
 
@@ -186,19 +183,9 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
     if (network === 'signet') {
       curlResponse = code.codeSampleSignet.curl;
     }
-    if (network === 'liquid') {
-      curlResponse = code.codeSampleLiquid.curl;
-    }
-    if (network === 'liquidtestnet') {
-      curlResponse = code.codeSampleLiquidTestnet.curl;
-    }
     let curlNetwork = '';
     if (this.env.BASE_MODULE === 'mempool') {
       if (!['', 'mainnet'].includes(network)) {
-        curlNetwork = `/${network}`;
-      }
-    } else if (this.env.BASE_MODULE === 'liquid') {
-      if (!['', 'liquid'].includes(network)) {
         curlNetwork = `/${network}`;
       }
     }
@@ -223,10 +210,6 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
       if (!['', 'mainnet'].includes(network)) {
         curlNetwork = `/${network}`;
       }
-    } else if (this.env.BASE_MODULE === 'liquid') {
-      if (!['', 'liquid'].includes(network)) {
-        curlNetwork = `/${network}`;
-      }
     }
 
     if (network === this.env.ROOT_NETWORK) {
@@ -239,4 +222,3 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
   }
 
 }
-

@@ -8,7 +8,7 @@
         <h5 class="card-title d-inline-block" i18n="mining.miners-luck" i18n-ngbTooltip="mining.miners-luck-1w"
         ngbTooltip="Pools luck (1 week)" placement="bottom" #minersluck [disableTooltip]="!isEllipsisActive(minersluck)">Pools Luck</h5>
         <p class="card-text" i18n-ngbTooltip="mining.pools-luck-desc"
-        ngbTooltip="The overall luck of all mining pools over the past week. A luck bigger than 100% means the average block time for the current epoch is less than 10 minutes." placement="bottom">
+        ngbTooltip="The overall luck of all mining pools over the past week. A luck bigger than 100% means the average block time for the current epoch is less than 1 minute." placement="bottom">
           {{ miningStats['minersLuck'] }}%
         </p>
       </div>
@@ -41,31 +41,31 @@
     <form [formGroup]="radioGroupForm" class="formRadioGroup"
       *ngIf="!widget && (miningStatsObservable$ | async) as stats">
       <div class="btn-group btn-group-toggle" name="radioBasic">
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 144" [class.active]="radioGroupForm.get('dateSpan').value === '24h'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '24h')" [class.active]="radioGroupForm.get('dateSpan').value === '24h'">
           <input type="radio" [value]="'24h'" fragment="24h" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'24h'" formControlName="dateSpan"> 24h
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 432" [class.active]="radioGroupForm.get('dateSpan').value === '3d'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '3d')" [class.active]="radioGroupForm.get('dateSpan').value === '3d'">
           <input type="radio" [value]="'3d'" fragment="3d" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'3d'" formControlName="dateSpan"> 3D
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 1008" [class.active]="radioGroupForm.get('dateSpan').value === '1w'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '1w')" [class.active]="radioGroupForm.get('dateSpan').value === '1w'">
           <input type="radio" [value]="'1w'" fragment="1w" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'1w'" formControlName="dateSpan"> 1W
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 4320" [class.active]="radioGroupForm.get('dateSpan').value === '1m'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '1m')" [class.active]="radioGroupForm.get('dateSpan').value === '1m'">
           <input type="radio" [value]="'1m'" fragment="1m" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'1m'" formControlName="dateSpan"> 1M
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 12960" [class.active]="radioGroupForm.get('dateSpan').value === '3m'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '3m')" [class.active]="radioGroupForm.get('dateSpan').value === '3m'">
           <input type="radio" [value]="'3m'" fragment="3m" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'3m'" formControlName="dateSpan"> 3M
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 25920" [class.active]="radioGroupForm.get('dateSpan').value === '6m'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '6m')" [class.active]="radioGroupForm.get('dateSpan').value === '6m'">
           <input type="radio" [value]="'6m'" fragment="6m" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'6m'" formControlName="dateSpan"> 6M
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 52560" [class.active]="radioGroupForm.get('dateSpan').value === '1y'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '1y')" [class.active]="radioGroupForm.get('dateSpan').value === '1y'">
           <input type="radio" [value]="'1y'" fragment="1y" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'1y'" formControlName="dateSpan"> 1Y
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 105120" [class.active]="radioGroupForm.get('dateSpan').value === '2y'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '2y')" [class.active]="radioGroupForm.get('dateSpan').value === '2y'">
           <input type="radio" [value]="'2y'" fragment="2y" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'2y'" formControlName="dateSpan"> 2Y
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.totalBlockCount >= 157680" [class.active]="radioGroupForm.get('dateSpan').value === '3y'">
+        <label class="btn btn-primary btn-sm" *ngIf="hasIndexedTimespan(stats.totalBlockCount, '3y')" [class.active]="radioGroupForm.get('dateSpan').value === '3y'">
           <input type="radio" [value]="'3y'" fragment="3y" [routerLink]="['/graphs/mining/pools' | relativeUrl]" [attr.data-cy]="'3y'" formControlName="dateSpan"> 3Y
         </label>
         <label class="btn btn-primary btn-sm" [class.active]="radioGroupForm.get('dateSpan').value === 'all'">

@@ -1,8 +1,11 @@
 import { Acceleration } from './acceleration/acceleration';
 import { MempoolTransactionExtended } from '../mempool.interfaces';
+import config from '../config';
 import logger from '../logger';
+import { QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT, sigopsToAdjustedVsize, vsizeToWeight, weightToVsize } from '../utils/weight-units';
 
-const BLOCK_WEIGHT_UNITS = 4_000_000;
+const BLOCK_WEIGHT_UNITS = config.MEMPOOL.BLOCK_WEIGHT_UNITS;
+const BLOCK_RESERVED_WEIGHT = QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT;
 const BLOCK_SIGOPS = 80_000;
 const MAX_RELATIVE_GRAPH_SIZE = 100;
 
@@ -104,7 +107,7 @@ export function getSameBlockRelatives(tx: MempoolTransactionExtended, transactio
 export function convertToGraphTx(tx: MempoolTransactionExtended, spendMap?: Map<string, MempoolTransactionExtended | string>): GraphTx {
   return {
     txid: tx.txid,
-    vsize: Math.max(tx.sigops * 5, Math.ceil(tx.weight / 4)),
+    vsize: Math.max(sigopsToAdjustedVsize(tx.sigops), weightToVsize(tx.weight)),
     weight: tx.weight,
     fees: {
       base: tx.fee || 0,
@@ -114,7 +117,7 @@ export function convertToGraphTx(tx: MempoolTransactionExtended, spendMap?: Map<
     spentby: spendMap ? (tx.vout.map((vout, index) => { const spend = spendMap.get(`${tx.txid}:${index}`); return (spend?.['txid'] || spend); }).filter(spent => spent) as string[]) : [],
 
     ancestorcount: 1,
-    ancestorsize: Math.max(tx.sigops * 5, Math.ceil(tx.weight / 4)),
+    ancestorsize: Math.max(sigopsToAdjustedVsize(tx.sigops), weightToVsize(tx.weight)),
     ancestors: new Map<string, GraphTx>(),
     ancestorRate: 0,
     individualRate: 0,
@@ -276,7 +279,7 @@ export function makeBlockTemplate(candidates: MempoolTransactionExtended[], acce
 
   candidates.forEach(tx => {
     // initializing everything up front helps V8 optimize property access later
-    const adjustedVsize = Math.ceil(Math.max(tx.weight / 4, 5 * (tx.sigops || 0)));
+    const adjustedVsize = Math.ceil(Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(tx.sigops || 0)));
     const feePerVsize = (tx.fee / adjustedVsize);
     auditPool.set(tx.txid, {
       txid: tx.txid,
@@ -329,7 +332,7 @@ export function makeBlockTemplate(candidates: MempoolTransactionExtended[], acce
   // Build blocks by greedily choosing the highest feerate package
   // (i.e. the package rooted in the transaction with the best ancestor score)
   const blocks: number[][] = [];
-  let blockWeight = 0;
+  let blockWeight = BLOCK_RESERVED_WEIGHT;
   let blockSigops = 0;
   const transactions: MinerTransaction[] = [];
   let modified: MinerTransaction[] = [];
@@ -357,7 +360,7 @@ export function makeBlockTemplate(candidates: MempoolTransactionExtended[], acce
 
     if (nextTx && !nextTx?.used) {
       // Check if the package fits into this block
-      if (blocks.length >= (maxBlocks - 1) || ((blockWeight + (4 * nextTx.ancestorVsize) < weightLimit) && (blockSigops + nextTx.ancestorSigops <= sigopLimit))) {
+      if (blocks.length >= (maxBlocks - 1) || ((blockWeight + vsizeToWeight(nextTx.ancestorVsize) < weightLimit) && (blockSigops + nextTx.ancestorSigops <= sigopLimit))) {
         const ancestors: MinerTransaction[] = Array.from(nextTx.ancestorMap.values());
         // sort ancestors by dependency graph (equivalent to sorting by ascending ancestor count)
         const sortedTxSet = [...ancestors.sort((a, b) => { return (a.ancestorMap.size || 0) - (b.ancestorMap.size || 0); }), nextTx];
@@ -398,7 +401,7 @@ export function makeBlockTemplate(candidates: MempoolTransactionExtended[], acce
     }
 
     // this block is full
-    const exceededPackageTries = failures > 1000 && blockWeight > (weightLimit - 4000);
+    const exceededPackageTries = failures > 1000 && blockWeight > (weightLimit - BLOCK_RESERVED_WEIGHT);
     const queueEmpty = !mempoolArray.length && !modified.length;
 
     if (exceededPackageTries || queueEmpty) {

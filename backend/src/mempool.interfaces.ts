@@ -2,13 +2,30 @@ import { IEsploraApi } from './api/bitcoin/esplora-api.interface';
 import { OrphanedBlock } from './api/chain-tips';
 import { HeapNode } from './utils/pairing-heap';
 
+export type PoolAddressMatchMode = 'any' | 'full_reward';
+
+// Compact positive-output evidence retained for deterministic pool rematches.
+// An absent address is significant: a positive non-addressed payout means no
+// registered address received the full coinbase reward.
+export interface PoolMatchCoinbaseOutput {
+  scriptpubkey_address?: string | null;
+  value: number;
+}
+
 export interface PoolTag {
   id: number;
   uniqueId: number;
   name: string;
   link: string;
-  regexes: string; // JSON array
-  addresses: string; // JSON array
+  regexes: string | string[]; // JSON array in database rows
+  addresses: string | string[]; // JSON array in database rows
+  // `full_reward` requires every positive qbit coinbase output to pay one of
+  // the registered addresses. This keeps operator addresses displayable
+  // without treating partial pool/template payouts as ownership evidence.
+  addressMatchMode?: PoolAddressMatchMode;
+  // AuxPoW-lane identifiers, matched only against the parent-chain coinbase
+  parentRegexes?: string | string[] | null; // JSON array
+  parentAddresses?: string | string[] | null; // JSON array
   slug: string;
 }
 
@@ -26,6 +43,13 @@ export interface PoolInfo {
 export interface PoolStats extends PoolInfo {
   rank: number;
   emptyBlocks: number;
+  // lane-aware absolute pool hashrate estimates in H/s: each lane's share of
+  // blocks is scaled by that lane's network rate, then summed. Block share
+  // alone cannot be used because the two Cadence lanes run at very different
+  // hashrates.
+  lastEstimatedHashrate?: number;
+  lastEstimatedHashrate3d?: number;
+  lastEstimatedHashrate1w?: number;
 }
 
 export interface BlockAudit {
@@ -132,6 +156,21 @@ export interface TransactionExtended extends IEsploraApi.Transaction {
   replacement?: boolean;
   uid?: number;
   flags?: number;
+}
+
+export interface Acceleration {
+  txid: string;
+  added: number;
+  effectiveVsize: number;
+  effectiveFee: number;
+  feeDelta: number;
+  pools: number[];
+  positions?: {
+    [pool: number]: {
+      block: number;
+      vbytes: number;
+    },
+  };
 }
 
 export interface MempoolTransactionExtended extends TransactionExtended {
@@ -265,10 +304,12 @@ export const TransactionFlags = {
   p2wpkh:                                             0b00010000_00000000n,
   p2wsh:                                              0b00100000_00000000n,
   p2tr:                                               0b01000000_00000000n,
+  p2mr:                                               0b10000000_00000000n,
   // behavior
   cpfp_parent:                               0b00000001_00000000_00000000n,
   cpfp_child:                                0b00000010_00000000_00000000n,
   replacement:                               0b00000100_00000000_00000000n,
+  anchor:                                    0b00010000_00000000_00000000n,
   // data
   op_return:                        0b00000001_00000000_00000000_00000000n,
   fake_pubkey:                      0b00000010_00000000_00000000_00000000n,
@@ -286,6 +327,22 @@ export const TransactionFlags = {
   sighash_default:0b00001000_00000000_00000000_00000000_00000000_00000000n,
   sighash_acp:    0b00010000_00000000_00000000_00000000_00000000_00000000n,
 };
+
+export interface QbitBlockCadence {
+  topBits: number;
+  chainId: number;
+  isAuxpow: boolean;
+  signalBits: number;
+  expectedChainId: number | null;
+  chainIdMatchesExpected: boolean | null;
+}
+
+// Parent-chain (Bitcoin) coinbase data recovered from an AuxPoW block header
+export interface QbitAuxPowParentSummary {
+  parentBlockHash: string;
+  parentCoinbaseRaw: string;
+  parentCoinbaseAddresses: string[];
+}
 
 export interface BlockExtension {
   totalFees: number;
@@ -328,6 +385,9 @@ export interface BlockExtension {
   totalInputAmt: number | null;
   // pools-v2.json git hash
   definitionHash: string | undefined;
+  cadence?: QbitBlockCadence;
+  // null for permissionless blocks and undecodable AuxPoW payloads
+  auxpow?: QbitAuxPowParentSummary | null;
 }
 
 /**
@@ -534,25 +594,26 @@ export interface INetworkInfo {
     warnings: string;
 }
 
-export interface IDifficultyAdjustment {
-  progressPercent: number;
-  difficultyChange: number;
-  estimatedRetargetDate: number;
-  remainingBlocks: number;
-  remainingTime: number;
-  previousRetarget: number;
-  previousTime: number;
-  nextRetargetHeight: number;
-  timeAvg: number;
-  timeOffset: number;
-  expectedBlocks: number;
+export interface AsertAnchors {
+  hourAgo: { height: number; timestamp: number } | null; // block ~60 blocks behind the tip (clamped to genesis)
+  dayAgo: { height: number; bits: number } | null;       // block ~1440 blocks behind the tip; null until the chain is that deep
 }
 
-export interface IndexedDifficultyAdjustment {
-  time: number; // UNIX timestamp
-  height: number; // Block height
-  difficulty: number;
-  adjustment: number;
+/**
+ * Difficulty anchors for one Cadence lane. Each lane retargets independently,
+ * so difficulty comparisons are only meaningful between blocks of the same
+ * lane: `latest` is the lane's most recent canonical block and `dayAgo` the
+ * most recent lane block mined at least 24h ago (null while the lane is
+ * younger than a day).
+ */
+export interface AsertLaneAnchor {
+  latest: { height: number; timestamp: number; bits: number; difficulty: number } | null;
+  dayAgo: { height: number; bits: number } | null;
+}
+
+export interface AsertLaneAnchors {
+  permissionless: AsertLaneAnchor;
+  auxpow: AsertLaneAnchor;
 }
 
 export interface RewardStats {

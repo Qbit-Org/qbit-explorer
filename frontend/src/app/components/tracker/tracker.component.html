@@ -19,12 +19,10 @@
 
         @if (!enterpriseInfo || !enterpriseInfo.dualLogo) {
           <div [ngSwitch]="network" class="network-label">
-            <span *ngSwitchCase="'signet'" class="network signet"><span class="name">Bitcoin Signet</span><app-svg-images name="signet" width="35" height="35" viewBox="0 0 65 65" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
-            <span *ngSwitchCase="'testnet'" class="network testnet"><span class="name">Bitcoin Testnet3</span><app-svg-images name="testnet" width="35" height="35" viewBox="0 0 65 65" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
-            <span *ngSwitchCase="'testnet4'" class="network testnet"><span class="name">Bitcoin Testnet4</span><app-svg-images name="testnet4" width="35" height="35" viewBox="0 0 65 65" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
-            <span *ngSwitchCase="'liquid'" class="network liquid"><span class="name">Liquid</span><app-svg-images name="liquid" width="35" height="35" viewBox="0 0 125 125" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
-            <span *ngSwitchCase="'liquidtestnet'" class="network liquidtestnet"><span class="name">Liquid Testnet</span><app-svg-images name="liquidtestnet" width="35" height="35" viewBox="0 0 125 125" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
-            <span *ngSwitchDefault class="network mainnet"><span class="name">Bitcoin</span><app-svg-images name="bitcoin" width="35" height="35" viewBox="0 0 65 65" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
+            <span *ngSwitchCase="'signet'" class="network signet"><span class="name">qbit Signet</span><app-svg-images name="signet" width="35" height="35" viewBox="0 0 65 65" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
+            <span *ngSwitchCase="'testnet'" class="network testnet"><span class="name">qbit Testnet3</span><app-svg-images name="testnet" width="35" height="35" viewBox="0 0 65 65" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
+            <span *ngSwitchCase="'testnet4'" class="network testnet"><span class="name">qbit Testnet4</span><app-svg-images name="testnet4" width="35" height="35" viewBox="0 0 65 65" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
+            <span *ngSwitchDefault class="network mainnet"><span class="name">qbit</span><app-svg-images name="qbit-mainnet" width="35" height="35" style="display: inline-block" class="mainnet ml-2"></app-svg-images></span>
           </div>
         }
       </div>
@@ -118,23 +116,6 @@
         </div>
         <span class="explainer">&nbsp;</span>
       } @else {
-        @if (tx && !tx.status?.confirmed && showAccelerationSummary) {
-          <ng-container *ngIf="(ETA$ | async) as eta;">
-            <app-accelerate-checkout
-              *ngIf="(da$ | async) as da;"
-              [advancedEnabled]="false"
-              [forceMobile]="true"
-              [tx]="tx"
-              [accelerating]="isAcceleration"
-              [miningStats]="miningStats"
-              [eta]="eta"
-              [referralCode]="referralCode"
-              (unavailable)="eligibleForAcceleration = false"
-              (paymentReceipt)="paymentReceipt($event)"
-              class="w-100"
-            ></app-accelerate-checkout>
-          </ng-container>
-        }
         <div class="status-panel d-flex flex-column h-100 w-100 justify-content-center align-items-center" [class.small-status]="tx && !tx.status?.confirmed && showAccelerationSummary">
           @if (tx?.acceleration && !tx.status?.confirmed) {
             <div class="progress-icon">

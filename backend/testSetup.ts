@@ -1,3 +1,6 @@
+// config.ts loads MEMPOOL_CONFIG_FILE instead of the mocked mempool-config.json,
+// and the local dev loop exports it, so keep it out of the unit tests
+delete process.env.MEMPOOL_CONFIG_FILE;
 jest.mock('./mempool-config.json', () => ({}), { virtual: true });
 jest.mock('./src/logger.ts', () => ({
   emerg: jest.fn(),

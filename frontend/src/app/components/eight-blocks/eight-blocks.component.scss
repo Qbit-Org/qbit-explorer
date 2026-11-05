@@ -35,6 +35,13 @@
       font-size: calc(var(--block-width) * 0.03);
       text-shadow: 0 0 calc(var(--block-width) * 0.05) black;
 
+      app-cadence-lane-badge.cadence-lane {
+        position: absolute;
+        top: 0;
+        right: 0;
+        font-size: 0.7em;
+      }
+
       h1 {
         font-size: 6em;
         line-height: 1;

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { BehaviorSubject, Observable, catchError, filter, from, of, shareReplay, switchMap, take, tap } from 'rxjs';
-import { Transaction, Address, Outspend, Recent, Asset, ScriptHash, AddressTxSummary, Utxo } from '@interfaces/electrs.interface';
+import { Transaction, Address, Outspend, Recent, ScriptHash, AddressTxSummary, Utxo } from '@interfaces/electrs.interface';
 import { StateService } from '@app/services/state.service';
 import { BlockExtended } from '@interfaces/node-api.interface';
 import { calcScriptHash$ } from '@app/bitcoin.utils';
@@ -222,18 +222,6 @@ export class ElectrsApiService {
     return from(Promise.all(scripts.map(script => calcScriptHash$(script)))).pipe(
       switchMap(scriptHashes => this.httpClient.post<AddressTxSummary[]>(this.apiBaseUrl + this.apiBasePath + '/api/scripthashes/txs/summary', scriptHashes, { params })),
     );
-  }
-
-  getAsset$(assetId: string): Observable<Asset> {
-    return this.httpClient.get<Asset>(this.apiBaseUrl + this.apiBasePath + '/api/asset/' + assetId);
-  }
-
-  getAssetTransactions$(assetId: string): Observable<Transaction[]> {
-    return this.httpClient.get<Transaction[]>(this.apiBaseUrl + this.apiBasePath + '/api/asset/' + assetId + '/txs');
-  }
-
-  getAssetTransactionsFromHash$(assetId: string, txid: string): Observable<Transaction[]> {
-    return this.httpClient.get<Transaction[]>(this.apiBaseUrl + this.apiBasePath + '/api/asset/' + assetId + '/txs/chain/' + txid);
   }
 
   getAddressesByPrefix$(prefix: string): Observable<string[]> {

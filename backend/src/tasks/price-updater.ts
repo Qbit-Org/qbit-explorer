@@ -10,6 +10,8 @@ import GeminiApi from './price-feeds/gemini-api';
 import KrakenApi from './price-feeds/kraken-api';
 import FreeCurrencyApi from './price-feeds/free-currency-api';
 
+export const QBIT_PRICE_FEEDS_AVAILABLE = false;
+
 export interface PriceFeed {
   name: string;
   url: string;
@@ -67,13 +69,15 @@ class PriceUpdater {
     this.latestPrices = this.getEmptyPricesObj();
     this.latestGoodPrices = this.getEmptyPricesObj();
 
-    this.feeds.push(new BitflyerApi()); // Does not have historical endpoint
-    this.feeds.push(new KrakenApi());
-    this.feeds.push(new CoinbaseApi());
-    this.feeds.push(new BitfinexApi());
-    this.feeds.push(new GeminiApi());
+    if (QBIT_PRICE_FEEDS_AVAILABLE) {
+      this.feeds.push(new BitflyerApi()); // Does not have historical endpoint
+      this.feeds.push(new KrakenApi());
+      this.feeds.push(new CoinbaseApi());
+      this.feeds.push(new BitfinexApi());
+      this.feeds.push(new GeminiApi());
 
-    this.currencyConversionFeed = new FreeCurrencyApi();
+      this.currencyConversionFeed = new FreeCurrencyApi();
+    }
     this.setCyclePosition();
   }
 
@@ -131,12 +135,22 @@ class PriceUpdater {
    * @asyncUnsafe
    */
   public async $initializeLatestPriceWithDb(): Promise<void> {
+    if (!QBIT_PRICE_FEEDS_AVAILABLE) {
+      this.latestPrices = this.getEmptyPricesObj();
+      this.latestGoodPrices = this.getEmptyPricesObj();
+      return;
+    }
+
     this.latestPrices = await PricesRepository.$getLatestConversionRates();
     this.latestGoodPrices = JSON.parse(JSON.stringify(this.latestPrices));
   }
 
   /** @asyncSafe */
   public async $run(): Promise<void> {
+    if (!QBIT_PRICE_FEEDS_AVAILABLE) {
+      return;
+    }
+
     if (['testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
       // Coins have no value on testnet/signet, so we want to always show 0
       return;
@@ -179,7 +193,7 @@ class PriceUpdater {
       }
 
     } catch (e: any) {
-      logger.err(`Cannot save BTC prices in db. Reason: ${e instanceof Error ? e.message : e}`, logger.tags.mining);
+      logger.err(`Cannot save fiat prices in db. Reason: ${e instanceof Error ? e.message : e}`, logger.tags.mining);
     }
 
     this.running = false;
@@ -212,7 +226,7 @@ class PriceUpdater {
   }
 
   /**
-   * Fetch last BTC price from exchanges, average them, and save it in the database once every hour
+   * Fetch latest fiat prices from exchanges, average them, and save them in the database once every hour.
    * @asyncUnsafe
    */
   private async $updatePrice(): Promise<void> {
@@ -247,14 +261,14 @@ class PriceUpdater {
             if (price > -1 && price < MAX_PRICES[currency]) {
               prices.push(price);
             }
-            logger.debug(`${feed.name} BTC/${currency} price: ${price}`, logger.tags.mining);
+            logger.debug(`${feed.name} coin/${currency} price: ${price}`, logger.tags.mining);
           } catch (e) {
-            logger.debug(`Could not fetch BTC/${currency} price at ${feed.name}. Reason: ${(e instanceof Error ? e.message : e)}`, logger.tags.mining);
+            logger.debug(`Could not fetch coin/${currency} price at ${feed.name}. Reason: ${(e instanceof Error ? e.message : e)}`, logger.tags.mining);
           }
         }
       }
       if (prices.length === 1) {
-        logger.debug(`Only ${prices.length} feed available for BTC/${currency} price`, logger.tags.mining);
+        logger.debug(`Only ${prices.length} feed available for coin/${currency} price`, logger.tags.mining);
       }
 
       // Compute average price, non weighted
@@ -292,9 +306,9 @@ class PriceUpdater {
     }
 
     if (this.latestPrices.USD === -1) {
-      logger.warn(`No BTC price available, falling back to latest known price: ${JSON.stringify(this.latestGoodPrices)}`);
+      logger.warn(`No fiat price available, falling back to latest known price: ${JSON.stringify(this.latestGoodPrices)}`);
     } else {
-      logger.info(`Latest BTC fiat averaged price: ${JSON.stringify(this.latestGoodPrices)}`);
+      logger.info(`Latest fiat averaged price: ${JSON.stringify(this.latestGoodPrices)}`);
     }
 
     if (this.ratesChangedCallback && this.latestGoodPrices.USD > 0) {

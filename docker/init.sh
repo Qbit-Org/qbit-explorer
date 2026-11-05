@@ -3,10 +3,10 @@
 #backend
 cp -r ./docker/backend/* ./backend/
 
-#geoip-data
+#geoip-data, pinned to a commit so every build gets the same databases
 mkdir -p ./backend/GeoIP/
-wget -O ./backend/GeoIP/GeoLite2-City.mmdb https://raw.githubusercontent.com/mempool/geoip-data/master/GeoLite2-City.mmdb
-wget -O ./backend/GeoIP/GeoLite2-ASN.mmdb https://raw.githubusercontent.com/mempool/geoip-data/master/GeoLite2-ASN.mmdb
+wget -O ./backend/GeoIP/GeoLite2-City.mmdb https://raw.githubusercontent.com/mempool/geoip-data/807ed1550b408eb13b680a6805df80a7a61f56ac/GeoLite2-City.mmdb
+wget -O ./backend/GeoIP/GeoLite2-ASN.mmdb https://raw.githubusercontent.com/mempool/geoip-data/807ed1550b408eb13b680a6805df80a7a61f56ac/GeoLite2-ASN.mmdb
 
 #frontend
 localhostIP="127.0.0.1"

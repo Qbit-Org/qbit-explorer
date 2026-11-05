@@ -60,6 +60,17 @@
   width: 100%;
 }
 
+.hashrate-breakdown-trigger {
+  cursor: help;
+}
+
+.hashrate-breakdown-icon {
+  color: var(--transparent-fg);
+  font-size: 0.75rem;
+  margin-left: 0.15rem;
+  vertical-align: 0.1rem;
+}
+
 .pool-distribution {
   min-height: 56px;
   display: block;

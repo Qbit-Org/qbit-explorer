@@ -2934,14 +2934,6 @@
         </context-group>
         <note priority="1" from="description">mining.avg-block-fee-1m</note>
       </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-fee-rates" datatype="html">
-        <source>See Bitcoin feerates visualized over time, including minimum and maximum feerates per block along with feerates at various percentiles.</source>
-        <target>समय के साथ बिटकॉइन शुल्क दरों को देखें, जिसमें प्रति ब्लॉक न्यूनतम और अधिकतम शुल्क दरों के साथ-साथ विभिन्न प्रतिशत पर शुल्क दरें भी शामिल हैं।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-fee-rates-graph/block-fee-rates-graph.component.ts</context>
-          <context context-type="linenumber">74</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="4793828002882320882" datatype="html">
         <source>At block: <x id="PH" equiv-text="data[0].data[2]"/></source>
         <target>ब्लॉक पर: <x id="PH" equiv-text="data[0].data[2]"/></target>
@@ -2974,14 +2966,6 @@
           <context context-type="linenumber">18</context>
         </context-group>
         <note priority="1" from="description">mining.block-fees</note>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-fees" datatype="html">
-        <source>See the average mining fees earned per Bitcoin block visualized in BTC and USD over time.</source>
-        <target>समय के साथ प्रति बिटकॉइन ब्लॉक अर्जित औसत खनन शुल्क को बीटीसी और यूएसडी में देखें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-fees-graph/block-fees-graph.component.ts</context>
-          <context context-type="linenumber">71</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="23555386d8af1ff73f297e89dd4af3f4689fb9dd" datatype="html">
         <source>Indexing blocks</source>
@@ -3039,14 +3023,6 @@
           <context context-type="linenumber">20</context>
         </context-group>
         <note priority="1" from="description">mining.block-fees-subsidy-subsidy</note>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-fees-subsidy" datatype="html">
-        <source>See the mining fees earned per Bitcoin block compared to the Bitcoin block subsidy, visualized in BTC and USD over time.</source>
-        <target>बिटकॉइन ब्लॉक सब्सिडी की तुलना में प्रति बिटकॉइन ब्लॉक अर्जित खनन शुल्क देखें, जिसे समय के साथ बीटीसी और यूएसडी में दर्शाया गया है।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-fees-subsidy-graph/block-fees-subsidy-graph.component.ts</context>
-          <context context-type="linenumber">80</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="8538305450922736186" datatype="html">
         <source>At block <x id="PH" equiv-text="'&lt;b style=&quot;color: white; margin-left: 2px&quot;&gt;' + data[0].axisValue"/></source>
@@ -3478,14 +3454,6 @@
         </context-group>
         <note priority="1" from="description">mining.block-rewards</note>
       </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-rewards" datatype="html">
-        <source>See Bitcoin block rewards in BTC and USD visualized over time. Block rewards are the total funds miners earn from the block subsidy and fees.</source>
-        <target>समय के साथ बिटकॉइन ब्लॉक रिवॉर्ड को BTC और USD में देखें। ब्लॉक रिवॉर्ड वह कुल राशि है जो माइनर्स ब्लॉक सब्सिडी और फीस से कमाते हैं।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-rewards-graph/block-rewards-graph.component.ts</context>
-          <context context-type="linenumber">69</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="56fa1cd221491b6478998679cba2dc8d55ba330d" datatype="html">
         <source>Block Sizes and Weights</source>
         <target>ब्लॉक साइज और वजन</target>
@@ -3502,14 +3470,6 @@
           <context context-type="linenumber">24</context>
         </context-group>
         <note priority="1" from="description">mining.block-sizes-weights</note>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-sizes" datatype="html">
-        <source>See Bitcoin block sizes (MB) and block weights (weight units) visualized over time.</source>
-        <target>समय के साथ बिटकॉइन ब्लॉक साइज (एमबी) और ब्लॉक वजन (वजन इकाइयाँ) देखें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">66</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
         <source>Size</source>
@@ -3657,22 +3617,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block/block.component.ts</context>
           <context context-type="linenumber">288</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.block" datatype="html">
-        <source>See size, weight, fee range, included transactions, audit (expected v actual), and more for Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> block <x id="BLOCK_HEIGHT" equiv-text="block.height"/> (<x id="BLOCK_ID" equiv-text="block.id"/>).</source>
-        <target>बिटकॉइन<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> ब्लॉक <x id="BLOCK_HEIGHT" equiv-text="block.height"/> (<x id="BLOCK_ID" equiv-text="block.id"/>) के लिए साइज, वजन, शुल्क सीमा, शामिल लेनदेन, ऑडिट (अपेक्षित बनाम वास्तविक) और अधिक देखें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-view/block-view.component.ts</context>
-          <context context-type="linenumber">115</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block/block-preview.component.ts</context>
-          <context context-type="linenumber">109</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block/block.component.ts</context>
-          <context context-type="linenumber">290</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2303359202781425764" datatype="html">
@@ -4485,14 +4429,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/blocks-list/blocks-list.component.ts</context>
           <context context-type="linenumber">74</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.blocks" datatype="html">
-        <source>See the most recent Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> blocks along with basic stats such as block height, block reward, block size, and more.</source>
-        <target>सबसे हाल के बिटकॉइन ब्लॉकों को बुनियादी आँकड़ों जैसे कि ब्लॉक की ऊँचाई, ब्लॉक इनाम, ब्लॉक आकार और अधिक के साथ देखें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/blocks-list/blocks-list.component.ts</context>
-          <context context-type="linenumber">76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="cf8caac4de0166eae6cd0fdfd010ee92b995cd96" datatype="html">
@@ -5495,14 +5431,6 @@
         </context-group>
         <note priority="1" from="description">mining.hashrate</note>
       </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.hashrate" datatype="html">
-        <source>See hashrate and difficulty for the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.network)"/> network visualized over time.</source>
-        <target>बिटकॉइन नेटवर्क के लिए हैशरेट और कठिनाई को समय के साथ देखें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">79</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="8105839921891777281" datatype="html">
         <source>Hashrate (MA)</source>
         <target>हैशरेट (एमए)</target>
@@ -5521,14 +5449,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrates-chart-pools/hashrate-chart-pools.component.ts</context>
           <context context-type="linenumber">75</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.descriptions.bitcoin.graphs.hashrate-pools" datatype="html">
-        <source>See Bitcoin mining pool dominance visualized over time: see how top mining pools' share of total hashrate has fluctuated over time.</source>
-        <target>समय के साथ बिटकॉइन खनन पूल के प्रभुत्व को देखें: देखें कि कुल हैशरेट में शीर्ष खनन पूलों की हिस्सेदारी समय के साथ कैसे उतार-चढ़ाव करती रही है।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/hashrates-chart-pools/hashrate-chart-pools.component.ts</context>
-          <context context-type="linenumber">76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5ee5eb7db86675abd5f0b0db835bf362ee9b23ff" datatype="html">
@@ -6091,14 +6011,6 @@
           <context context-type="linenumber">74</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="meta.description.mining.dashboard" datatype="html">
-        <source>Get real-time Bitcoin mining stats like hashrate, difficulty adjustment, block rewards, pool dominance, and more.</source>
-        <target>वास्तविक समय बिटकॉइन खनन आँकड़े प्राप्त करें जैसे हैशरेट, कठिनाई समायोजन, ब्लॉक पुरस्कार, पूल प्रभुत्व, और अधिक।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/mining-dashboard/mining-dashboard.component.ts</context>
-          <context context-type="linenumber">31</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="667d1fa0b03107009b84c29319f1393e93992788" datatype="html">
         <source><x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span&gt;"/>Mint<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_SPAN_1" ctype="x-span_1" equiv-text="&lt;span class=&quot;amount&quot;&gt;"/> <x id="INTERPOLATION" equiv-text="{{ minted &gt;= 100000 ? (minted | amountShortener:undefined:undefined:true) : minted }}"/> <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;ng-container *ngTemplateOutlet=&quot;runeName; context: { $implicit: runestone.mint.toString() }&quot;&gt;"/><x id="CLOSE_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;/ng-container&gt;"/></source>
         <target><x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span&gt;"/>मिंट<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_SPAN_1" ctype="x-span_1" equiv-text="&lt;span class=&quot;amount&quot;&gt;"/> <x id="INTERPOLATION" equiv-text="{{ minted &gt;= 100000 ? (minted | amountShortener:undefined:undefined:true) : minted }}"/> <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;ng-container *ngTemplateOutlet=&quot;runeName; context: { $implicit: runestone.mint.toString() }&quot;&gt;"/><x id="CLOSE_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;/ng-container&gt;"/></target>
@@ -6334,14 +6246,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/search-form/search-results/search-results.component.html</context>
           <context context-type="linenumber">47</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.pool-ranking" datatype="html">
-        <source>See the top Bitcoin mining pools ranked by number of blocks mined, over your desired timeframe.</source>
-        <target>अपने इच्छित समय सीमा में खनन किए गए ब्लॉकों की संख्या के आधार पर रैंक किए गए शीर्ष बिटकॉइन खनन पूल देखें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/pool-ranking/pool-ranking.component.ts</context>
-          <context context-type="linenumber">61</context>
         </context-group>
       </trans-unit>
       <trans-unit id="312539377512157124" datatype="html">
@@ -6689,22 +6593,6 @@
         </context-group>
         <note priority="1" from="description">price-chart.percent-change</note>
       </trans-unit>
-      <trans-unit id="price-chart.title" datatype="html">
-        <source>Bitcoin Price</source>
-        <target>बिटकॉइन मूल्य</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/price-chart/price-chart.component.ts</context>
-          <context context-type="linenumber">77</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="price-chart.description" datatype="html">
-        <source>See the Bitcoin price in USD visualized over time.</source>
-        <target>समय के साथ USD में बिटकॉइन की कीमत देखें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/price-chart/price-chart.component.ts</context>
-          <context context-type="linenumber">78</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="f13cbfe8cfc955918e9f64466d2cafddb4760d9a" datatype="html">
         <source>Broadcast Transaction</source>
         <target>प्रसारण लेनदेन</target>
@@ -6847,14 +6735,6 @@
           <context context-type="linenumber">34</context>
         </context-group>
         <note priority="1" from="description">rbf.no-replacements-yet</note>
-      </trans-unit>
-      <trans-unit id="meta.description.rbf-list" datatype="html">
-        <source>See the most recent RBF replacements on the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> network, updated in real-time.</source>
-        <target>बिटकॉइन नेटवर्क पर सबसे हालिया आरबीएफ प्रतिस्थापन देखें, जो वास्तविक समय में अपडेट किया गया है।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/rbf-list/rbf-list.component.ts</context>
-          <context context-type="linenumber">63</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="5403a767248e304199592271bba3366d2ca3f903" datatype="html">
         <source>Show less</source>
@@ -7280,13 +7160,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/stale-list/stale-list.component.ts</context>
           <context context-type="linenumber">62</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.stale-chain-tips" datatype="html">
-        <source>See the most recent stale chain tips on the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> network.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/stale-list/stale-list.component.ts</context>
-          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="75c20c8a9cd9723d45bee0230dd582d7c2e4ecbc" datatype="html">
@@ -8017,14 +7890,6 @@
         </context-group>
         <note priority="1" from="description">Transaction Sigops</note>
         <note priority="1" from="meaning">transaction.sigops</note>
-      </trans-unit>
-      <trans-unit id="meta.description.preview-tx" datatype="html">
-        <source>Preview a transaction to the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> network using the transaction's raw hex data.</source>
-        <target>लेन-देन के कच्चे हेक्स डेटा का उपयोग करके बिटकॉइन<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> नेटवर्क पर लेन-देन का पूर्वावलोकन करें।</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/transaction/transaction-raw.component.ts</context>
-          <context context-type="linenumber">91</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="df5fd5288dc0b13ce611a0c857e97baee9595e67" datatype="html">
         <source> This transaction ID appears twice in the blockchain as the coinbase of blocks <x id="START_LINK" ctype="x-a" equiv-text="&lt;a [routerLink]=&quot;['/block/' | relativeUrl, duplicateTxBlocks[0]]&quot;&gt;"/><x id="INTERPOLATION" equiv-text="locks[0] }}"/><x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/> and <x id="START_LINK_1" equiv-text="&lt;a [routerLink]=&quot;['/block/' | relativeUrl, duplicateTxBlocks[1]]&quot;&gt;"/><x id="INTERPOLATION_1" equiv-text="cks[1] }}"/><x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>, due to a bug later mitigated by <x id="START_LINK_2" equiv-text="&lt;a href=&quot;https://github.com/bitcoin/bips/blob/master/bip-0030.mediawiki&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;"/>BIP-30<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>. </source>

@@ -170,7 +170,7 @@
               <tr>
                 <td i18n="transaction.vsize|Transaction Virtual Size">Virtual size</td>
                 <td>
-                  <span [innerHTML]="'&lrm;' + ((transaction.weight + weightFromMissingSig) / 4 | vbytes: 2)"></span>
+                  <span [innerHTML]="'&lrm;' + (transaction.weight + weightFromMissingSig | vbytes: 2)"></span>
                   <fa-icon *ngIf="tooltipVsize" [ngbTooltip]="tooltipVsize" class="icon-symbol" [icon]="['fas', 'info-circle']" [fixedWidth]="true"></fa-icon>
                 </td>
               </tr>

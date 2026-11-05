@@ -1,5 +1,5 @@
 import bitcoinApi, { bitcoinCoreApi } from '../api/bitcoin/bitcoin-api-factory';
-import { BlockExtended, BlockExtension, BlockPrice, EffectiveFeeStats } from '../mempool.interfaces';
+import { AsertLaneAnchors, BlockExtended, BlockExtension, BlockPrice, EffectiveFeeStats, PoolMatchCoinbaseOutput } from '../mempool.interfaces';
 import DB from '../database';
 import logger from '../logger';
 import { Common } from '../api/common';
@@ -7,7 +7,6 @@ import PoolsRepository from './PoolsRepository';
 import HashratesRepository from './HashratesRepository';
 import { RowDataPacket } from 'mysql2';
 import BlocksSummariesRepository from './BlocksSummariesRepository';
-import DifficultyAdjustmentsRepository from './DifficultyAdjustmentsRepository';
 import bitcoinClient from '../api/bitcoin/bitcoin-client';
 import config from '../config';
 import chainTips from '../api/chain-tips';
@@ -16,6 +15,11 @@ import BlocksAuditsRepository from './BlocksAuditsRepository';
 import transactionUtils from '../api/transaction-utils';
 import { parseDATUMTemplateCreator } from '../utils/bitcoin-script';
 import poolsUpdater from '../tasks/pools-updater';
+import { decodeQbitBlockVersion, laneOf } from '../utils/qbit-version';
+import { parseAuxPowParentCoinbase, summarizeAuxPowHeader } from '../utils/qbit-auxpow';
+import { matchBlockMiner } from '../utils/pool-match';
+import { BlockForHashrate } from '../utils/qbit-lane-hashrate';
+import { vsizeToWeight, weightToFractionalVsize } from '../utils/weight-units';
 
 interface DatabaseBlock {
   index_version: number;
@@ -109,14 +113,21 @@ const BLOCK_DB_FIELDS = `
   blocks.stale
 `;
 
+export class IncompleteHashrateWindowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IncompleteHashrateWindowError';
+  }
+}
+
 class BlocksRepository {
-  static version = 1;
+  static version = 2;
 
   /**
    * Save indexed block data in the database
    * @asyncSafe
    */
-  public async $saveBlockInDatabase(block: BlockExtended) {
+  public async $saveBlockInDatabase(block: BlockExtended, coinbasePayouts: PoolMatchCoinbaseOutput[]) {
     const truncatedCoinbaseSignature = block?.extras?.coinbaseSignature?.substring(0, 500);
     const truncatedCoinbaseSignatureAscii = block?.extras?.coinbaseSignatureAscii?.substring(0, 500);
 
@@ -128,11 +139,11 @@ class BlocksRepository {
         reward,             version,                  bits,              nonce,
         merkle_root,        previous_block_hash,      avg_fee,           avg_fee_rate,
         median_timestamp,   header,                   coinbase_address,  coinbase_addresses,
-        coinbase_signature, utxoset_size,             utxoset_change,    avg_tx_size,
-        total_inputs,       total_outputs,            total_input_amt,   total_output_amt,
-        fee_percentiles,    segwit_total_txs,         segwit_total_size, segwit_total_weight,
-        median_fee_amt,     coinbase_signature_ascii, definition_hash,   index_version,
-        stale,              first_seen
+        coinbase_payouts,   coinbase_signature,       utxoset_size,      utxoset_change,
+        avg_tx_size,        total_inputs,              total_outputs,     total_input_amt,
+        total_output_amt,   fee_percentiles,           segwit_total_txs,  segwit_total_size,
+        segwit_total_weight, median_fee_amt,           coinbase_signature_ascii, definition_hash,
+        index_version,      stale,                     first_seen,        lane
       ) VALUE (
         ?, ?, FROM_UNIXTIME(?), ?,
         ?, ?, ?, ?,
@@ -144,7 +155,7 @@ class BlocksRepository {
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, FROM_UNIXTIME(?)
+        ?, ?, FROM_UNIXTIME(?), ?
       )`;
 
       const poolDbId = await PoolsRepository.$getPoolByUniqueId(block.extras.pool.id);
@@ -177,6 +188,7 @@ class BlocksRepository {
         block.extras.header,
         block.extras.coinbaseAddress,
         block.extras.coinbaseAddresses ? JSON.stringify(block.extras.coinbaseAddresses) : null,
+        JSON.stringify(coinbasePayouts),
         truncatedCoinbaseSignature,
         block.extras.utxoSetSize,
         block.extras.utxoSetChange,
@@ -194,7 +206,8 @@ class BlocksRepository {
         poolsUpdater.currentSha,
         BlocksRepository.version,
         (block.stale ? 1 : 0),
-        block.extras.firstSeen === null ? 1 : block.extras.firstSeen // Sentinel value 1 indicates that we could not find first seen time
+        block.extras.firstSeen === null ? 1 : block.extras.firstSeen, // Sentinel value 1 indicates that we could not find first seen time
+        laneOf(block.version, config.MEMPOOL.NETWORK),
       ];
 
       await DB.query(query, params);
@@ -378,6 +391,68 @@ class BlocksRepository {
       return <number>rows[0].blockCount;
     } catch (e) {
       logger.err(`Cannot count blocks for this pool (using offset). Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
+    }
+  }
+
+  /**
+   * Get the per-lane difficulty anchors backing the lane-aware difficulty
+   * state: for each Cadence lane, its most recent canonical block and the most
+   * recent lane block mined at least 24h ago (for the lane's 24h delta).
+   * @asyncSafe
+   */
+  public async $getAsertLaneAnchors(): Promise<AsertLaneAnchors> {
+    const anchors: AsertLaneAnchors = {
+      permissionless: { latest: null, dayAgo: null },
+      auxpow: { latest: null, dayAgo: null },
+    };
+
+    try {
+      const [latestRows]: any[] = await DB.query(`
+        SELECT blocks.lane, blocks.height, UNIX_TIMESTAMP(blocks.blockTimestamp) as timestamp, blocks.bits, blocks.difficulty
+        FROM blocks
+        INNER JOIN (
+          SELECT lane, MAX(height) as height
+          FROM blocks
+          WHERE stale = 0
+          GROUP BY lane
+        ) tips ON tips.lane = blocks.lane AND tips.height = blocks.height
+        WHERE blocks.stale = 0
+      `);
+      const [dayAgoRows]: any[] = await DB.query(`
+        SELECT blocks.lane, blocks.height, blocks.bits
+        FROM blocks
+        INNER JOIN (
+          SELECT lane, MAX(height) as height
+          FROM blocks
+          WHERE stale = 0 AND blockTimestamp <= DATE_SUB(NOW(), INTERVAL 1 DAY)
+          GROUP BY lane
+        ) agedTips ON agedTips.lane = blocks.lane AND agedTips.height = blocks.height
+        WHERE blocks.stale = 0
+      `);
+
+      for (const row of latestRows) {
+        if (anchors[row.lane]) {
+          anchors[row.lane].latest = {
+            height: Number(row.height),
+            timestamp: Number(row.timestamp),
+            bits: Number(row.bits),
+            difficulty: Number(row.difficulty),
+          };
+        }
+      }
+      for (const row of dayAgoRows) {
+        if (anchors[row.lane]) {
+          anchors[row.lane].dayAgo = {
+            height: Number(row.height),
+            bits: Number(row.bits),
+          };
+        }
+      }
+
+      return anchors;
+    } catch (e) {
+      logger.err(`Cannot fetch per-lane difficulty anchors. Reason: ` + (e instanceof Error ? e.message : e));
       throw e;
     }
   }
@@ -600,15 +675,120 @@ class BlocksRepository {
   }
 
   /**
-   * Return blocks difficulty
+   * Return block heights and timestamps over an interval, in ascending height order
    * @asyncSafe
    */
-  public async $getBlocksDifficulty(): Promise<object[]> {
+  public async $getBlockTimes(interval: string | null = null): Promise<{ height: number, timestamp: number }[]> {
+    interval = Common.getSqlInterval(interval);
+
+    let query = `SELECT height, UNIX_TIMESTAMP(blockTimestamp) as timestamp FROM blocks WHERE stale = 0`;
+    if (interval) {
+      query += ` AND blockTimestamp BETWEEN DATE_SUB(NOW(), INTERVAL ${interval}) AND NOW()`;
+    }
+    query += ` ORDER BY height ASC`;
+
     try {
-      const [rows]: any[] = await DB.query(`SELECT UNIX_TIMESTAMP(blockTimestamp) as time, height, difficulty, bits FROM blocks WHERE stale = 0 ORDER BY height ASC`);
+      const [rows]: any[] = await DB.query(query);
       return rows;
     } catch (e) {
-      logger.err('Cannot get blocks difficulty list from the db. Reason: ' + (e instanceof Error ? e.message : e));
+      logger.err('Cannot get block times from the db. Reason: ' + (e instanceof Error ? e.message : e));
+      throw e;
+    }
+  }
+
+  /**
+   * Return a getnetworkhashps-compatible active-chain window in ascending
+   * height order. `blockCount` blocks contribute proof work and the extra
+   * oldest block is their shared timing/chainwork anchor.
+   * @asyncSafe
+   */
+  public async $getHashrateWindow(blockCount: number, endHeight?: number): Promise<BlockForHashrate[]> {
+    if (!Number.isInteger(blockCount) || blockCount <= 0) {
+      return [];
+    }
+
+    const params: number[] = [];
+    let query = `SELECT
+      height,
+      UNIX_TIMESTAMP(blockTimestamp) as timestamp,
+      bits,
+      version,
+      pool_id as poolId
+      FROM blocks
+      WHERE stale = 0`;
+    if (endHeight !== undefined) {
+      query += ` AND height <= ?`;
+      params.push(endHeight);
+    }
+    query += ` ORDER BY height DESC LIMIT ?`;
+    params.push(blockCount + 1);
+
+    try {
+      const [rows]: any[] = await DB.query(query, params);
+      const window = rows.reverse().map(row => ({
+        height: Number(row.height),
+        timestamp: Number(row.timestamp),
+        bits: Number(row.bits),
+        version: Number(row.version),
+        poolId: Number(row.poolId),
+      }));
+
+      if (window.length === 0) {
+        if (endHeight !== undefined) {
+          throw new IncompleteHashrateWindowError(`Hashrate window ending at ${endHeight} has no indexed blocks`);
+        }
+        return [];
+      }
+      const newestHeight = window[window.length - 1].height;
+      if (endHeight !== undefined && newestHeight !== endHeight) {
+        throw new IncompleteHashrateWindowError(`Hashrate window ends at ${newestHeight}, expected ${endHeight}`);
+      }
+      const expectedRows = Math.min(blockCount, newestHeight) + 1;
+      if (window.length !== expectedRows) {
+        throw new IncompleteHashrateWindowError(`Hashrate window has ${window.length} rows, expected ${expectedRows} including its anchor`);
+      }
+      for (let i = 1; i < window.length; ++i) {
+        if (window[i].height !== window[i - 1].height + 1) {
+          throw new IncompleteHashrateWindowError(`Hashrate window is not consecutive at heights ${window[i - 1].height} and ${window[i].height}`);
+        }
+      }
+
+      return window;
+    } catch (e) {
+      logger.err('Cannot get a block window for hashrate calculation. Reason: ' + (e instanceof Error ? e.message : e), logger.tags.mining);
+      throw e;
+    }
+  }
+
+  /**
+   * Return the daily average difficulty over an interval, in ascending height order.
+   * qbit retargets every block (ASERT), so the history is aggregated from the
+   * blocks table instead of a retarget-event table.
+   * @asyncSafe
+   */
+  public async $getDailyDifficulty(interval: string | null = null): Promise<{ time: number, height: number, difficulty: number, lane: string }[]> {
+    interval = Common.getSqlInterval(interval);
+
+    // group by lane as well as day: the lanes retarget independently at very
+    // different difficulties, so averaging them together would only chart the
+    // lane mix, not the difficulty
+    let query = `SELECT
+      CAST(AVG(UNIX_TIMESTAMP(blockTimestamp)) as INT) as time,
+      CAST(AVG(height) AS INT) as height,
+      CAST(AVG(difficulty) as DOUBLE) as difficulty,
+      lane
+      FROM blocks
+      WHERE stale = 0`;
+    if (interval) {
+      query += ` AND blockTimestamp BETWEEN DATE_SUB(NOW(), INTERVAL ${interval}) AND NOW()`;
+    }
+    query += ` GROUP BY lane, UNIX_TIMESTAMP(blockTimestamp) DIV 86400 ORDER BY height`;
+
+    try {
+      const [rows]: any[] = await DB.query(query);
+      return rows;
+    } catch (e) {
+      logger.err('Cannot get daily difficulty history from the db. Reason: ' + (e instanceof Error ? e.message : e));
       throw e;
     }
   }
@@ -742,7 +922,6 @@ class BlocksRepository {
       if (firstBadBlockHeight != null) {
         logger.warn(`Chain divergence detected at block ${firstBadBlockHeight}`);
         await HashratesRepository.$deleteHashratesFromTimestamp(blocksByHash[firstBadBlockHeight].timestamp - 604800);
-        await DifficultyAdjustmentsRepository.$deleteAdjustementsFromHeight(firstBadBlockHeight);
         return false;
       }
 
@@ -1044,7 +1223,7 @@ class BlocksRepository {
   public async $getBlocksWithoutCoinbaseAddresses(): Promise<any> {
     try {
       const [blocks] = await DB.query(`
-        SELECT height, hash, coinbase_addresses
+        SELECT height, hash, coinbase_addresses, header, pool_id
         FROM blocks
         WHERE coinbase_addresses IS NULL AND
           coinbase_address IS NOT NULL
@@ -1098,21 +1277,28 @@ class BlocksRepository {
   }
 
   /**
-   * Save coinbase addresses
+   * Atomically save an indexed coinbase recipient set, its positive output
+   * evidence, and the pool assignment derived from those exact payouts.
+   * Keeping these fields in one update avoids marking a legacy row indexed
+   * before its newly available pool evidence has been persisted.
    *
-   * @param id
-   * @param addresses
    * @asyncSafe
    */
-  public async $saveCoinbaseAddresses(id: string, addresses: string[]): Promise<void> {
+  public async $saveCoinbaseAddressesAndPool(
+    id: string,
+    addresses: string[],
+    payouts: PoolMatchCoinbaseOutput[],
+    poolId: number
+  ): Promise<void> {
     try {
       await DB.query(`
-        UPDATE blocks SET coinbase_addresses = ?
+        UPDATE blocks
+        SET coinbase_addresses = ?, coinbase_payouts = ?, pool_id = ?, definition_hash = ?
         WHERE hash = ?`,
-        [JSON.stringify(addresses), id]
+        [JSON.stringify(addresses), JSON.stringify(payouts), poolId, poolsUpdater.currentSha, id]
       );
     } catch (e) {
-      logger.err(`Cannot update block coinbase addresses. Reason: ` + (e instanceof Error ? e.message : e));
+      logger.err(`Cannot save block coinbase addresses and pool. Reason: ` + (e instanceof Error ? e.message : e));
       throw e;
     }
   }
@@ -1133,6 +1319,21 @@ class BlocksRepository {
       );
     } catch (e) {
       logger.err(`Cannot update block pool. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
+    }
+  }
+
+  /**
+   * Stamp all blocks with the given pool definition hash
+   *
+   * @param definitionHash
+   * @asyncUnsafe
+   */
+  public async $updateDefinitionHash(definitionHash: string | null): Promise<void> {
+    try {
+      await DB.query(`UPDATE blocks SET definition_hash = ?`, [definitionHash]);
+    } catch (e) {
+      logger.err(`Cannot update blocks definition hash. Reason: ` + (e instanceof Error ? e.message : e));
       throw e;
     }
   }
@@ -1246,6 +1447,7 @@ class BlocksRepository {
     blk.mediantime = dbBlk.mediantime;
     blk.indexVersion = dbBlk.index_version;
     // BlockExtension
+    extras.cadence = decodeQbitBlockVersion(dbBlk.version, config.MEMPOOL.NETWORK);
     extras.totalFees = dbBlk.totalFees;
     extras.medianFee = dbBlk.medianFee;
     extras.feeRange = JSON.parse(dbBlk.feeRange);
@@ -1273,10 +1475,11 @@ class BlocksRepository {
     extras.segwitTotalSize = dbBlk.segwitTotalSize;
     extras.segwitTotalWeight = dbBlk.segwitTotalWeight;
     extras.header = dbBlk.header,
+    extras.auxpow = summarizeAuxPowHeader(dbBlk.header);
     extras.utxoSetChange = dbBlk.utxoSetChange;
     extras.utxoSetSize = dbBlk.utxoSetSize;
     extras.totalInputAmt = dbBlk.totalInputAmt;
-    extras.virtualSize = dbBlk.weight / 4.0;
+    extras.virtualSize = weightToFractionalVsize(dbBlk.weight);
 
     extras.firstSeen = null;
     if (config.CORE_RPC.DEBUG_LOG_PATH) {
@@ -1347,6 +1550,10 @@ class BlocksRepository {
       // return early, run the next migration on the next indexing loop
       return blocksMigrated;
     }
+    blocksMigrated = await this.$migrateBlocksToV2();
+    if (blocksMigrated > 0) {
+      return blocksMigrated;
+    }
     return 0;
   }
 
@@ -1376,7 +1583,7 @@ class BlocksRepository {
         const transactions = await blocks.$getStrippedBlockTransactions(row.hash);
         // recalculate effective fee statistics using latest methodology
         const feeStats = Common.calcEffectiveFeeStatistics(transactions.map(tx => ({
-          weight: tx.vsize * 4,
+          weight: vsizeToWeight(tx.vsize),
           effectiveFeePerVsize: tx.rate,
           txid: tx.txid,
           acceleration: tx.acc,
@@ -1403,6 +1610,98 @@ class BlocksRepository {
       logger.notice(`Migrating blocks to version 1 completed: migrated ${blocksMigrated} blocks`);
     } catch (e) {
       logger.err(`Migrating blocks to version 1 failed. Trying again later. Reason: ${(e instanceof Error ? e.message : e)}`);
+      throw e;
+    }
+    return blocksMigrated;
+  }
+
+  // migration to repair AuxPoW headers truncated by the varchar(160) schema
+  /** @asyncSafe */
+  private async $migrateBlocksToV2(): Promise<number> {
+    let blocksMigrated = 0;
+    try {
+      // AuxPoW-lane rows indexed before blocks.header was widened
+      // (database migration 109) only hold the first 80 bytes of the
+      // serialized header, but the full payload is required for parent-chain
+      // pool attribution and extras.auxpow. Repair rows in place — at any
+      // depth, stale rows included — since the node still serves headers for
+      // non-canonical blocks. The AuxPoW-lane shape matches migration 108:
+      // canonical top bits plus the AuxPoW flag.
+      const [rows]: any[] = await DB.query(`
+        SELECT height, hash, coinbase_raw, coinbase_addresses, coinbase_payouts
+        FROM blocks
+        WHERE index_version < 2
+          AND (version & 3758096384) = 536870912 AND (version & 256) != 0
+          AND LENGTH(header) <= 160
+        ORDER BY height DESC
+      `);
+      const blocksToMigrate = rows.length;
+      if (blocksToMigrate === 0) {
+        return 0;
+      }
+
+      const pools = await PoolsRepository.$getPools();
+      const unknownPool = await PoolsRepository.$getUnknownPool();
+
+      let timer = Date.now() / 1000;
+      const startedAt = Date.now() / 1000;
+
+      for (const row of rows) {
+        let header: string;
+        try {
+          header = await bitcoinClient.getBlockHeader(row.hash, false);
+        } catch (e) {
+          // the node cannot serve this header right now; the row stays below
+          // index_version 2 so the next indexer run retries it
+          logger.warn(`Cannot fetch header of block ${row.hash} to repair its truncated AuxPoW payload, will retry. Reason: ${(e instanceof Error ? e.message : e)}`);
+          continue;
+        }
+
+        if (header.length <= 160) {
+          // the node served only a bare header for this AuxPoW block; leave
+          // the row below index_version 2 so a later run can repair it
+          logger.warn(`Fetched header of AuxPoW block ${row.hash} still misses its AuxPoW payload, will retry.`);
+          continue;
+        }
+
+        const parentCoinbase = parseAuxPowParentCoinbase(header);
+        if (!parentCoinbase) {
+          // a valid serialized AuxPoW header has a parseable parent proof;
+          // keep the truncated row pending rather than permanently marking a
+          // malformed or unsupported replacement as repaired
+          logger.warn(`Fetched header of AuxPoW block ${row.hash} has an invalid AuxPoW payload, will retry.`);
+          continue;
+        }
+
+        // re-run pool attribution: the parent-chain coinbase recovered from
+        // the repaired header may identify a pool the truncated one could not
+        const addresses = row.coinbase_addresses ? JSON.parse(row.coinbase_addresses) : [];
+        const payouts: PoolMatchCoinbaseOutput[] | undefined =
+          row.coinbase_payouts === null || row.coinbase_payouts === undefined
+          ? undefined
+          : JSON.parse(row.coinbase_payouts);
+        const pool = matchBlockMiner(row.coinbase_raw, addresses, pools, parentCoinbase, payouts) ?? unknownPool;
+
+        await DB.query(`
+          UPDATE blocks SET index_version = 2, header = ?, pool_id = ?
+          WHERE hash = ?`,
+          [header, pool.id, row.hash]
+        );
+
+        const elapsedSeconds = (Date.now() / 1000) - timer;
+        if (elapsedSeconds > 5) {
+          const runningFor = (Date.now() / 1000) - startedAt;
+          const blockPerSeconds = blocksMigrated / elapsedSeconds;
+          const progress = Math.round(blocksMigrated / blocksToMigrate * 10000) / 100;
+          logger.debug(`Repairing truncated AuxPoW headers | ~${blockPerSeconds.toFixed(2)} blocks/sec | height: ${row.height} | total: ${blocksMigrated}/${blocksToMigrate} (${progress}%) | elapsed: ${runningFor.toFixed(2)} seconds`);
+          timer = Date.now() / 1000;
+        }
+
+        blocksMigrated++;
+      }
+      logger.notice(`Repairing truncated AuxPoW headers completed: repaired ${blocksMigrated} of ${blocksToMigrate} blocks`);
+    } catch (e) {
+      logger.err(`Repairing truncated AuxPoW headers failed. Trying again later. Reason: ${(e instanceof Error ? e.message : e)}`);
       throw e;
     }
     return blocksMigrated;

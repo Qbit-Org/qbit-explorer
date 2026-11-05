@@ -144,7 +144,7 @@
       </h2>
     </div>
 
-    <app-transactions-list [transactions]="transactions" [showConfirmations]="true" [addresses]="[address.address]" [acceleratedTxids]="acceleratedTxids" (loadMore)="loadMore()"></app-transactions-list>
+    <app-transactions-list [transactions]="transactions" [showConfirmations]="true" [addresses]="[address.address]" (loadMore)="loadMore()"></app-transactions-list>
 
     <div class="text-center">
       <ng-template [ngIf]="isLoadingTransactions">
@@ -246,13 +246,7 @@
         <ng-container i18n="Electrum server limit exceeded error">
           <br>
           <i>There are too many transactions on this address, more than your backend can handle. See more on <a href="/docs/faq#address-lookup-issues">setting up a stronger backend</a>.</i>
-          <br><br>
-          Consider viewing this address on the official Mempool website instead:
         </ng-container>
-          <br>
-          <a href="https://mempool.space/address/{{ addressString }}" target="_blank">https://mempool.space/address/{{ addressString }}</a>
-          <br>
-          <a href="http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/address/{{ addressString }}" target="_blank">http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/address/{{ addressString }}</a>
         }
       </div>
   </ng-template>
@@ -314,7 +308,7 @@
     <button *ngIf="showTaprootPsbtButton()" type="button" class="btn btn-sm taproot-psbt-btn" (click)="taprootPsbtExpanded = !taprootPsbtExpanded" i18n-ngbTooltip="address.taproot-psbt-add-unpublished-spend-paths" ngbTooltip="Add unpublished spending paths">
       <fa-icon [icon]="['fas', 'code-fork']" [fixedWidth]="true"></fa-icon>
     </button>
-    <app-address-labels *ngIf="!addressTypeInfo?.tapscript" [channel]="exampleChannel" [address]="addressTypeInfo" class="ml-1"></app-address-labels>
+    <app-address-labels *ngIf="!addressTypeInfo?.tapscript" [address]="addressTypeInfo" class="ml-1"></app-address-labels>
   </td>
 </ng-template>
 

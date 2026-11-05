@@ -1,13 +1,13 @@
 import { GbtGenerator, GbtResult, ThreadTransaction as RustThreadTransaction, ThreadAcceleration as RustThreadAcceleration } from 'rust-gbt';
 import logger from '../logger';
-import { MempoolBlock, MempoolTransactionExtended, MempoolBlockWithTransactions, MempoolBlockDelta, Ancestor, CompactThreadTransaction, EffectiveFeeStats, TransactionClassified, TransactionCompressed, MempoolDeltaChange, GbtCandidates, PoolTag } from '../mempool.interfaces';
+import { Acceleration, MempoolBlock, MempoolTransactionExtended, MempoolBlockWithTransactions, MempoolBlockDelta, Ancestor, CompactThreadTransaction, EffectiveFeeStats, TransactionClassified, TransactionCompressed, MempoolDeltaChange, GbtCandidates, PoolTag } from '../mempool.interfaces';
 import { Common, OnlineFeeStatsCalculator } from './common';
 import config from '../config';
 import { Worker } from 'worker_threads';
 import path from 'path';
 import mempool from './mempool';
-import { Acceleration } from './services/acceleration';
 import PoolsRepository from '../repositories/PoolsRepository';
+import { QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT, vsizeToWeight, weightToFractionalVsize } from '../utils/weight-units';
 
 const MAX_UINT32 = Math.pow(2, 32) - 1;
 
@@ -47,10 +47,6 @@ class MempoolBlocks {
 
   /** @asyncUnsafe */
   public async updatePools$(): Promise<void> {
-    if (['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) === false) {
-      this.pools = {};
-      return;
-    }
     const allPools = await PoolsRepository.$getPools();
     this.pools = {};
     for (const pool of allPools) {
@@ -124,7 +120,7 @@ class MempoolBlocks {
         const stripped = {
           uid: entry.uid,
           fee: entry.fee + (useAccelerations && (!accelerationPool || accelerations[entry.txid]?.pools?.includes(accelerationPool)) ? (accelerations[entry.txid]?.feeDelta || 0) : 0),
-          weight: (entry.adjustedVsize * 4),
+          weight: vsizeToWeight(entry.adjustedVsize),
           sigops: entry.sigops,
           feePerVsize: entry.adjustedFeePerVsize || entry.feePerVsize,
           effectiveFeePerVsize: entry.effectiveFeePerVsize || entry.adjustedFeePerVsize || entry.feePerVsize,
@@ -198,7 +194,7 @@ class MempoolBlocks {
       return {
         uid: entry.uid || 0,
         fee: entry.fee + (useAccelerations ? (accelerations[entry.txid]?.feeDelta || 0) : 0),
-        weight: (entry.adjustedVsize * 4),
+        weight: vsizeToWeight(entry.adjustedVsize),
         sigops: entry.sigops,
         feePerVsize: entry.adjustedFeePerVsize || entry.feePerVsize,
         effectiveFeePerVsize: entry.effectiveFeePerVsize || entry.adjustedFeePerVsize || entry.feePerVsize,
@@ -410,7 +406,7 @@ class MempoolBlocks {
               const relative = {
                 txid: txid,
                 fee: ancestor.fee,
-                weight: (ancestor.adjustedVsize * 4),
+                weight: vsizeToWeight(ancestor.adjustedVsize),
               };
               if (matched) {
                 descendants.push(relative);
@@ -445,7 +441,7 @@ class MempoolBlocks {
 
     const isAcceleratedBy : { [txid: string]: number[] | false } = {};
 
-    const sizeLimit = (config.MEMPOOL.BLOCK_WEIGHT_UNITS / 4) * 1.2;
+    const sizeLimit = weightToFractionalVsize(config.MEMPOOL.BLOCK_WEIGHT_UNITS) * 1.2;
     // update this thread's mempool with the results
     let mempoolTx: MempoolTransactionExtended;
     let acceleration: Acceleration;
@@ -554,7 +550,7 @@ class MempoolBlocks {
     }
     return {
       blockSize: totalSize,
-      blockVSize: (totalWeight / 4), // fractional vsize to avoid rounding errors
+      blockVSize: weightToFractionalVsize(totalWeight),
       nTx: transactionIds.length,
       totalFees: totalFees,
       medianFee: feeStats.medianFee, // Common.percentile(transactions.map((tx) => tx.effectiveFeePerVsize), config.MEMPOOL.RECOMMENDED_FEE_PERCENTILE),
@@ -693,6 +689,7 @@ class MempoolBlocks {
   // estimates and saves positions of accelerations in mining partner mempools
   private updateAccelerationPositions(mempoolCache: { [txid: string]: MempoolTransactionExtended }, accelerations: { [txid: string]: Acceleration }, mempoolBlocks: MempoolBlockWithTransactions[]): void {
     const accelerationPositions: { [txid: string]: { poolId: number, pool: string, block: number, vsize: number }[] } = {};
+    const poolBlockVSizeLimit = weightToFractionalVsize(config.MEMPOOL.BLOCK_WEIGHT_UNITS - QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT);
     // keep track of simulated mempool blocks for each active pool
     const pools: {
       [pool: string]: { name: string, block: number, vsize: number, accelerations: string[], complete: boolean };
@@ -701,7 +698,7 @@ class MempoolBlocks {
     const accQueue: { acceleration: Acceleration, rate: number, vsize: number }[] = Object.values(accelerations).filter(acc => acc.txid in mempoolCache).map(acc => {
       let vsize = mempoolCache[acc.txid].vsize;
       for (const ancestor of mempoolCache[acc.txid].ancestors || []) {
-        vsize += (ancestor.weight / 4);
+        vsize += weightToFractionalVsize(ancestor.weight);
       }
       return {
         acceleration: acc,
@@ -746,7 +743,7 @@ class MempoolBlocks {
         const nextTx = mempoolBlocks[block].transactions[index];
         if (next.rate >= (nextTx.rate || (nextTx.fee / nextTx.vsize))) {
           for (const pool of next.acceleration.pools) {
-            if (pools[pool].vsize + next.vsize <= 999_000) {
+            if (pools[pool].vsize + next.vsize <= poolBlockVSizeLimit) {
               pools[pool].vsize += next.vsize;
             } else {
               pools[pool].block++;
@@ -791,7 +788,7 @@ class MempoolBlocks {
           if (accelerationPositions[nextTx.txid] == null) {
             // insert into all pools' blocks
             for (const pool of Object.keys(pools)) {
-              if (pools[pool].vsize + nextTx.vsize <= 999_000) {
+              if (pools[pool].vsize + nextTx.vsize <= poolBlockVSizeLimit) {
                 pools[pool].vsize += nextTx.vsize;
               } else {
                 pools[pool].block++;

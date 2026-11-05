@@ -1,6 +1,7 @@
 import { Component, OnInit, Input, ChangeDetectionStrategy } from '@angular/core';
 import { CpfpInfo } from '@interfaces/node-api.interface';
 import { Transaction } from '@interfaces/electrs.interface';
+import { feeRatePerVsize } from '@app/shared/weight-units';
 
 @Component({
   selector: 'app-cpfp-info',
@@ -18,7 +19,7 @@ export class CpfpInfoComponent implements OnInit {
   ngOnInit(): void {}
 
   roundToOneDecimal(cpfpTx: any): number {
-    return +(cpfpTx.fee / (cpfpTx.weight / 4)).toFixed(1);
+    return +feeRatePerVsize(cpfpTx.fee, cpfpTx.weight).toFixed(1);
   }
 
   trackByIndex(index: number): number {

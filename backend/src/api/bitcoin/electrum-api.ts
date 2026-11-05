@@ -77,7 +77,7 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
   }
 
   /** @asyncUnsafe */
-  async $getAddressTransactions(address: string, lastSeenTxId: string): Promise<IEsploraApi.Transaction[]> {
+  async $getAddressTransactions(address: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]> {
     const addressInfo = await this.bitcoindClient.validateAddress(address);
     if (!addressInfo || !addressInfo.isvalid) {
       throw new Error('Invalid Bitcoin address');

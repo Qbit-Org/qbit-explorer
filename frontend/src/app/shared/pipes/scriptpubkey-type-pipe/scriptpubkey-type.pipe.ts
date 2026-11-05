@@ -1,4 +1,7 @@
 import { Pipe, PipeTransform } from '@angular/core';
+import { formatScriptPubKeyType, getReservedWitnessVersion } from '@app/shared/scriptpubkey-type.utils';
+
+export { formatScriptPubKeyType, getReservedWitnessVersion };
 
 @Pipe({
   name: 'scriptpubkeyType',
@@ -6,17 +9,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 })
 export class ScriptpubkeyTypePipe implements PipeTransform {
 
-  transform(value: string): string {
-    switch (value) {
-      case 'fee':
-        return $localize`Transaction fee`;
-      case 'p2pk':
-        return 'P2PK';
-      case 'op_return':
-        return 'OP_RETURN';
-      default:
-        return value.toUpperCase();
-    }
+  transform(value: string | null | undefined, scriptpubkey?: string | null): string {
+    return formatScriptPubKeyType(value, scriptpubkey);
   }
 
 }

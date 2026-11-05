@@ -38,7 +38,7 @@ interface FailoverHost {
 class FailoverRouter {
   activeHost: FailoverHost;
   fallbackHost: FailoverHost;
-  maxSlippage: number = config.ESPLORA.MAX_BEHIND_TIP ?? (Common.isLiquid() ? 8 : 2);
+  maxSlippage: number = config.ESPLORA.MAX_BEHIND_TIP ?? 2;
   maxHeight: number = 0;
   hosts: FailoverHost[];
   multihost: boolean;
@@ -258,7 +258,6 @@ class FailoverRouter {
       const response = await this.pollConnection.get<string>(
         url, {
           timeout: config.ESPLORA.FALLBACK_TIMEOUT,
-          headers: Common.isLiquid() ? { 'Host': 'liquid.network' } : undefined
         }
       );
       const match = response.data.match(/GIT_COMMIT_HASH\s*=\s*['"](.*?)['"]/);
@@ -282,9 +281,6 @@ class FailoverRouter {
           port: 443,
           path: '/en-US/resources/config.js',
           method: 'GET',
-          headers: {
-            'Host': Common.isLiquid() ? 'liquid.network' : 'mempool.space'
-          },
           timeout: config.ESPLORA.FALLBACK_TIMEOUT,
         }, (res) => {
           let data = '';
@@ -317,7 +313,6 @@ class FailoverRouter {
       const response = await this.pollConnection.get<any>(
         url, {
           timeout: config.ESPLORA.FALLBACK_TIMEOUT,
-          headers: Common.isLiquid() ? { 'Host': 'liquid.network' } : undefined
         }
       );
       if (response.data?.gitCommit) {
@@ -340,7 +335,6 @@ class FailoverRouter {
       const response = await this.pollConnection.get<any>(
         url, {
           timeout: config.ESPLORA.FALLBACK_TIMEOUT,
-          headers: Common.isLiquid() ? { 'Host': 'liquid.network' } : undefined
         }
       );
       if (response.data?.gitHash) {
@@ -432,7 +426,8 @@ class ElectrsApi implements AbstractBitcoinApi {
   }
 
   $getTransactionHex(txId: string): Promise<string> {
-    return this.failoverRouter.$get<string>('/tx/' + txId + '/hex');
+    // 'text' skips axios' JSON transform, which would turn an all-digit hex into a number
+    return this.failoverRouter.$get<string>('/tx/' + txId + '/hex', 'text');
   }
 
   $getTransactionMerkleProof(txId: string): Promise<IEsploraApi.MerkleProof> {
@@ -494,8 +489,9 @@ class ElectrsApi implements AbstractBitcoinApi {
   }
 
   $getRawBlock(hash: string): Promise<Buffer> {
-    return this.failoverRouter.$get<any>('/block/' + hash + '/raw', 'arraybuffer')
-      .then((response) => { return Buffer.from(response.data); });
+    // $get already resolves to the response body
+    return this.failoverRouter.$get<ArrayBuffer>('/block/' + hash + '/raw', 'arraybuffer')
+      .then((data) => Buffer.from(data));
   }
 
   $getAddress(address: string): Promise<IEsploraApi.Address> {
@@ -503,7 +499,7 @@ class ElectrsApi implements AbstractBitcoinApi {
   }
 
   $getAddressTransactions(address: string, txId?: string): Promise<IEsploraApi.Transaction[]> {
-    throw new Error('Method getAddressTransactions not implemented.');
+    return this.failoverRouter.$get<IEsploraApi.Transaction[]>('/address/' + address + '/txs', 'json', txId ? { after_txid: txId } : null);
   }
 
   $getAddressUtxos(address: string): Promise<IEsploraApi.UTXO[]> {
@@ -547,7 +543,7 @@ class ElectrsApi implements AbstractBitcoinApi {
   }
 
   async $getBatchedOutspends(txids: string[]): Promise<IEsploraApi.Outspend[][]> {
-    throw new Error('Method not implemented.');
+    return this.failoverRouter.$get<IEsploraApi.Outspend[][]>('/txs/outspends', 'json', { txids: txids.join(',') });
   }
 
   async $getBatchedOutspendsInternal(txids: string[]): Promise<IEsploraApi.Outspend[][]> {
@@ -564,8 +560,8 @@ class ElectrsApi implements AbstractBitcoinApi {
     return this.failoverRouter.$get<IEsploraApi.Transaction>('/tx/' + txid);
   }
 
-  async $getAddressTransactionSummary(address: string): Promise<IEsploraApi.AddressTxSummary[]> {
-    return this.failoverRouter.$get<IEsploraApi.AddressTxSummary[]>('/address/' + address + '/txs/summary');
+  async $getAddressTransactionSummary(address: string, txId?: string): Promise<IEsploraApi.AddressTxSummary[]> {
+    return this.failoverRouter.$get<IEsploraApi.AddressTxSummary[]>('/address/' + address + '/txs/summary' + (txId ? '/' + txId : ''));
   }
 
   public startHealthChecks(): void {

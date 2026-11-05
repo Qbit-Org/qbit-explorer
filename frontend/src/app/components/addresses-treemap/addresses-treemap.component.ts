@@ -3,7 +3,6 @@ import { Router } from '@angular/router';
 import { EChartsOption, TreemapSeriesOption } from '@app/graphs/echarts';
 import { lerpColor } from '@app/shared/graphs.utils';
 import { AmountShortenerPipe } from '@app/shared/pipes/amount-shortener.pipe';
-import { LightningApiService } from '@app/lightning/lightning-api.service';
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
 import { StateService } from '@app/services/state.service';
 import { Address } from '@interfaces/electrs.interface';
@@ -28,7 +27,6 @@ export class AddressesTreemap implements OnChanges {
 
   constructor(
     @Inject(LOCALE_ID) public locale: string,
-    private lightningApiService: LightningApiService,
     private amountShortenerPipe: AmountShortenerPipe,
     private zone: NgZone,
     private router: Router,
@@ -127,9 +125,9 @@ export class AddressesTreemap implements OnChanges {
 
   formatValue(sats: number): string {
     if (sats > 100000000) {
-      return formatNumber(sats / 100000000, this.locale, '1.2-2') + ' BTC';
+      return formatNumber(sats / 100000000, this.locale, '1.2-2') + ' QBT';
     } else {
-     return this.amountShortenerPipe.transform(sats, 2) + ' sats';
+     return this.amountShortenerPipe.transform(sats, 2) + ' bits';
     }
   }
 

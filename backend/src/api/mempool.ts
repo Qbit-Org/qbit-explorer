@@ -1,6 +1,6 @@
 import config from '../config';
 import bitcoinApi from './bitcoin/bitcoin-api-factory';
-import { MempoolTransactionExtended, TransactionExtended, VbytesPerSecond, GbtCandidates } from '../mempool.interfaces';
+import { Acceleration, MempoolTransactionExtended, TransactionExtended, VbytesPerSecond, GbtCandidates } from '../mempool.interfaces';
 import logger from '../logger';
 import { Common } from './common';
 import transactionUtils from './transaction-utils';
@@ -9,8 +9,6 @@ import loadingIndicators from './loading-indicators';
 import bitcoinClient from './bitcoin/bitcoin-client';
 import bitcoinSecondClient from './bitcoin/bitcoin-second-client';
 import rbfCache from './rbf-cache';
-import { Acceleration } from './services/acceleration';
-import accelerationApi from './services/acceleration';
 import redisCache from './redis-cache';
 import blocks from './blocks';
 
@@ -49,8 +47,6 @@ class Mempool {
 
   constructor() {
     // Initialize mempoolInfo here to avoid circular dependency issues
-    // Use config directly instead of Common.isLiquid() to break circular dependency
-    const isLiquid = config.MEMPOOL.NETWORK === 'liquid' || config.MEMPOOL.NETWORK === 'liquidtestnet';
     this.mempoolInfo = {
       loaded: false,
       size: 0,
@@ -58,8 +54,8 @@ class Mempool {
       usage: 0,
       total_fee: 0,
       maxmempool: 300000000,
-      mempoolminfee: isLiquid ? 0.00000100 : 0.00001000,
-      minrelaytxfee: isLiquid ? 0.00000100 : 0.00001000
+      mempoolminfee: 0.00001000,
+      minrelaytxfee: 0.00001000
     };
     this.txPerSecondInterval = setInterval(this.updateTxPerSecond.bind(this), 1000);
   }
@@ -429,13 +425,43 @@ class Mempool {
 
   public updateAccelerations(newAccelerationMap: Record<string, Acceleration>): string[] {
     try {
-      const accelerationDelta = accelerationApi.getAccelerationDelta(this.accelerations, newAccelerationMap);
+      const accelerationDelta = this.getAccelerationDelta(this.accelerations, newAccelerationMap);
       this.accelerations = newAccelerationMap;
       return accelerationDelta;
     } catch (e: any) {
       logger.debug(`Failed to update accelerations: ` + (e instanceof Error ? e.message : e));
       return [];
     }
+  }
+
+  private getAccelerationDelta(oldAccelerationMap: Record<string, Acceleration>, newAccelerationMap: Record<string, Acceleration>): string[] {
+    const changed: string[] = [];
+
+    for (const acceleration of Object.values(newAccelerationMap)) {
+      if (!this.mempoolCache[acceleration.txid]) {
+        continue;
+      }
+      const previous = oldAccelerationMap[acceleration.txid];
+      if (previous == null || previous.feeDelta !== acceleration.feeDelta || this.accelerationPoolsChanged(previous.pools, acceleration.pools)) {
+        changed.push(acceleration.txid);
+      }
+    }
+
+    for (const oldTxid of Object.keys(oldAccelerationMap)) {
+      if (!newAccelerationMap[oldTxid]) {
+        changed.push(oldTxid);
+      }
+    }
+
+    return changed;
+  }
+
+  private accelerationPoolsChanged(oldPools: number[] = [], newPools: number[] = []): boolean {
+    if (oldPools.length !== newPools.length) {
+      return true;
+    }
+    const pools = new Set(oldPools);
+    return newPools.some(pool => !pools.has(pool));
   }
 
   public getNextCandidates(minFeeTransactions: string[], blockHeight: number, deletedTransactions: MempoolTransactionExtended[]): GbtCandidates | undefined {

@@ -18,6 +18,7 @@ import { SeoService } from '@app/services/seo.service';
 import { seoDescriptionNetwork } from '@app/shared/common.utils';
 import { CpfpInfo } from '@interfaces/node-api.interface';
 import { LiquidUnblinding } from '@components/transaction/liquid-ublinding';
+import { feeRatePerVsize } from '@app/shared/weight-units';
 
 @Component({
   selector: 'app-transaction-preview',
@@ -91,7 +92,7 @@ export class TransactionPreviewComponent implements OnInit, OnDestroy {
           this.seoService.setTitle(
             $localize`:@@bisq.transaction.browser-title:Transaction: ${this.txId}:INTERPOLATION:`
           );
-          const network = this.stateService.network === 'liquid' || this.stateService.network === 'liquidtestnet' ? 'Liquid' : 'Bitcoin';
+          const network = this.stateService.network === 'liquid' || this.stateService.network === 'liquidtestnet' ? 'Liquid' : 'qbit';
           const seoDescription = seoDescriptionNetwork(this.stateService.network);
           this.seoService.setDescription($localize`:@@meta.description.bitcoin.transaction:Get real-time status, addresses, fees, script info, and more for ${network}${seoDescription} transaction with txid ${this.txId}.`);
           this.resetTransaction();
@@ -149,7 +150,7 @@ export class TransactionPreviewComponent implements OnInit, OnDestroy {
           if (tx.fee === undefined) {
             this.tx.fee = 0;
           }
-          this.tx.feePerVsize = tx.fee / (tx.weight / 4);
+          this.tx.feePerVsize = feeRatePerVsize(tx.fee, tx.weight);
           this.isLoadingTx = false;
           this.error = undefined;
           this.totalValue = this.tx.vout.reduce((acc, v) => v.value + acc, 0);

@@ -13,6 +13,8 @@ import { selectPowerOfTen } from '@app/bitcoin.utils';
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
 import { StateService } from '@app/services/state.service';
 import { ActivatedRoute, Router } from '@angular/router';
+import { weightToFractionalVsize } from '@app/shared/weight-units';
+import { expectedBlocksForTimespan as getExpectedBlocksForTimespan } from '@app/shared/block-target.utils';
 
 @Component({
   selector: 'app-block-fee-rates-graph',
@@ -71,7 +73,7 @@ export class BlockFeeRatesGraphComponent implements OnInit {
       this.miningWindowPreference = '1m';
     } else {
       this.seoService.setTitle($localize`:@@ed8e33059967f554ff06b4f5b6049c465b92d9b3:Block Fee Rates`);
-      this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.block-fee-rates:See Bitcoin feerates visualized over time, including minimum and maximum feerates per block along with feerates at various percentiles.`);
+      this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.block-fee-rates:See qbit feerates visualized over time, including minimum and maximum feerates per block along with feerates at various percentiles.`);
       this.miningWindowPreference = this.miningService.getDefaultTimespan('24h');
     }
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
@@ -208,6 +210,10 @@ export class BlockFeeRatesGraphComponent implements OnInit {
       );
   }
 
+  expectedBlocksForTimespan(timespan: string): number {
+    return getExpectedBlocksForTimespan(timespan, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
+  }
+
   prepareChartOptions(data, weightMode) {
     this.chartOptions = {
       color: this.widget ? ['#6b6b6b', new echarts.graphic.LinearGradient(0, 0, 0, 0.65, [
@@ -246,9 +252,9 @@ export class BlockFeeRatesGraphComponent implements OnInit {
 
           for (const rate of data.reverse()) {
             if (weightMode) {
-              tooltip += `${rate.marker} ${rate.seriesName}: ${(rate.data[1] / 4).toFixed(2)} sats/WU<br>`;
+              tooltip += `${rate.marker} ${rate.seriesName}: ${weightToFractionalVsize(rate.data[1]).toFixed(2)} bits/WU<br>`;
             } else {
-              tooltip += `${rate.marker} ${rate.seriesName}: ${rate.data[1].toFixed(2)} sats/vByte<br>`;
+              tooltip += `${rate.marker} ${rate.seriesName}: ${rate.data[1].toFixed(2)} bits/vByte<br>`;
             }
           }
 
@@ -300,11 +306,11 @@ export class BlockFeeRatesGraphComponent implements OnInit {
           color: 'rgb(110, 112, 121)',
           formatter: (val) => {
             if (weightMode) {
-              val /= 4;
+              val = weightToFractionalVsize(val);
             }
             const selectedPowerOfTen: any = selectPowerOfTen(val);
             const newVal = Math.round(val / selectedPowerOfTen.divider);
-            return `${newVal}${selectedPowerOfTen.unit} s/${weightMode ? 'WU': 'vB'}`;
+            return `${newVal}${selectedPowerOfTen.unit} bits/${weightMode ? 'WU': 'vB'}`;
           },
         },
         splitLine: {

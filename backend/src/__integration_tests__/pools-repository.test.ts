@@ -47,6 +47,7 @@ describe('PoolsRepository Integration Tests', () => {
     expect(pool).toBeDefined();
     expect(pool!.name).toBe('AntPool');
     expect(pool!.slug).toBe('antpool');
+    expect(pool!.addressMatchMode).toBe('any');
   });
 
   test('should get all pools', async () => {
@@ -79,9 +80,43 @@ describe('PoolsRepository Integration Tests', () => {
     const pool = await PoolsRepository.$getPool('multi-address-pool', false);
 
     expect(pool).toBeDefined();
-    const poolAddresses = JSON.parse(pool!.addresses);
+    expect(typeof pool!.addresses).toBe('string');
+    const poolAddresses = JSON.parse(pool!.addresses as string);
     expect(poolAddresses).toHaveLength(3);
     expect(poolAddresses).toContain('bc1qtest1');
+  });
+
+  test('should persist and update a full-reward address match mode', async () => {
+    await PoolsRepository.$insertNewMiningPool({
+      id: 1200,
+      name: 'Guarded Pool',
+      link: 'https://pool.example',
+      addresses: ['qb1qguarded'],
+      regexes: ['/guarded/'],
+      addressMatchMode: 'full_reward',
+    }, 'guarded-pool');
+
+    let pool = await PoolsRepository.$getPoolByUniqueId(1200);
+    expect(pool).toEqual(expect.objectContaining({
+      addresses: ['qb1qguarded'],
+      addressMatchMode: 'full_reward',
+    }));
+
+    await PoolsRepository.$updateMiningPoolTags(
+      pool!.id,
+      ['qb1qupdated'],
+      ['/updated/'],
+      [],
+      [],
+      'any'
+    );
+
+    pool = await PoolsRepository.$getPoolByUniqueId(1200);
+    expect(pool).toEqual(expect.objectContaining({
+      addresses: ['qb1qupdated'],
+      regexes: ['/updated/'],
+      addressMatchMode: 'any',
+    }));
   });
 
   test('should handle pool with regexes', async () => {
@@ -95,7 +130,8 @@ describe('PoolsRepository Integration Tests', () => {
     const pool = await PoolsRepository.$getPool('regex-pool', false);
 
     expect(pool).toBeDefined();
-    const poolRegexes = JSON.parse(pool!.regexes);
+    expect(typeof pool!.regexes).toBe('string');
+    const poolRegexes = JSON.parse(pool!.regexes as string);
     expect(poolRegexes).toHaveLength(2);
     expect(poolRegexes[0]).toBe('/Pool Name/');
   });
@@ -119,4 +155,3 @@ describe('PoolsRepository Integration Tests', () => {
     expect(pool!.name).toBe('Updated Pool Name');
   });
 });
-

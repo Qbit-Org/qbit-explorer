@@ -102,6 +102,11 @@ tr, td, th {
   width: 15%;
 }
 
+.lane {
+  width: 12%;
+  white-space: nowrap;
+}
+
 .timestamp {
   width: 10%;
   @media (max-width: 1100px) {

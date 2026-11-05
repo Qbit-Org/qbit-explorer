@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Inject, Input, LOCALE_ID, OnInit, HostBinding } from '@angular/core';
-import { echarts, EChartsOption } from '@app/graphs/echarts';
-import { combineLatest, fromEvent, merge, Observable, of } from 'rxjs';
-import { map, mergeMap, share, startWith, switchMap, tap } from 'rxjs/operators';
+import { EChartsOption, LineSeriesOption } from '@app/graphs/echarts';
+import { combineLatest, fromEvent, merge, Observable } from 'rxjs';
+import { map, share, startWith, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '@app/services/api.service';
 import { SeoService } from '@app/services/seo.service';
 import { formatNumber } from '@angular/common';
@@ -14,6 +14,59 @@ import { ActivatedRoute } from '@angular/router';
 import { StateService } from '@app/services/state.service';
 import { seoDescriptionNetwork } from '@app/shared/common.utils';
 import { AmountShortenerPipe } from '@app/shared/pipes/amount-shortener.pipe';
+import { HistoricalHashrateResponse } from '@interfaces/node-api.interface';
+import { expectedBlocksForTimespan as getExpectedBlocksForTimespan } from '@app/shared/block-target.utils';
+
+type ChartPoint = [number, number];
+type NullableChartPoint = [number, number | null];
+
+interface HashrateChartData {
+  aggregate: ChartPoint[];
+  permissionless?: ChartPoint[];
+  auxpow?: ChartPoint[];
+  difficulty: NullableChartPoint[];        // permissionless lane on a lane-aware backend, legacy otherwise
+  difficultyAuxpow?: NullableChartPoint[];
+}
+
+interface HashrateWidgetStats {
+  blockCount: number;
+  currentDifficulty: number;
+  currentDifficultyPermissionless?: number | null;
+  currentDifficultyAuxpow?: number | null;
+  currentHashrate: number;
+  currentHashratePermissionless?: number;
+  currentHashrateAuxpow?: number;
+  hasLaneHashrateBreakdown: boolean;
+  hasLaneDifficultyBreakdown: boolean;
+}
+
+interface HashrateLegendEntry {
+  name: string;
+  inactiveColor: string;
+  textStyle: {
+    color: string;
+  };
+  icon: string;
+  itemStyle: {
+    color: string;
+  };
+}
+
+const SERIES_ID = {
+  aggregate: 'hashrate-aggregate',
+  permissionless: 'hashrate-permissionless',
+  auxpow: 'hashrate-auxpow',
+  difficulty: 'difficulty',
+  difficultyAuxpow: 'difficulty-auxpow',
+} as const;
+
+const SERIES_COLOR = {
+  aggregate: '#FFB300',
+  permissionless: '#007cfa',
+  auxpow: '#00ddff',
+  difficulty: '#D81B60',
+  difficultyAuxpow: '#9C27B0',
+} as const;
 
 @Component({
   selector: 'app-hashrate-chart',
@@ -47,12 +100,20 @@ export class HashrateChartComponent implements OnInit {
 
   @HostBinding('attr.dir') dir = 'ltr';
 
-  hashrateObservable$: Observable<any>;
+  hashrateObservable$: Observable<HashrateWidgetStats>;
   isLoading = true;
   formatNumber = formatNumber;
   timespan = '';
   chartInstance: any = undefined;
   network = '';
+
+  readonly aggregateLabel = $localize`:mining.aggregate-hashrate|Aggregate network hashrate series:Aggregate`;
+  readonly permissionlessLabel = $localize`:cadence.permissionless|Permissionless mining lane label:Permissionless`;
+  readonly auxpowLabel = $localize`:cadence.auxpow|AuxPoW mining lane label:AuxPoW`;
+  readonly difficultyLabel = $localize`:@@25148835d92465353fc5fe8897c27d5369978e5a:Difficulty`;
+  readonly difficultyPermissionlessLabel = $localize`:mining.difficulty-permissionless|Permissionless lane difficulty series:Difficulty (Permissionless)`;
+  readonly difficultyAuxpowLabel = $localize`:mining.difficulty-auxpow|AuxPoW lane difficulty series:Difficulty (AuxPoW)`;
+  private readonly legacyHashrateLabel = $localize`:@@79a9dc5b1caca3cbeb1733a19515edacc5fc7920:Hashrate`;
 
   constructor(
     @Inject(LOCALE_ID) public locale: string,
@@ -76,7 +137,7 @@ export class HashrateChartComponent implements OnInit {
       this.miningWindowPreference = '1y';
     } else {
       this.seoService.setTitle($localize`:@@3510fc6daa1d975f331e3a717bdf1a34efa06dff:Hashrate & Difficulty`);
-      this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.hashrate:See hashrate and difficulty for the Bitcoin${seoDescriptionNetwork(this.network)} network visualized over time.`);
+      this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.hashrate:See aggregate, permissionless, and AuxPoW hashrate alongside difficulty for the qbit${seoDescriptionNetwork(this.network)} network visualized over time.`);
       this.miningWindowPreference = this.miningService.getDefaultTimespan('3m');
     }
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
@@ -115,88 +176,157 @@ export class HashrateChartComponent implements OnInit {
         ),
         fromEvent(window, 'resize').pipe(startWith(null)),
       ).pipe(
-        map(([response, _]) => response),
-        tap((response: any) => {
+        map(([response]) => response),
+        tap((response) => {
           const data = response.body;
-
-          // always include the latest difficulty
-          if (data.difficulty.length && data.difficulty[data.difficulty.length - 1].difficulty !== data.currentDifficulty) {
-            data.difficulty.push({
-              timestamp: Date.now() / 1000,
-              difficulty: data.currentDifficulty
-            });
+          if (!data) {
+            return;
           }
 
-          // We generate duplicated data point so the tooltip works nicely
-          const diffFixed = [];
-          let diffIndex = 1;
-          let hashIndex = 0;
-          while (hashIndex < data.hashrates.length) {
-            if (diffIndex >= data.difficulty.length) {
-              while (hashIndex < data.hashrates.length) {
-                diffFixed.push({
-                  timestamp: data.hashrates[hashIndex].timestamp,
-                  difficulty: data.difficulty.length > 0 ?  data.difficulty[data.difficulty.length - 1].difficulty : null
-                });
-                ++hashIndex;
-              }
-              diffIndex++;
-              break;
-            }
+          const hasAlignedHistory = Array.isArray(data.hashratesAggregate)
+            && data.hashratesAggregate.length > 0
+            && Array.isArray(data.hashratesPermissionless)
+            && data.hashratesPermissionless.length === data.hashratesAggregate.length
+            && Array.isArray(data.hashratesAuxpow)
+            && data.hashratesAuxpow.length === data.hashratesAggregate.length;
+          // Preserve the complete legacy aggregate line while lane backfill is
+          // still sparse. The aligned aggregate validates the lane subset; at
+          // those timestamps its values match the legacy series.
+          const aggregateHistory = data.hashrates;
 
-            while (hashIndex < data.hashrates.length && diffIndex < data.difficulty.length &&
-              data.hashrates[hashIndex].timestamp <= data.difficulty[diffIndex].time
-            ) {
-              diffFixed.push({
-                timestamp: data.hashrates[hashIndex].timestamp,
-                difficulty: data.difficulty[diffIndex - 1].difficulty
-              });
-              ++hashIndex;
-            }
-            ++diffIndex;
-          }
-
-          while (diffIndex <= data.difficulty.length) {
-            diffFixed.push({
-              timestamp: data.difficulty[diffIndex - 1].time,
-              difficulty: data.difficulty[diffIndex - 1].difficulty
-            });
-            diffIndex++;
-          }
-
-          const maResolution = 15;
-          const hashrateMa = [];
-          for (let i = maResolution - 1; i < data.hashrates.length; ++i) {
-            let avg = 0;
-            for (let y = maResolution - 1; y >= 0; --y) {
-              avg += data.hashrates[i - y].avgHashrate;
-            }
-            avg /= maResolution;
-            hashrateMa.push([data.hashrates[i].timestamp * 1000, avg]);
-          }
+          // the legacy difficulty field carries the permissionless series when
+          // the backend is lane-aware; a lane-blind backend simply gets one
+          // legacy-labelled difficulty line. A lane-aware backend always sends
+          // difficultyAuxpow, so only treat the chart as dual-lane once that
+          // lane actually has data.
+          const hasLaneDifficulty = Array.isArray(data.difficultyAuxpow)
+            && (data.difficultyAuxpow.length > 0 || data.currentDifficultyAuxpow != null);
 
           this.prepareChartOptions({
-            hashrates: data.hashrates.map(val => [val.timestamp * 1000, val.avgHashrate]),
-            difficulty: diffFixed.map(val => [val.timestamp * 1000, val.difficulty]),
-            hashrateMa: hashrateMa,
+            aggregate: this.toChartPoints(aggregateHistory),
+            permissionless: hasAlignedHistory
+              ? this.toChartPoints(data.hashratesPermissionless)
+              : undefined,
+            auxpow: hasAlignedHistory
+              ? this.toChartPoints(data.hashratesAuxpow)
+              : undefined,
+            difficulty: this.alignDifficultyToHashrate(
+              data.difficultyPermissionless ?? data.difficulty,
+              data.currentDifficultyPermissionless ?? data.currentDifficulty,
+              aggregateHistory,
+            ),
+            difficultyAuxpow: hasLaneDifficulty
+              ? this.alignDifficultyToHashrate(data.difficultyAuxpow, data.currentDifficultyAuxpow ?? null, aggregateHistory)
+              : undefined,
           });
           this.isLoading = false;
         }),
         map((response) => {
           const data = response.body;
+          if (!data) {
+            return {
+              blockCount: 0,
+              currentDifficulty: 0,
+              currentHashrate: 0,
+              hasLaneHashrateBreakdown: false,
+              hasLaneDifficultyBreakdown: false,
+            };
+          }
           return {
-            blockCount: parseInt(response.headers.get('x-total-count'), 10),
+            blockCount: parseInt(response.headers.get('x-total-count') || '0', 10),
             currentDifficulty: data.currentDifficulty,
+            currentDifficultyPermissionless: data.currentDifficultyPermissionless,
+            currentDifficultyAuxpow: data.currentDifficultyAuxpow,
             currentHashrate: data.currentHashrate,
+            currentHashratePermissionless: data.currentHashratePermissionless,
+            currentHashrateAuxpow: data.currentHashrateAuxpow,
+            hasLaneHashrateBreakdown: data.currentHashrate > 0
+              && data.currentHashratePermissionless !== undefined
+              && data.currentHashrateAuxpow !== undefined,
+            hasLaneDifficultyBreakdown: data.currentDifficultyPermissionless != null
+              && data.currentDifficultyAuxpow != null,
           };
         }),
         share()
       );
   }
 
-  prepareChartOptions(data) {
+  expectedBlocksForTimespan(timespan: string): number {
+    return getExpectedBlocksForTimespan(timespan, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
+  }
+
+  private toChartPoints(hashrates: HistoricalHashrateResponse['hashrates']): ChartPoint[] {
+    return hashrates.map((hashrate) => [hashrate.timestamp * 1000, hashrate.avgHashrate]);
+  }
+
+  /**
+   * Step one difficulty series along the hashrate timestamps (duplicating
+   * points so the shared axis tooltip always finds a value) and append the
+   * current difficulty as the newest point.
+   */
+  private alignDifficultyToHashrate(
+    difficultyHistory: HistoricalHashrateResponse['difficulty'],
+    currentDifficulty: number | null,
+    hashrateHistory: HistoricalHashrateResponse['hashrates'],
+  ): NullableChartPoint[] {
+    const difficulty = [...difficultyHistory];
+
+    // always include the latest difficulty — also when the lane has no block
+    // inside the selected interval (e.g. idle AuxPoW), so a known current
+    // difficulty still draws instead of an all-null series
+    if (currentDifficulty !== null && (difficulty.length === 0 || difficulty[difficulty.length - 1].difficulty !== currentDifficulty)) {
+      difficulty.push({
+        time: Date.now() / 1000,
+        difficulty: currentDifficulty
+      });
+    }
+
+    // We generate duplicated data point so the tooltip works nicely
+    const diffFixed = [];
+    let diffIndex = 1;
+    let hashIndex = 0;
+    while (hashIndex < hashrateHistory.length) {
+      if (diffIndex >= difficulty.length) {
+        while (hashIndex < hashrateHistory.length) {
+          diffFixed.push({
+            timestamp: hashrateHistory[hashIndex].timestamp,
+            difficulty: difficulty.length > 0 ? difficulty[difficulty.length - 1].difficulty : null
+          });
+          ++hashIndex;
+        }
+        diffIndex++;
+        break;
+      }
+
+      while (hashIndex < hashrateHistory.length && diffIndex < difficulty.length &&
+        hashrateHistory[hashIndex].timestamp <= difficulty[diffIndex].time
+      ) {
+        diffFixed.push({
+          timestamp: hashrateHistory[hashIndex].timestamp,
+          difficulty: difficulty[diffIndex - 1].difficulty
+        });
+        ++hashIndex;
+      }
+      ++diffIndex;
+    }
+
+    while (diffIndex <= difficulty.length) {
+      diffFixed.push({
+        timestamp: difficulty[diffIndex - 1].time,
+        difficulty: difficulty[diffIndex - 1].difficulty
+      });
+      diffIndex++;
+    }
+
+    return diffFixed.map(val => [val.timestamp * 1000, val.difficulty] as NullableChartPoint);
+  }
+
+  prepareChartOptions(data: HashrateChartData): void {
+    const hasData = data.aggregate.length > 0
+      || (data.permissionless?.length ?? 0) > 0
+      || (data.auxpow?.length ?? 0) > 0;
     let title: object;
-    if (data.hashrates.length === 0) {
+    if (!hasData) {
       title = {
         textStyle: {
           color: 'grey',
@@ -208,29 +338,124 @@ export class HashrateChartComponent implements OnInit {
       };
     }
 
+    const storedLegend = this.getStoredLegendSelection();
+    const legendData: HashrateLegendEntry[] = [
+      this.getLegendEntry(this.aggregateLabel, SERIES_COLOR.aggregate),
+    ];
+    const series: LineSeriesOption[] = [
+      {
+        id: SERIES_ID.aggregate,
+        zlevel: 2,
+        yAxisIndex: 0,
+        name: this.aggregateLabel,
+        showSymbol: false,
+        symbol: 'none',
+        data: data.aggregate,
+        type: 'line',
+        lineStyle: {
+          color: SERIES_COLOR.aggregate,
+          width: 3,
+        },
+        itemStyle: {
+          color: SERIES_COLOR.aggregate,
+        },
+      },
+    ];
+
+    if (data.permissionless !== undefined) {
+      legendData.push(this.getLegendEntry(this.permissionlessLabel, SERIES_COLOR.permissionless));
+      series.push({
+        id: SERIES_ID.permissionless,
+        zlevel: 1,
+        yAxisIndex: 0,
+        name: this.permissionlessLabel,
+        showSymbol: false,
+        symbol: 'none',
+        data: data.permissionless,
+        type: 'line',
+        lineStyle: {
+          color: SERIES_COLOR.permissionless,
+          width: 2,
+        },
+        itemStyle: {
+          color: SERIES_COLOR.permissionless,
+        },
+      });
+    }
+
+    if (data.auxpow !== undefined) {
+      legendData.push(this.getLegendEntry(this.auxpowLabel, SERIES_COLOR.auxpow));
+      series.push({
+        id: SERIES_ID.auxpow,
+        zlevel: 1,
+        yAxisIndex: 0,
+        name: this.auxpowLabel,
+        showSymbol: false,
+        symbol: 'none',
+        data: data.auxpow,
+        type: 'line',
+        lineStyle: {
+          color: SERIES_COLOR.auxpow,
+          type: 'dashed',
+          width: 2,
+        },
+        itemStyle: {
+          color: SERIES_COLOR.auxpow,
+        },
+      });
+    }
+
+    // with a lane-aware backend the two lanes get their own difficulty lines;
+    // otherwise a single legacy-labelled difficulty line remains
+    const hasLaneDifficulty = data.difficultyAuxpow !== undefined;
+    const difficultyName = hasLaneDifficulty ? this.difficultyPermissionlessLabel : this.difficultyLabel;
+    legendData.push(this.getLegendEntry(difficultyName, SERIES_COLOR.difficulty));
+    series.push({
+      id: SERIES_ID.difficulty,
+      zlevel: 0,
+      yAxisIndex: 1,
+      name: difficultyName,
+      showSymbol: false,
+      symbol: 'none',
+      data: data.difficulty,
+      type: 'line',
+      lineStyle: {
+        color: SERIES_COLOR.difficulty,
+        width: 3,
+      },
+      itemStyle: {
+        color: SERIES_COLOR.difficulty,
+      },
+    });
+
+    if (data.difficultyAuxpow !== undefined) {
+      legendData.push(this.getLegendEntry(this.difficultyAuxpowLabel, SERIES_COLOR.difficultyAuxpow));
+      series.push({
+        id: SERIES_ID.difficultyAuxpow,
+        zlevel: 0,
+        yAxisIndex: 1,
+        name: this.difficultyAuxpowLabel,
+        showSymbol: false,
+        symbol: 'none',
+        data: data.difficultyAuxpow,
+        type: 'line',
+        lineStyle: {
+          color: SERIES_COLOR.difficultyAuxpow,
+          type: 'dashed',
+          width: 2,
+        },
+        itemStyle: {
+          color: SERIES_COLOR.difficultyAuxpow,
+        },
+      });
+    }
+
     this.chartOptions = {
       title: title,
       animation: false,
-      color: [
-        new echarts.graphic.LinearGradient(0, 0, 0, 0.65, [
-          { offset: 0, color: '#F4511E99' },
-          { offset: 0.25, color: '#FB8C0099' },
-          { offset: 0.5, color: '#FFB30099' },
-          { offset: 0.75, color: '#FDD83599' },
-          { offset: 1, color: '#7CB34299' }
-        ]),
-        '#D81B60',
-        new echarts.graphic.LinearGradient(0, 0, 0, 0.65, [
-          { offset: 0, color: '#F4511E' },
-          { offset: 0.25, color: '#FB8C00' },
-          { offset: 0.5, color: '#FFB300' },
-          { offset: 0.75, color: '#FDD835' },
-          { offset: 1, color: '#7CB342' }
-        ]),
-      ],
       grid: {
         height: (this.widget && this.height) ? this.height - 30 : undefined,
-        top: this.widget ? 20 : 40,
+        top: this.widget ? 20 : (this.isMobile() ? 68 : 40),
         bottom: this.widget ? 30 : 70,
         right: this.right,
         left: this.left,
@@ -249,23 +474,23 @@ export class HashrateChartComponent implements OnInit {
           align: 'left',
         },
         borderColor: '#000',
-        formatter: (ticks) => {
-          let hashrateString = '';
-          let difficultyString = '';
-          let hashrateStringMA = '';
+        formatter: (ticks): string => {
+          if (!ticks?.length) {
+            return '';
+          }
+
+          const rows: Record<string, string> = {};
 
           for (const tick of ticks) {
-            if (tick.seriesIndex === 0) { // Hashrate
-              hashrateString = `${tick.marker} ${tick.seriesName}: ${this.amountShortenerPipe.transform(tick.data[1], 3, 'H/s', false, true)}<br>`;
-            } else if (tick.seriesIndex === 1) { // Difficulty
+            if ([SERIES_ID.difficulty, SERIES_ID.difficultyAuxpow].includes(tick.seriesId)) {
               const difficulty = tick.data[1];
               if (difficulty === null) {
-                difficultyString = `${tick.marker} ${tick.seriesName}: No data<br>`;
+                rows[tick.seriesId] = `${tick.marker} ${tick.seriesName}: No data<br>`;
               } else {
-                difficultyString = `${tick.marker} ${tick.seriesName}: ${this.amountShortenerPipe.transform(tick.data[1], 2, '', false)}<br>`;
+                rows[tick.seriesId] = `${tick.marker} ${tick.seriesName}: ${this.amountShortenerPipe.transform(tick.data[1], 2, '', false)}<br>`;
               }
-            } else if (tick.seriesIndex === 2) { // Hashrate MA
-              hashrateStringMA = `${tick.marker} ${tick.seriesName}: ${this.amountShortenerPipe.transform(tick.data[1], 3, 'H/s', false, true)}<br>`;
+            } else if ([SERIES_ID.aggregate, SERIES_ID.permissionless, SERIES_ID.auxpow].includes(tick.seriesId)) {
+              rows[tick.seriesId] = `${tick.marker} ${tick.seriesName}: ${this.amountShortenerPipe.transform(tick.data[1], 3, 'H/s', false, true)}<br>`;
             }
           }
 
@@ -273,59 +498,39 @@ export class HashrateChartComponent implements OnInit {
 
           return `
             <b style="color: white; margin-left: 2px">${date}</b><br>
-            <span>${difficultyString}</span>
-            <span>${hashrateString}</span>
-            <span>${hashrateStringMA}</span>
+            <span>${rows[SERIES_ID.difficulty] || ''}</span>
+            <span>${rows[SERIES_ID.difficultyAuxpow] || ''}</span>
+            <span>${rows[SERIES_ID.aggregate] || ''}</span>
+            <span>${rows[SERIES_ID.permissionless] || ''}</span>
+            <span>${rows[SERIES_ID.auxpow] || ''}</span>
           `;
         }
       },
-      xAxis: data.hashrates.length === 0 ? undefined : {
+      xAxis: !hasData ? undefined : {
         type: 'time',
         splitNumber: (this.isMobile() || this.widget) ? 5 : 10,
         axisLabel: {
           hideOverlap: true,
         }
       },
-      legend: (this.widget || data.hashrates.length === 0) ? undefined : {
-        data: [
-          {
-            name: $localize`:@@79a9dc5b1caca3cbeb1733a19515edacc5fc7920:Hashrate`,
-            inactiveColor: 'rgb(110, 112, 121)',
-            textStyle: {
-              color: 'white',
-            },
-            icon: 'roundRect',
-            itemStyle: {
-              color: '#FFB300',
-            },
-          },
-          {
-            name: $localize`:@@25148835d92465353fc5fe8897c27d5369978e5a:Difficulty`,
-            inactiveColor: 'rgb(110, 112, 121)',
-            textStyle: {
-              color: 'white',
-            },
-            icon: 'roundRect',
-          },
-          {
-            name: $localize`Hashrate (MA)`,
-            inactiveColor: 'rgb(110, 112, 121)',
-            textStyle: {
-              color: 'white',
-            },
-            icon: 'roundRect',
-            itemStyle: {
-              color: '#FFB300',
-            },
-          },
-        ],
-        selected: JSON.parse(this.storageService?.getValue('hashrate_difficulty_legend') || 'null') ?? {
-          '$localize`:@@79a9dc5b1caca3cbeb1733a19515edacc5fc7920:Hashrate`': true,
-          '$localize`::Difficulty`': this.network === '',
-          '$localize`Hashrate (MA)`': true,
+      legend: (this.widget || !hasData) ? undefined : {
+        data: legendData,
+        selected: {
+          [this.aggregateLabel]: storedLegend[this.aggregateLabel]
+            ?? storedLegend[this.legacyHashrateLabel]
+            ?? true,
+          [this.permissionlessLabel]: storedLegend[this.permissionlessLabel] ?? true,
+          [this.auxpowLabel]: storedLegend[this.auxpowLabel] ?? true,
+          [this.difficultyLabel]: storedLegend[this.difficultyLabel] ?? this.network === '',
+          [this.difficultyPermissionlessLabel]: storedLegend[this.difficultyPermissionlessLabel]
+            ?? storedLegend[this.difficultyLabel]
+            ?? this.network === '',
+          [this.difficultyAuxpowLabel]: storedLegend[this.difficultyAuxpowLabel]
+            ?? storedLegend[this.difficultyLabel]
+            ?? this.network === '',
         },
       },
-      yAxis: data.hashrates.length === 0 ? undefined : [
+      yAxis: !hasData ? undefined : [
         {
           min: (value) => {
             const selectedPowerOfTen: any = selectPowerOfTen(value.min);
@@ -352,7 +557,26 @@ export class HashrateChartComponent implements OnInit {
             }
           },
         },
-        {
+        hasLaneDifficulty ? {
+          // the two lanes' difficulties sit orders of magnitude apart
+          // (AuxPoW tracks merge-mined Bitcoin), so a shared linear scale
+          // would flatline the permissionless series; a log axis keeps both
+          // trends readable
+          type: 'log',
+          logBase: 10,
+          position: 'right',
+          axisLabel: {
+            color: 'rgb(110, 112, 121)',
+            formatter: (val): string => {
+              return this.amountShortenerPipe.transform(val, 3, '', false, true).toString();
+            },
+            showMinLabel: false,
+            showMaxLabel: false,
+          },
+          splitLine: {
+            show: false,
+          }
+        } : {
           type: 'value',
           position: 'right',
           min: (value) => {
@@ -362,11 +586,11 @@ export class HashrateChartComponent implements OnInit {
             }
             const selectedPowerOfTen: any = selectPowerOfTen(firstYAxisMin);
             const newMin = Math.floor(firstYAxisMin / selectedPowerOfTen.divider / 10);
-            return 600 / 2 ** 32 * newMin * selectedPowerOfTen.divider * 10;
+            return this.stateService.env.BLOCK_TARGET_SPACING_SECONDS / 2 ** 32 * newMin * selectedPowerOfTen.divider * 10;
           },
           max: (value) => {
             const firstYAxisMax = this.chartInstance.getModel().getComponent('yAxis', 0).axis.scale.getExtent()[1];
-            const scaledMax = 600 / 2 ** 32 * firstYAxisMax;
+            const scaledMax = this.stateService.env.BLOCK_TARGET_SPACING_SECONDS / 2 ** 32 * firstYAxisMax;
             return Math.max(scaledMax, value.max);
           },
           axisLabel: {
@@ -385,44 +609,7 @@ export class HashrateChartComponent implements OnInit {
           }
         }
       ],
-      series: data.hashrates.length === 0 ? [] : [
-        {
-          zlevel: 0,
-          yAxisIndex: 0,
-          name: $localize`:@@79a9dc5b1caca3cbeb1733a19515edacc5fc7920:Hashrate`,
-          showSymbol: false,
-          symbol: 'none',
-          data: data.hashrates,
-          type: 'line',
-          lineStyle: {
-            width: 1,
-          },
-        },
-        {
-          zlevel: 1,
-          yAxisIndex: 1,
-          name: $localize`:@@25148835d92465353fc5fe8897c27d5369978e5a:Difficulty`,
-          showSymbol: false,
-          symbol: 'none',
-          data: data.difficulty,
-          type: 'line',
-          lineStyle: {
-            width: 3,
-          }
-        },
-        {
-          zlevel: 2,
-          name: $localize`Hashrate (MA)`,
-          showSymbol: false,
-          symbol: 'none',
-          data: data.hashrateMa,
-          type: 'line',
-          smooth: true,
-          lineStyle: {
-            width: 3,
-          }
-        }
-      ],
+      series: hasData ? series : [],
       dataZoom: this.widget ? null : [{
         type: 'inside',
         realtime: true,
@@ -449,6 +636,34 @@ export class HashrateChartComponent implements OnInit {
         },
       }],
     };
+  }
+
+  private getLegendEntry(name: string, color: string): HashrateLegendEntry {
+    return {
+      name,
+      inactiveColor: 'rgb(110, 112, 121)',
+      textStyle: {
+        color: 'white',
+      },
+      icon: 'roundRect',
+      itemStyle: {
+        color,
+      },
+    };
+  }
+
+  private getStoredLegendSelection(): Record<string, boolean> {
+    const value = this.storageService.getValue('hashrate_difficulty_legend');
+    if (!value) {
+      return {};
+    }
+
+    try {
+      const selected = JSON.parse(value);
+      return selected && typeof selected === 'object' ? selected : {};
+    } catch {
+      return {};
+    }
   }
 
   onChartInit(ec) {

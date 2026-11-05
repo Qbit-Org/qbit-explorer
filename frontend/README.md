@@ -1,82 +1,72 @@
-# Mempool Frontend
+# qbit Explorer Frontend
 
-You can build and run the Mempool frontend and proxy to the production Mempool backend (for easier frontend development), or you can connect it to your own backend for a full Mempool development instance, custom deployment, etc.
+You can build and run the frontend and proxy to the public qbit explorer backend at https://mempool.qbit.org (for easier frontend development), or you can connect it to your own backend for a full development instance, custom deployment, etc.
 
 Jump to a section in this doc:
 - [Quick Setup for Frontend Development](#quick-setup-for-frontend-development)
 - [Manual Frontend Setup](#manual-setup)
-- [Translations](#translations-transifex-project)
+- [Translations](#translations)
 
 ## Quick Setup for Frontend Development
 
-If you want to quickly improve the UI, fix typos, or make other updates that don't require any backend changes, you don't need to set up an entire backend—you can simply run the Mempool frontend locally and proxy to the mempool.space backend.
+If you want to quickly improve the UI, fix typos, or make other updates that don't require any backend changes, you don't need to set up an entire backend—you can simply run the frontend locally and proxy to the mempool.qbit.org backend.
 
-### 1. Clone Mempool Repository
+### 1. Clone the Repository
 
-Get the latest Mempool code:
+Get the latest explorer code:
 
 ```
-git clone https://github.com/mempool/mempool
-cd mempool/frontend
+git clone https://github.com/Qbit-Org/qbit-explorer
+cd qbit-explorer/frontend
 ```
 
-### 2. Specify Website
+### 2. Configure qbit Defaults
 
-The same frontend codebase is used for https://mempool.space and https://liquid.network.
-
-Configure the frontend for the site you want by running the corresponding command:
+Configure the frontend for the qbit mempool profile:
 
 ```
 $ npm run config:defaults:mempool
-$ npm run config:defaults:liquid
 ```
 
 ### 3. Run the Frontend
 
-_Make sure to use Node.js 20.x and npm 9.x or newer._
+_Use the Node.js version in the repository's `.nvmrc` and the npm that ships with it._
 
 Install project dependencies and run the frontend server:
 
 ```
-$ npm install
-$ npm run serve:local-prod
+$ npm ci
+$ MEMPOOL_HOSTNAME=mempool.qbit.org npm run serve:parameterized
 ```
 
-The frontend will be available at http://localhost:4200/ and all API requests will be proxied to the production server at https://mempool.space.
+The frontend will be available at http://localhost:4200/ and all API requests will be proxied to https://mempool.qbit.org.
 
 ### 4. Test
 
-After making your changes, you can run our end-to-end automation suite and check for possible regressions.
-
-Headless:
+After making your changes, run the frontend checks that CI runs:
 
 ```
-$ npm run config:defaults:mempool && npm run cypress:run
+$ npm run lint
+$ npm run smoke:qbit-scripts
+$ npm run smoke:qbit-weight
+$ npm run build
 ```
 
-Interactive:
-
-```
-$ npm run config:defaults:mempool && npm run cypress:open
-```
-
-This will open the Cypress test runner, where you can select any of the test files to run.
-
-If all tests are green, submit your PR, and it will be reviewed by someone on the team as soon as possible.
+If all checks pass, submit your PR (see [`CONTRIBUTING.md`](../CONTRIBUTING.md)).
 
 ## Manual Setup
 
-Set up the [Mempool backend](../backend/) first, if you haven't already.
+Set up the [backend](../backend/) first, if you haven't already.
 
 ### 1. Build the Frontend
 
-_Make sure to use Node.js 20.x and npm 9.x or newer._
+_Use the Node.js version in the repository's `.nvmrc` and the npm that ships with it._
 
 Build the frontend:
 
 ```
 cd frontend
-npm install
+npm ci
 npm run build
 ```
 
@@ -84,7 +74,7 @@ npm run build
 
 #### Development
 
-To run your local Mempool frontend with your local Mempool backend:
+To run your local frontend with your local backend:
 
 ```
 npm run serve
@@ -92,45 +82,10 @@ npm run serve
 
 #### Production
 
-The `npm run build` command from step 1 above should have generated a `dist` directory. Put the contents of `dist/` onto your web server.
+The `npm run build` command from step 1 above should have generated the site in `dist/mempool/browser/`. Put the contents of that directory onto your web server.
 
 You will probably want to set up a reverse proxy, TLS, etc. There are sample nginx configuration files in the top level of the repository for reference, but note that support for such tasks is outside the scope of this project.
 
-## Translations: Transifex Project
+## Translations
 
-The Mempool frontend strings are localized into 20+ locales:
-https://www.transifex.com/mempool/mempool/dashboard/
-
-### Translators
-
-* Arabic @baro0k
-* Czech @pixelmade2
-* Danish @pierrevendelboe
-* German @Emzy
-* English (default)
-* Spanish @maxhodler @bisqes
-* Persian @techmix
-* French @Bayernatoor
-* Korean @kcalvinalvinn @sogoagain
-* Italian @HodlBits
-* Lithuanian @eimze21
-* Hebrew @rapidlab309
-* Georgian @wyd_idk
-* Hungarian @btcdragonlord
-* Dutch @m__btc
-* Japanese @wiz @japananon
-* Norwegian @T82771355
-* Polish @maciejsoltysiak
-* Portugese @jgcastro1985
-* Slovenian @thepkbadger
-* Finnish @bio_bitcoin
-* Swedish @softsimon_
-* Thai @Gusb3ll
-* Turkish @stackmore
-* Ukrainian @volbil
-* Vietnamese @BitcoinvnNews
-* Chinese @wdljt
-* Russian @TonyCrusoe @Bitconan
-* Romanian @mirceavesa
-* Macedonian @SkechBoy
-* Nepalese @kebinm
+The language menu offers English only. The other `src/locale/messages.<lang>.xlf` files are inherited from upstream mempool, whose volunteer translators are credited in the [upstream frontend README](https://github.com/mempool/mempool/blob/v3.3.1/frontend/README.md#translators), and have not been updated for qbit. This project does not pull translations from upstream's Transifex project. See [`CONTRIBUTING.md`](../CONTRIBUTING.md#translations) for the translation policy.

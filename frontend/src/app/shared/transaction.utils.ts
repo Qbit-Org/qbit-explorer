@@ -4,7 +4,8 @@ import { Transaction, Vin, Utxo } from '@interfaces/electrs.interface';
 import { CpfpInfo, RbfInfo, TransactionStripped } from '@interfaces/node-api.interface';
 import { StateService } from '@app/services/state.service';
 import { hash, Hash } from '@app/shared/sha256';
-import { AddressType, AddressTypeInfo, detectAddressType } from '@app/shared/address-utils';
+import { AddressType, AddressTypeInfo, detectAddressType, getAddressNetworkParams } from '@app/shared/address-utils';
+import { feeRatePerVsize, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '@app/shared/weight-units';
 import * as secp256k1 from '@noble/secp256k1';
 
 // Bitcoin Core default policy settings
@@ -18,10 +19,12 @@ const MAX_STANDARD_P2WSH_STACK_ITEM_SIZE = 80;
 const MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE = 80;
 const MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600;
 const MAX_STANDARD_SCRIPTSIG_SIZE = 1650;
-const DUST_RELAY_TX_FEE = 3;
-export const MAX_OP_RETURN_RELAY = 83;
+const DUST_RELAY_TX_FEE_SATS_PER_KVB = 750; // qbit policy: 0.75 sat/vB
+const PQC_SIG_SIZE = 3680; // qbit bounded SLH-DSA signature bytes
+export const MAX_OP_RETURN_RELAY = 200_000; // qbit policy: -datacarriersize default, shared by all OP_RETURN outputs
+const MAX_DUST_OUTPUTS_PER_TX = 1; // qbit policy: ephemeral dust allows one dust output
 const DEFAULT_PERMIT_BAREMULTISIG = true;
-const MAX_TX_LEGACY_SIGOPS = 2_500 * 4; // witness-adjusted sigops
+const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
 
 const TAPROOT_NUMS_INTERNAL_KEY = '50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
 const SECP256K1_ORDER = BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
@@ -32,19 +35,19 @@ export function countScriptSigops(script: string, isRawScript: boolean = false, 
   }
 
   let sigops = 0;
-  // count OP_CHECKSIG and OP_CHECKSIGVERIFY
-  sigops += (script.match(/OP_CHECKSIG/g)?.length || 0);
+  // count OP_CHECKSIG and OP_CHECKSIGVERIFY (qbitd's GetSigOpCount skips OP_CHECKSIGPQC and OP_CHECKSIGADD)
+  sigops += (script.match(/OP_CHECKSIG(?:VERIFY)?\b/g)?.length || 0);
 
   // count OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY
   if (isRawScript) {
     // in scriptPubKey or scriptSig, always worth 20
     sigops += 20 * (script.match(/OP_CHECKMULTISIG/g)?.length || 0);
   } else {
-    // in redeem scripts and witnesses, worth N if preceded by OP_N, 20 otherwise
-    const matches = script.matchAll(/(?:OP_(?:PUSHNUM_)?(\d+))? OP_CHECKMULTISIG/g);
+    // in redeem scripts and witnesses, worth N if preceded by OP_1 to OP_16, 20 otherwise
+    const matches = script.matchAll(/(?:OP_(?:PUSHNUM_)?(\d+) )?OP_CHECKMULTISIG/g);
     for (const match of matches) {
       const n = parseInt(match[1]);
-      if (Number.isInteger(n)) {
+      if (n >= 1 && n <= 16) {
         sigops += n;
       } else {
         sigops += 20;
@@ -52,7 +55,7 @@ export function countScriptSigops(script: string, isRawScript: boolean = false, 
     }
   }
 
-  return witness ? sigops : (sigops * 4);
+  return witness ? sigops : (sigops * WITNESS_SCALE_FACTOR);
 }
 
 export function setSchnorrSighashFlags(flags: bigint, witness: string[]): bigint {
@@ -246,6 +249,40 @@ export function extractDERSignaturesASM(script_asm: string): SigInfo[] {
   return signatures;
 }
 
+// P2MR signatures are PQC_SIG_SIZE bytes, plus a trailing sighash byte unless SIGHASH_DEFAULT
+export function extractPQCSignatures(witnesses: string[]): SigInfo[] {
+  if (!witnesses?.length) {
+    return [];
+  }
+
+  const signatures: SigInfo[] = [];
+
+  for (const witness of witnesses) {
+    if (witness.length === PQC_SIG_SIZE * 2 + 2) {
+      signatures.push({
+        signature: witness,
+        sighash: decodeSighashFlag(parseInt(witness.slice(-2), 16)),
+      });
+    } else if (witness.length === PQC_SIG_SIZE * 2) {
+      signatures.push({
+        signature: witness,
+        sighash: SighashFlag.DEFAULT,
+      });
+    }
+  }
+
+  return signatures;
+}
+
+// P2MR witness: [script args..., leaf script, control block, (annex)]; there is no key path
+export function p2mrScriptArgs(witness: string[]): string[] {
+  if (!witness?.length) {
+    return [];
+  }
+  const hasAnnex = witness.length > 1 && witness[witness.length - 1].startsWith('50');
+  return witness.slice(0, Math.max(0, witness.length - (hasAnnex ? 3 : 2)));
+}
+
 export function extractSchnorrSignatures(witnesses: string[]): SigInfo[] {
   if (!witnesses?.length) {
     return [];
@@ -296,6 +333,9 @@ export function processInputSignatures(vin: Vin): SigInfo[] {
       const taprootInfo = parseTaproot(vin.witness);
       signatures = extractSchnorrSignatures(taprootInfo.stack);
     } break;
+    case 'v2_p2mr':
+      signatures = extractPQCSignatures(p2mrScriptArgs(vin.witness));
+      break;
     default:
       // non-signed input types?
       break;
@@ -443,6 +483,14 @@ export function fillUnsignedInput(vin: Vin): { missingSigs: number, bytes: numbe
         }
       }
     } break;
+    case 'v2_p2mr':
+      signatures = extractPQCSignatures(p2mrScriptArgs(vin.witness));
+      if (/^OP_PUSHBYTES_32 [a-fA-F0-9]{64} OP_CHECKSIGPQC$/.test(vin.inner_witnessscript_asm) && !signatures.length) {
+        missingSigs = 1;
+        bytes = PQC_SIG_SIZE + 3; // 3 byte compact size
+        addToWitness = true;
+      }
+      break;
     default:
       break;
   }
@@ -454,7 +502,8 @@ export function getDustThreshold(scriptpubkey: string): number {
   dustSize += getVarIntLength(dustSize);
   dustSize += 8;
   dustSize += isWitnessProgram(scriptpubkey) ? 67 : 148;
-  return dustSize * DUST_RELAY_TX_FEE;
+  const fee = Math.floor(dustSize * DUST_RELAY_TX_FEE_SATS_PER_KVB / 1000);
+  return fee === 0 && DUST_RELAY_TX_FEE_SATS_PER_KVB > 0 ? 1 : fee;
 }
 
 function isDustOutput(value: number, scriptpubkey: string): boolean {
@@ -517,8 +566,8 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
     // bad-txns-nonstandard-inputs
     if (vin.prevout?.scriptpubkey_type === 'p2sh') {
       // TODO: evaluate script (https://github.com/bitcoin/bitcoin/blob/1ac627c485a43e50a9a49baddce186ee3ad4daad/src/policy/policy.cpp#L177)
-      // countScriptSigops returns the witness-scaled sigops, so divide by 4 before comparison with MAX_P2SH_SIGOPS
-      const sigops = (countScriptSigops(vin.inner_redeemscript_asm || '') / 4);
+      // countScriptSigops returns the witness-scaled sigops, so normalize before comparing with MAX_P2SH_SIGOPS
+      const sigops = (countScriptSigops(vin.inner_redeemscript_asm || '') / WITNESS_SCALE_FACTOR);
       if (sigops > MAX_P2SH_SIGOPS) {
         return true;
       }
@@ -557,6 +606,7 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
   // output validation
   let opreturnCount = 0;
   let opreturnBytes = 0;
+  let dustCount = 0;
   for (const vout of tx.vout) {
     // scriptpubkey
     if (['nonstandard', 'provably_unspendable', 'empty'].includes(vout.scriptpubkey_type)) {
@@ -585,8 +635,13 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
     // dust
     if (vout.scriptpubkey_type !== 'op_return' && isDustOutput(vout.value, vout.scriptpubkey)) {
       // under minimum output size
-      return !isStandardEphemeralDust(tx, height, network);
+      dustCount++;
     }
+  }
+
+  // dust is only standard as a single ephemeral dust output
+  if (dustCount > MAX_DUST_OUTPUTS_PER_TX || (dustCount > 0 && !isStandardEphemeralDust(tx, height, network))) {
+    return true;
   }
 
   // op_return
@@ -602,12 +657,15 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
 }
 
 // Individual versioned standardness rules
+// qbit nodes have enforced all of these rules since genesis (qbit v1.0.0 src/policy/), so every
+// qbit network activates them at height 0 rather than at Bitcoin Core's activation heights.
 
 const V3_STANDARDNESS_ACTIVATION_HEIGHT = {
-  'testnet4': 42_000,
-  'testnet': 2_900_000,
-  'signet': 211_000,
-  '': 863_500,
+  'testnet4': 0,
+  'testnet': 0,
+  'signet': 0,
+  'regtest': 0,
+  '': 0,
 };
 function isNonStandardVersion(tx: Transaction, height?: number, network?: string): boolean {
   let TX_MAX_STANDARD_VERSION = 3;
@@ -628,10 +686,11 @@ function isNonStandardVersion(tx: Transaction, height?: number, network?: string
 }
 
 const ANCHOR_STANDARDNESS_ACTIVATION_HEIGHT = {
-  'testnet4': 42_000,
-  'testnet': 2_900_000,
-  'signet': 211_000,
-  '': 863_500,
+  'testnet4': 0,
+  'testnet': 0,
+  'signet': 0,
+  'regtest': 0,
+  '': 0,
 };
 function isNonStandardAnchor(vin: Vin, height?: number, network?: string): boolean {
   if (
@@ -649,16 +708,17 @@ function isNonStandardAnchor(vin: Vin, height?: number, network?: string): boole
 
 // Ephemeral dust is a new concept that allows a single dust output in a transaction, provided the transaction is zero fee
 const EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT = {
-  'testnet4': 90_500,
-  'testnet': 4_550_000,
-  'signet': 260_000,
-  '': 905_000,
+  'testnet4': 0,
+  'testnet': 0,
+  'signet': 0,
+  'regtest': 0,
+  '': 0,
 };
 function isStandardEphemeralDust(tx: Transaction, height?: number, network?: string): boolean {
   if (
     tx.fee === 0
     && (height == null || (
-      EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT[network]
+      EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT[network] != null
       && height >= EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT[network]
     ))
   ) {
@@ -669,16 +729,21 @@ function isStandardEphemeralDust(tx: Transaction, height?: number, network?: str
 
 // OP_RETURN size & count limits were lifted in v28.3/v29.2/v30.0
 const OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT = {
-  'testnet4': 108_000,
-  'testnet': 4_750_000,
-  'signet': 276_500,
-  '': 921_000,
+  'testnet4': 0,
+  'testnet': 0,
+  'signet': 0,
+  'regtest': 0,
+  '': 0,
 };
 const MAX_DATACARRIER_BYTES = 83;
 function isStandardOpReturn(bytes: number, outputs: number,height?: number, network?: string): boolean {
+  if (bytes > MAX_OP_RETURN_RELAY) {
+    // qbit still caps the combined size of all OP_RETURN outputs
+    return false;
+  }
   if (
     (height == null || (
-      OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT[network]
+      OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT[network] != null
       && height >= OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT[network]
     )) // limits lifted
     || // OR
@@ -691,15 +756,16 @@ function isStandardOpReturn(bytes: number, outputs: number,height?: number, netw
 
 // New legacy sigops limit started to be enforced in v30.0
 const LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT = {
-  'testnet4': 108_000,
-  'testnet': 4_750_000,
-  'signet': 276_500,
-  '': 921_000,
+  'testnet4': 0,
+  'testnet': 0,
+  'signet': 0,
+  'regtest': 0,
+  '': 0,
 };
 function isNonStandardLegacySigops(tx: Transaction, height?: number, network?: string): boolean {
   if (
     height == null || (
-      LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT[network]
+      LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT[network] != null
       && height >= LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT[network]
     )
   ) {
@@ -749,7 +815,7 @@ export function getNonWitnessSize(tx: Transaction): number {
     // marker & segwit flag
     weight -= 2;
   }
-  return Math.ceil(weight / 4);
+  return weightToVsize(weight);
 }
 
 export function setSegwitSighashFlags(flags: bigint, witness: string[]): bigint {
@@ -841,6 +907,9 @@ export function getTransactionFlags(tx: Transaction, cpfpInfo?: CpfpInfo, replac
       case 'p2sh': flags |= TransactionFlags.p2sh; break;
       case 'v0_p2wpkh': flags |= TransactionFlags.p2wpkh; break;
       case 'v0_p2wsh': flags |= TransactionFlags.p2wsh; break;
+      case 'witness_v2_p2mr':
+      case 'v2_p2mr': flags |= TransactionFlags.p2mr; break;
+      case 'anchor': flags |= TransactionFlags.anchor; break;
       case 'v1_p2tr': {
         flags |= TransactionFlags.p2tr;
         // every valid taproot input has at least one witness item, however transactions
@@ -907,6 +976,9 @@ export function getTransactionFlags(tx: Transaction, cpfpInfo?: CpfpInfo, replac
       case 'v0_p2wpkh': flags |= TransactionFlags.p2wpkh; break;
       case 'v0_p2wsh': flags |= TransactionFlags.p2wsh; break;
       case 'v1_p2tr': flags |= TransactionFlags.p2tr; break;
+      case 'witness_v2_p2mr':
+      case 'v2_p2mr': flags |= TransactionFlags.p2mr; break;
+      case 'anchor': flags |= TransactionFlags.anchor; break;
       case 'op_return': flags |= TransactionFlags.op_return; break;
     }
     if (vout.scriptpubkey_address) {
@@ -956,13 +1028,13 @@ export function getTransactionFlags(tx: Transaction, cpfpInfo?: CpfpInfo, replac
 
 export function getUnacceleratedFeeRate(tx: Transaction, accelerated: boolean): number {
   if (accelerated) {
-    let ancestorVsize = tx.weight / 4;
+    let ancestorVsize = weightToFractionalVsize(tx.weight);
     let ancestorFee = tx.fee;
     for (const ancestor of tx.ancestors || []) {
-      ancestorVsize += (ancestor.weight / 4);
+      ancestorVsize += weightToFractionalVsize(ancestor.weight);
       ancestorFee += ancestor.fee;
     }
-    return Math.min(tx.fee / (tx.weight / 4), (ancestorFee / ancestorVsize));
+    return Math.min(feeRatePerVsize(tx.fee, tx.weight), (ancestorFee / ancestorVsize));
   } else {
     return tx.effectiveFeePerVsize;
   }
@@ -1097,6 +1169,8 @@ function convertScriptSigAsm(hex: string): string {
         b.push('OP_CLTV');
       } else if (op === 0xb2) {
         b.push('OP_CSV');
+      } else if (op === 0xb3) {
+        b.push('OP_CHECKSIGPQC');
       } else if (op === 0xba) {
         b.push('OP_CHECKSIGADD');
       } else {
@@ -1160,7 +1234,8 @@ export function addInnerScriptsToVin(vin: Vin): void {
     vin.inner_witnessscript_asm = convertScriptSigAsm(witnessScript);
   }
 
-  if (vin.prevout.scriptpubkey_type === 'v1_p2tr' && vin.witness) {
+  // P2MR shares taproot's script-path witness layout
+  if ((vin.prevout.scriptpubkey_type === 'v1_p2tr' || vin.prevout.scriptpubkey_type === 'v2_p2mr') && vin.witness) {
     const witnessScript = witnessToP2TRScript(vin.witness);
     if (witnessScript !== null) {
       vin.inner_witnessscript_asm = convertScriptSigAsm(witnessScript);
@@ -1810,6 +1885,10 @@ export function scriptPubKeyToAddress(scriptPubKey: string, network: string): { 
   if (/^5120[0-9a-f]{64}$/.test(scriptPubKey)) {
     return { address: p2tr(scriptPubKey.substring(4, 4 + 64), network), type: 'v1_p2tr' };
   }
+  // P2MR
+  if (/^5220[0-9a-f]{64}$/.test(scriptPubKey)) {
+    return { address: p2mr(scriptPubKey.substring(4, 4 + 64), network), type: 'v2_p2mr' };
+  }
   // multisig
   if (/^[0-9a-f]+ae$/.test(scriptPubKey)) {
     return { address: null, type: 'multisig' };
@@ -1827,6 +1906,8 @@ export function scriptPubKeyToAddress(scriptPubKey: string, network: string): { 
 
 export function addressToScriptPubKey(address: string, network: string): { scriptPubKey: string | null, type: AddressType } {
   const type = detectAddressType(address, network);
+  const anchorAddress = p2a(network);
+  const isAnchorAddress = address === anchorAddress || address === anchorAddress.toUpperCase();
 
   if (type === 'p2pk') {
     if (address.length === 66) {
@@ -1842,16 +1923,16 @@ export function addressToScriptPubKey(address: string, network: string): { scrip
     return { scriptPubKey: base58ToSpk(address, network), type };
   }
 
-  if (type === 'v0_p2wpkh' || type === 'v0_p2wsh' || type === 'v1_p2tr' || address === p2a(network)) {
-    return { scriptPubKey: bech32ToSpk(address, network), type };
+  if (type === 'v0_p2wpkh' || type === 'v0_p2wsh' || type === 'v1_p2tr' || type === 'v2_p2mr' || isAnchorAddress) {
+    return { scriptPubKey: bech32ToSpk(address, network), type: isAnchorAddress ? 'anchor' : type };
   }
-  
+
   return { scriptPubKey: null, type };
 }
 
 function p2pkh(pubKeyHash: string, network: string): string {
   const pubkeyHashArray = hexStringToUint8Array(pubKeyHash);
-  const version = ['testnet', 'testnet4', 'signet'].includes(network) ? 0x6f : 0x00;
+  const version = getAddressNetworkParams(network).p2pkhVersion;
   const versionedPayload = Uint8Array.from([version, ...pubkeyHashArray]);
   const hash1 = new Hash().update(versionedPayload).digest();
   const hash2 = new Hash().update(hash1).digest();
@@ -1863,7 +1944,7 @@ function p2pkh(pubKeyHash: string, network: string): string {
 
 function p2sh(scriptHash: string, network: string): string {
   const scriptHashArray = hexStringToUint8Array(scriptHash);
-  const version = ['testnet', 'testnet4', 'signet'].includes(network) ? 0xc4 : 0x05;
+  const version = getAddressNetworkParams(network).p2shVersion;
   const versionedPayload = Uint8Array.from([version, ...scriptHashArray]);
   const hash1 = new Hash().update(versionedPayload).digest();
   const hash2 = new Hash().update(hash1).digest();
@@ -1875,7 +1956,7 @@ function p2sh(scriptHash: string, network: string): string {
 
 function p2wpkh(pubKeyHash: string, network: string): string {
   const pubkeyHashArray = hexStringToUint8Array(pubKeyHash);
-  const hrp = ['testnet', 'testnet4', 'signet'].includes(network) ? 'tb' : 'bc';
+  const hrp = getAddressNetworkParams(network).bech32Hrp;
   const version = 0;
   const words = [version].concat(toWords(pubkeyHashArray));
   const bech32Address = bech32Encode(hrp, words);
@@ -1884,7 +1965,7 @@ function p2wpkh(pubKeyHash: string, network: string): string {
 
 function p2wsh(scriptHash: string, network: string): string {
   const scriptHashArray = hexStringToUint8Array(scriptHash);
-  const hrp = ['testnet', 'testnet4', 'signet'].includes(network) ? 'tb' : 'bc';
+  const hrp = getAddressNetworkParams(network).bech32Hrp;
   const version = 0;
   const words = [version].concat(toWords(scriptHashArray));
   const bech32Address = bech32Encode(hrp, words);
@@ -1893,16 +1974,25 @@ function p2wsh(scriptHash: string, network: string): string {
 
 function p2tr(pubKey: string, network: string): string {
   const pubkeyArray = hexStringToUint8Array(pubKey);
-  const hrp = ['testnet', 'testnet4', 'signet'].includes(network) ? 'tb' : 'bc';
+  const hrp = getAddressNetworkParams(network).bech32Hrp;
   const version = 1;
   const words = [version].concat(toWords(pubkeyArray));
   const bech32Address = bech32Encode(hrp, words, 'bech32m');
   return bech32Address;
 }
 
+function p2mr(commitment: string, network: string): string {
+  const commitmentArray = hexStringToUint8Array(commitment);
+  const hrp = getAddressNetworkParams(network).bech32Hrp;
+  const version = 2;
+  const words = [version].concat(toWords(commitmentArray));
+  const bech32Address = bech32Encode(hrp, words, 'bech32m');
+  return bech32Address;
+}
+
 function p2a(network: string): string {
   const pubkeyHashArray = hexStringToUint8Array('4e73');
-  const hrp = ['testnet', 'testnet4', 'signet'].includes(network) ? 'tb' : 'bc';
+  const hrp = getAddressNetworkParams(network).bech32Hrp;
   const version = 1;
   const words = [version].concat(toWords(pubkeyHashArray));
   const bech32Address = bech32Encode(hrp, words, 'bech32m');
@@ -1994,13 +2084,13 @@ function base58ToSpk(address: string, network: string): string | null {
     const payloadHex = uint8ArrayToHexString(payload);
 
     // P2PKH
-    const p2pkhVersion = ['testnet', 'testnet4', 'signet'].includes(network) ? 0x6f : 0x00;
+    const p2pkhVersion = getAddressNetworkParams(network).p2pkhVersion;
     if (version === p2pkhVersion) {
       return '76a914' + payloadHex + '88ac';
     }
 
     // P2SH
-    const p2shVersion = ['testnet', 'testnet4', 'signet'].includes(network) ? 0xc4 : 0x05;
+    const p2shVersion = getAddressNetworkParams(network).p2shVersion;
     if (version === p2shVersion) {
       return 'a914' + payloadHex + '87';
     }
@@ -2029,6 +2119,9 @@ function bech32Encode(prefix: string, words: number[], encoding: Bech32Encoding 
 
 /* Decodes a *valid* bech32 or bech32m encoded address into its prefix and payload */
 function bech32Decode(address: string): { prefix: string, words: number[], encoding: Bech32Encoding } {
+  if (/[a-z]/.test(address) && /[A-Z]/.test(address)) {
+    throw new Error('Mixed-case bech32 address');
+  }
   const normalized = address.toLowerCase();
   const separator = normalized.lastIndexOf('1');
   const prefix = normalized.slice(0, separator);
@@ -2052,13 +2145,16 @@ function bech32Decode(address: string): { prefix: string, words: number[], encod
 }
 
 function bech32ToSpk(address: string, network: string): string | null {
-  const expectedHrp = ['testnet', 'testnet4', 'signet'].includes(network) ? 'tb' : 'bc';
+  const expectedHrp = getAddressNetworkParams(network).bech32Hrp;
   try {
     const decoded = bech32Decode(address);
     if (decoded.prefix !== expectedHrp) {
       return null;
     }
     const version = decoded.words[0];
+    if ((version === 0 && decoded.encoding !== 'bech32') || (version > 0 && decoded.encoding !== 'bech32m')) {
+      return null;
+    }
     const data = fromWords(decoded.words.slice(1));
     const versionOpcode = version === 0 ? '00' : (version + 0x50).toString(16).padStart(2, '0');
     const pushLen = data.length.toString(16).padStart(2, '0');
@@ -2439,7 +2535,7 @@ const opcodes = {
   176: 'OP_NOP1',
   177: 'OP_CHECKLOCKTIMEVERIFY',
   178: 'OP_CHECKSEQUENCEVERIFY',
-  179: 'OP_NOP4',
+  179: 'OP_CHECKSIGPQC',
   180: 'OP_NOP5',
   181: 'OP_NOP6',
   182: 'OP_NOP7',

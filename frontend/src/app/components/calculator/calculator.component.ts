@@ -1,12 +1,10 @@
 import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup } from '@angular/forms';
-import { combineLatest, Observable } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
-import { StateService } from '@app/services/state.service';
-import { WebsocketService } from '@app/services/websocket.service';
+import { QBIT_MAX_SUPPLY_QBT, QBIT_MAX_SUPPLY_SAT, QBIT_SATS_PER_QBT } from '@app/shared/qbit-subsidy';
 
-const MAX_BTC_SUPPLY = 21000000;
-const MAX_SATOSHI_SUPPLY = MAX_BTC_SUPPLY * 100_000_000;
+const MAX_COIN_SUPPLY = QBIT_MAX_SUPPLY_QBT;
+const MAX_COIN_SUPPLY_TEXT = MAX_COIN_SUPPLY.toString();
+const MAX_SATOSHI_SUPPLY = QBIT_MAX_SUPPLY_SAT.toString();
 
 @Component({
   selector: 'app-calculator',
@@ -18,104 +16,43 @@ const MAX_SATOSHI_SUPPLY = MAX_BTC_SUPPLY * 100_000_000;
 export class CalculatorComponent implements OnInit {
   satoshis = 10000;
   form: FormGroup;
-  currentPrice = 0;
   isMaxSupply = false;
 
-  currency$ = this.stateService.fiatCurrency$;
-  price$: Observable<number>;
-  lastFiatPrice$: Observable<number>;
-
   constructor(
-    private stateService: StateService,
     private formBuilder: FormBuilder,
-    private websocketService: WebsocketService,
   ) { }
 
   ngOnInit(): void {
     this.form = this.formBuilder.group({
-      fiat: [0],
       bitcoin: [0],
       satoshis: [0],
     });
 
-    this.lastFiatPrice$ = this.stateService.conversions$.asObservable()
-      .pipe(
-        map((conversions) => conversions.time)
-      );
-
-    let currency;
-    this.price$ = this.currency$.pipe(
-      switchMap((result) => {
-        currency = result;
-        return this.stateService.conversions$.asObservable();
-      }),
-      map((conversions) => {
-        return conversions[currency];
-      })
-    );
-
-    combineLatest([
-      this.price$,
-      this.form.get('fiat').valueChanges
-    ]).subscribe(([price, value]) => {
-      this.currentPrice = price;
-      const maxFiat = price * MAX_BTC_SUPPLY;
-      const isMaxSupply = value >= maxFiat;
+    this.form.get('bitcoin').valueChanges.subscribe((value) => {
+      const satoshisValue = this.coinsToSatoshis(value);
+      const isMaxSupply = BigInt(satoshisValue) >= QBIT_MAX_SUPPLY_SAT;
       this.isMaxSupply = isMaxSupply;
-      if (isMaxSupply) {
-        value = maxFiat;
-        this.form.get('fiat').setValue(this.formatFiat(value), { emitEvent: false });
-      }
-      let rate = parseFloat((value / price).toFixed(8));
-      if (rate >= MAX_BTC_SUPPLY) {
-        rate = MAX_BTC_SUPPLY;
-      }
-      const satsRate = Math.round(rate * 100_000_000);
-      if (isNaN(value)) {
-        return;
-      }
-      this.form.get('bitcoin').setValue(isMaxSupply ? MAX_BTC_SUPPLY.toString() : rate.toFixed(8), { emitEvent: false });
-      this.form.get('satoshis').setValue(satsRate, { emitEvent: false } );
+      const cappedSatoshisValue = isMaxSupply ? MAX_SATOSHI_SUPPLY : satoshisValue;
+      this.form.get('satoshis').setValue(cappedSatoshisValue, { emitEvent: false });
     });
 
-    combineLatest([
-      this.price$,
-      this.form.get('bitcoin').valueChanges
-    ]).subscribe(([price, value]) => {
-      this.currentPrice = price;
-      const isMaxSupply = parseFloat(value) >= MAX_BTC_SUPPLY;
-      this.isMaxSupply = isMaxSupply;
-      const rate = parseFloat((value * price).toFixed(8));
-      if (isNaN(value)) {
+    this.form.get('satoshis').valueChanges.subscribe((value) => {
+      const satoshisValue = this.wholeSatoshis(value);
+      if (satoshisValue === null) {
         return;
       }
-      this.form.get('fiat').setValue(this.formatFiat(rate), { emitEvent: false } );
-      this.form.get('satoshis').setValue(Math.min(Math.round(value * 100_000_000), MAX_SATOSHI_SUPPLY), { emitEvent: false } );
-    });
-
-    combineLatest([
-      this.price$,
-      this.form.get('satoshis').valueChanges
-    ]).subscribe(([price, value]) => {
-      this.currentPrice = price;
-      let bitcoinValue = value / 100_000_000;
-      const isMaxSupply = bitcoinValue >= MAX_BTC_SUPPLY;
+      const isMaxSupply = BigInt(satoshisValue) >= QBIT_MAX_SUPPLY_SAT;
       this.isMaxSupply = isMaxSupply;
+      let cappedSatoshisValue = satoshisValue;
       if (isMaxSupply) {
-        bitcoinValue = MAX_BTC_SUPPLY;
-        value = MAX_SATOSHI_SUPPLY;
-        this.form.get('satoshis').setValue(value, { emitEvent: false });
+        cappedSatoshisValue = MAX_SATOSHI_SUPPLY;
+        this.form.get('satoshis').setValue(cappedSatoshisValue, { emitEvent: false });
       }
-      const rate = parseFloat((bitcoinValue * price).toFixed(8));
-      const bitcoinRate = isMaxSupply ? MAX_BTC_SUPPLY.toString() : bitcoinValue.toFixed(8);
-      if (isNaN(value)) {
-        return;
-      }
-      this.form.get('fiat').setValue(this.formatFiat(rate), { emitEvent: false } );
+      const bitcoinRate = isMaxSupply ? MAX_COIN_SUPPLY_TEXT : this.satoshisToCoins(cappedSatoshisValue);
       this.form.get('bitcoin').setValue(bitcoinRate, { emitEvent: false });
     });
 
-    // Default form with 1 BTC
+    // Default form with 1 whole coin.
     this.form.get('bitcoin').setValue(1, { emitEvent: true });
   }
 
@@ -132,22 +69,40 @@ export class CalculatorComponent implements OnInit {
     if (name === 'bitcoin' && this.countDecimals(sanitizedValue) > 8) {
       sanitizedValue = this.toFixedWithoutRounding(sanitizedValue, 8);
     }
-    if (name === 'fiat' && this.countDecimals(sanitizedValue) > 2) {
-      sanitizedValue = this.toFixedWithoutRounding(sanitizedValue, 2);
-    }
     if (sanitizedValue === '') {
       sanitizedValue = '0';
     }
     if (name === 'satoshis') {
       sanitizedValue = parseFloat(sanitizedValue).toFixed(0);
     }
-    if (name === 'bitcoin' && parseFloat(sanitizedValue) >= MAX_BTC_SUPPLY) {
-      sanitizedValue = MAX_BTC_SUPPLY.toString();
+    if (name === 'bitcoin' && BigInt(this.coinsToSatoshis(sanitizedValue)) > QBIT_MAX_SUPPLY_SAT) {
+      sanitizedValue = MAX_COIN_SUPPLY_TEXT;
     }
-    if (name === 'satoshis' && parseFloat(sanitizedValue) > MAX_SATOSHI_SUPPLY) {
-      sanitizedValue = MAX_SATOSHI_SUPPLY.toString();
+    if (name === 'satoshis' && BigInt(sanitizedValue) > QBIT_MAX_SUPPLY_SAT) {
+      sanitizedValue = MAX_SATOSHI_SUPPLY;
     }
     formControl.setValue(sanitizedValue, {emitEvent: true});
+  }
+
+  coinsToSatoshis(value: string | number): string {
+    const normalizedValue = this.removeExtraDots(String(value).replace(',', '.').replace(/[^0-9.]/g, ''));
+    const [wholeRaw, fractionalRaw = ''] = normalizedValue.split('.');
+    const whole = BigInt(wholeRaw || '0');
+    const fractional = BigInt((fractionalRaw + '00000000').slice(0, 8));
+    return (whole * QBIT_SATS_PER_QBT + fractional).toString();
+  }
+
+  satoshisToCoins(value: string): string {
+    const satoshis = BigInt(value);
+    const whole = satoshis / QBIT_SATS_PER_QBT;
+    const fractional = satoshis % QBIT_SATS_PER_QBT;
+    return `${whole.toString()}.${fractional.toString().padStart(8, '0')}`;
+  }
+
+  wholeSatoshis(value: string | number): string | null {
+    const [wholeRaw] = String(value).split('.');
+    const whole = wholeRaw.replace(/[^0-9]/g, '');
+    return whole ? whole : null;
   }
 
   removeExtraDots(str: string): string {
@@ -173,23 +128,5 @@ export class CalculatorComponent implements OnInit {
 
   selectAll(event): void {
     event.target.select();
-  }
-
-  formatFiat(num: number): string | number {
-    if (Math.abs(num) >= 1000) {
-      // For values >= 1000: show 2 decimals, or 0 if whole number
-      if (num % 1 === 0) {
-        return Math.round(num);
-      }
-      return (Math.round(num * 100) / 100).toFixed(2);
-    }
-    if (num % 1 === 0) {
-      return Math.round(num);
-    }
-    // For small values (< 1), show more precision
-    if (Math.abs(num) < 1 && num !== 0) {
-      return num.toFixed(8);
-    }
-    return (Math.round(num * 100) / 100).toFixed(2);
   }
 }

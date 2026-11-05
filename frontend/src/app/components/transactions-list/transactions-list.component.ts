@@ -6,9 +6,8 @@ import { Outspend, Transaction, Vin, Vout } from '@interfaces/electrs.interface'
 import { ElectrsApiService } from '@app/services/electrs-api.service';
 import { environment } from '@environments/environment';
 import { AssetsService } from '@app/services/assets.service';
-import { filter, map, tap, switchMap, catchError } from 'rxjs/operators';
+import { map, tap, switchMap } from 'rxjs/operators';
 import { BlockExtended } from '@interfaces/node-api.interface';
-import { ApiService } from '@app/services/api.service';
 import { PriceService } from '@app/services/price.service';
 import { StorageService } from '@app/services/storage.service';
 import { OrdApiService } from '@app/services/ord-api.service';
@@ -41,7 +40,6 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
   @Input() inputIndex: number;
   @Input() outputIndex: number;
   @Input() addresses: string[] = [];
-  @Input() acceleratedTxids: Set<string> | null = null;
   @Input() rowLimit = 12;
   @Input() blockTime: number = 0; // Used for price calculation if all the transactions are in the same block
   @Input() txPreview = false;
@@ -57,7 +55,6 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
   queryParamsSubscription: Subscription;
   currency: string;
   refreshOutspends$: ReplaySubject<string[]> = new ReplaySubject();
-  refreshChannels$: ReplaySubject<string[]> = new ReplaySubject();
   showDetails$ = new BehaviorSubject<boolean>(false);
   assetsMinimal: any;
   transactionsLength: number = 0;
@@ -85,7 +82,6 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
     public stateService: StateService,
     private cacheService: CacheService,
     private electrsApiService: ElectrsApiService,
-    private apiService: ApiService,
     private ordApiService: OrdApiService,
     private assetsService: AssetsService,
     private ref: ChangeDetectorRef,
@@ -164,25 +160,6 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
             }
           }),
         ),
-        this.refreshChannels$
-          .pipe(
-            filter(() => this.stateService.networkSupportsLightning() && !this.txPreview),
-            switchMap((txIds) => this.apiService.getChannelByTxIds$(txIds)),
-            catchError((error) => {
-              // handle 404
-              return of([]);
-            }),
-            tap((channels) => {
-              if (!this.transactions) {
-                return;
-              }
-              const transactions = this.transactions.filter((tx) => !tx._channels);
-              channels.forEach((channel, i) => {
-                transactions[i]._channels = channel;
-              });
-            }),
-          )
-        ,
     ).subscribe(() => this.ref.markForCheck());
 
     this.currencyChangeSubscription = this.stateService.fiatCurrency$
@@ -361,12 +338,6 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
       if (txIds.length && !this.cached) {
         this.refreshOutspends$.next(txIds);
       }
-      if (this.stateService.networkSupportsLightning()) {
-        const txIds = this.transactions.filter((tx) => !tx._channels).map((tx) => tx.txid);
-        if (txIds.length) {
-          this.refreshChannels$.next(txIds);
-        }
-      }
     }
   }
 
@@ -384,8 +355,8 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
 
       // Check for address poisoning similarity matches
       this.similarityMatches.set(tx.txid, new Map());
-      const comparableVouts = tx.vout.slice(0, 20).filter(v => ['p2pkh', 'p2sh', 'v0_p2wpkh', 'v0_p2wsh', 'v1_p2tr'].includes(v.scriptpubkey_type) && !this.isFakeScripthash(v));
-      const comparableVins = tx.vin.slice(0, 20).map(v => v.prevout).filter(v => ['p2pkh', 'p2sh', 'v0_p2wpkh', 'v0_p2wsh', 'v1_p2tr'].includes(v?.scriptpubkey_type) && !this.isFakeScripthash(v));
+      const comparableVouts = tx.vout.slice(0, 20).filter(v => ['p2pkh', 'p2sh', 'v0_p2wpkh', 'v0_p2wsh', 'v1_p2tr', 'v2_p2mr'].includes(v.scriptpubkey_type) && !this.isFakeScripthash(v));
+      const comparableVins = tx.vin.slice(0, 20).map(v => v.prevout).filter(v => ['p2pkh', 'p2sh', 'v0_p2wpkh', 'v0_p2wsh', 'v1_p2tr', 'v2_p2mr'].includes(v?.scriptpubkey_type) && !this.isFakeScripthash(v));
 
       // Count unique addresses per type & position
       const typeCount = new Map<string, { voutAddrs: Set<string>, vinAddrs: Set<string> }>();
@@ -490,10 +461,10 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
     if (this.network === 'liquid' || this.network === 'liquidtestnet') {
       return;
     }
-    const modes = ['btc', 'sats', 'fiat'];
+    const modes = ['qbt', 'sats'];
     const oldIndex = modes.indexOf(this.stateService.viewAmountMode$.value);
     const newIndex = (oldIndex + 1) % modes.length;
-    this.stateService.viewAmountMode$.next(modes[newIndex] as 'btc' | 'sats' | 'fiat');
+    this.stateService.viewAmountMode$.next(modes[newIndex] as 'qbt' | 'sats' | 'fiat');
     this.storageService.setValue('view-amount-mode', modes[newIndex]);
   }
 

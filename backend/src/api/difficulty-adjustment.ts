@@ -1,32 +1,57 @@
 import config from '../config';
-import { IDifficultyAdjustment } from '../mempool.interfaces';
+import { AsertAnchors, AsertLaneAnchor, AsertLaneAnchors } from '../mempool.interfaces';
 import blocks from './blocks';
+import { laneOf, QbitLane } from '../utils/qbit-version';
 
-export interface DifficultyAdjustment {
-  progressPercent: number;       // Percent: 0 to 100
-  difficultyChange: number;      // Percent: -75 to 300
-  estimatedRetargetDate: number; // Unix time in ms
-  remainingBlocks: number;       // Block count
-  remainingTime: number;         // Duration of time in ms
-  previousRetarget: number;      // Percent: -75 to 300
-  previousTime: number;          // Unix time in ms
-  nextRetargetHeight: number;    // Block Height
-  timeAvg: number;               // Duration of time in ms
-  adjustedTimeAvg;               // Expected block interval with hashrate implied over last 504 blocks
-  timeOffset: number;            // (Testnet) Time since last block (cap @ 20min) in ms
-  expectedBlocks: number;         // Block count
+/**
+ * Difficulty state of one Cadence lane. Each lane retargets independently and
+ * their difficulties differ by orders of magnitude (AuxPoW tracks merge-mined
+ * Bitcoin hashrate), so they must never be mixed in one number.
+ */
+export interface QbitLaneDifficultyState {
+  difficulty: number;           // difficulty of the lane's most recent block
+  bits: number;                 // nBits of the lane's most recent block
+  target: string;               // 256-bit target of the lane's most recent block, hex encoded
+  height: number;               // height of the lane's most recent block
+  timestamp: number;            // unix seconds of the lane's most recent block
+  change24h: number | null;     // vs the most recent same-lane block mined >= 24h ago; null while the lane is younger
+}
+
+/**
+ * qbit adjusts difficulty on every block via aserti3-2d (2h halflife): there is
+ * no epoch, no scheduled retarget and no "next adjustment in N blocks". This
+ * state describes the continuous DAA instead of Bitcoin's 2016-block epoch.
+ *
+ * The headline current* /change24h fields are pinned to the permissionless
+ * lane whenever lane anchors are available: the raw chain tip alternates
+ * between lanes, and quoting "the latest block's difficulty" would flip-flop
+ * by ~2000x depending on which lane mined last.
+ */
+export interface QbitDifficultyState {
+  asertActive: true;            // sentinel for the frontend feature gate
+  currentBits: number;          // nBits of the permissionless lane tip (chain tip when lane data is unavailable)
+  currentTarget: string;        // 256-bit target, hex encoded, same source block as currentBits
+  currentDifficulty: number;    // difficulty, same source block as currentBits
+  timeAvgMs: number;            // rolling average block interval over the last ~60 blocks, both lanes combined
+  targetSpacingMs: number;      // consensus target block interval
+  change24h: number;            // difficulty delta in percent, same lane pinning as currentDifficulty
+  previousTime: number;         // ms-epoch timestamp of the latest block on the chain (gates websocket pushes)
+  timeAvg: number;              // legacy alias of timeAvgMs, consumed by ETA logic
+  adjustedTimeAvg: number;      // legacy alias of timeAvgMs, consumed by ETA logic
+  timeOffset: number;           // always 0 on qbit, consumed by ETA logic
+  lanes: Record<QbitLane, QbitLaneDifficultyState | null> | null; // per-lane state; null without indexed lane anchors
 }
 
 /**
  * Calculate the difficulty increase/decrease by using the `bits` integer contained in two
  * block headers.
  *
- * Warning: Only compare `bits` from blocks in two adjacent difficulty periods. This code
- * assumes the maximum difference is x4 or /4 (as per the protocol) and will throw an
- * error if an exponent difference of 2 or more is seen.
+ * With ASERT the difficulty moves every block and there is no protocol bound on how far
+ * `bits` can drift between two arbitrary blocks (e.g. across a long idle gap), so any
+ * exponent distance is legal here and the result is unclamped.
  *
- * @param {number} oldBits The 32 bit `bits` integer from a block header.
- * @param {number} newBits The 32 bit `bits` integer from a block header in the next difficulty period.
+ * @param {number} oldBits The 32 bit `bits` integer from an older block header.
+ * @param {number} newBits The 32 bit `bits` integer from a newer block header.
  * @returns {number} A floating point decimal of the difficulty change from old to new.
  *          (ie. 21.3 means 21.3% increase in difficulty, -21.3 is a 21.3% decrease in difficulty)
  */
@@ -50,132 +75,171 @@ export function calcBitsDifference(oldBits: number, newBits: number): number {
   verifyBits(oldBits);
   verifyBits(newBits);
 
-  // No need to mask exponents because we checked the bounds above
   const oldExp = oldBits >> 24;
   const newExp = newBits >> 24;
   const oldNum = oldBits & 0x007fffff;
   const newNum = newBits & 0x007fffff;
-  // The diff can only possibly be 1, 0, -1
-  // (because maximum difficulty change is x4 or /4 (2 bits up or down))
-  let result: number;
-  switch (newExp - oldExp) {
-    // New less than old, target lowered, difficulty increased
-    case -1:
-      result = ((oldNum << 8) * 100) / newNum - 100;
-      break;
-    // Same exponent, compare numbers as is.
-    case 0:
-      result = (oldNum * 100) / newNum - 100;
-      break;
-    // Old less than new, target raised, difficulty decreased
-    case 1:
-      result = (oldNum * 100) / (newNum << 8) - 100;
-      break;
-    default:
-      throw new Error('Impossible exponent difference');
-  }
 
-  // Min/Max values
-  return result > 300 ? 300 : result < -75 ? -75 : result;
+  // target = mantissa * 256^(exponent - 3), and difficulty is inversely
+  // proportional to the target, so the change is the ratio of the targets.
+  const targetRatio = (oldNum / newNum) * Math.pow(256, oldExp - newExp);
+  return (targetRatio - 1) * 100;
 }
 
-export function calcDifficultyAdjustment(
-  DATime: number,
-  quarterEpochTime: number | null,
-  nowSeconds: number,
-  blockHeight: number,
-  previousRetarget: number,
-  network: string,
-  latestBlockTimestamp: number,
-): DifficultyAdjustment {
-  const EPOCH_BLOCK_LENGTH = 2016; // Bitcoin mainnet
-  const BLOCK_SECONDS_TARGET = 600; // Bitcoin mainnet
-  const TESTNET_MAX_BLOCK_SECONDS = 1200; // Bitcoin testnet
+/**
+ * Expand a compact `bits` value into the full 256-bit target, hex encoded.
+ */
+export function bitsToTargetHex(bits: number): string {
+  const exponent = bits >> 24;
+  const mantissa = BigInt(bits & 0x007fffff);
+  const target = exponent >= 3
+    ? mantissa << (8n * BigInt(exponent - 3))
+    : mantissa >> (8n * BigInt(3 - exponent));
+  return target.toString(16).padStart(64, '0');
+}
 
-  const diffSeconds = Math.max(0, nowSeconds - DATime);
-  const blocksInEpoch = (blockHeight >= 0) ? blockHeight % EPOCH_BLOCK_LENGTH : 0;
-  const progressPercent = (blockHeight >= 0) ? blocksInEpoch / EPOCH_BLOCK_LENGTH * 100 : 100;
-  const remainingBlocks = EPOCH_BLOCK_LENGTH - blocksInEpoch;
-  const nextRetargetHeight = (blockHeight >= 0) ? blockHeight + remainingBlocks : 0;
-  const expectedBlocks = diffSeconds / BLOCK_SECONDS_TARGET;
-  const actualTimespan = (blocksInEpoch === 2015 ? latestBlockTimestamp : nowSeconds) - DATime;
-
-  let difficultyChange = 0;
-  let timeAvgSecs = blocksInEpoch ? diffSeconds / blocksInEpoch : BLOCK_SECONDS_TARGET;
-  let adjustedTimeAvgSecs = timeAvgSecs;
-
-  // for the first 504 blocks of the epoch, calculate the expected avg block interval
-  // from a sliding window over the last 504 blocks
-  if (quarterEpochTime && blocksInEpoch < 503) {
-    const timeLastEpoch = DATime - quarterEpochTime;
-    const adjustedTimeLastEpoch = timeLastEpoch * (1 + (previousRetarget / 100));
-    const adjustedTimeSpan = diffSeconds + adjustedTimeLastEpoch;
-    adjustedTimeAvgSecs = adjustedTimeSpan / 503;
-    difficultyChange = (BLOCK_SECONDS_TARGET / (adjustedTimeSpan / 504) - 1) * 100;
-  } else {
-    difficultyChange = (BLOCK_SECONDS_TARGET / (actualTimespan / (blocksInEpoch + 1)) - 1) * 100;
+/**
+ * Derive one lane's difficulty state from its anchors. change24h compares the
+ * lane's latest block against the most recent same-lane block mined at least
+ * 24h earlier; cross-lane bits are never compared.
+ */
+function calcLaneDifficultyState(anchor: AsertLaneAnchor): QbitLaneDifficultyState | null {
+  if (!anchor.latest) {
+    return null;
   }
 
-  // Max increase is x4 (+300%)
-  if (difficultyChange > 300) {
-    difficultyChange = 300;
-  }
-  // Max decrease is /4 (-75%)
-  if (difficultyChange < -75) {
-    difficultyChange = -75;
-  }
-
-  // Testnet difficulty is set to 1 after 20 minutes of no blocks,
-  // therefore the time between blocks will always be below 20 minutes (1200s).
-  let timeOffset = 0;
-  if (network === 'testnet') {
-    if (timeAvgSecs > TESTNET_MAX_BLOCK_SECONDS) {
-      timeAvgSecs = TESTNET_MAX_BLOCK_SECONDS;
-    }
-
-    const secondsSinceLastBlock = nowSeconds - latestBlockTimestamp;
-    if (secondsSinceLastBlock + timeAvgSecs > TESTNET_MAX_BLOCK_SECONDS) {
-      timeOffset = -Math.min(secondsSinceLastBlock, TESTNET_MAX_BLOCK_SECONDS) * 1000;
+  let change24h: number | null = null;
+  if (anchor.dayAgo && anchor.dayAgo.height <= anchor.latest.height) {
+    try {
+      change24h = calcBitsDifference(anchor.dayAgo.bits, anchor.latest.bits);
+    } catch (e) {
+      change24h = null;
     }
   }
-
-  const timeAvg = Math.floor(timeAvgSecs * 1000);
-  const adjustedTimeAvg = Math.floor(adjustedTimeAvgSecs * 1000);
-  const remainingTime = remainingBlocks * adjustedTimeAvg;
-  const estimatedRetargetDate = remainingTime + nowSeconds * 1000;
 
   return {
-    progressPercent,
-    difficultyChange,
-    estimatedRetargetDate,
-    remainingBlocks,
-    remainingTime,
-    previousRetarget,
-    previousTime: DATime,
-    nextRetargetHeight,
-    timeAvg,
-    adjustedTimeAvg,
-    timeOffset,
-    expectedBlocks,
+    difficulty: anchor.latest.difficulty,
+    bits: anchor.latest.bits,
+    target: bitsToTargetHex(anchor.latest.bits),
+    height: anchor.latest.height,
+    timestamp: anchor.latest.timestamp,
+    change24h,
+  };
+}
+
+/**
+ * Derive the continuous-DAA difficulty state from the chain tip and the two
+ * anchor blocks maintained by the blocks API: one ~60 blocks back (block
+ * spacing average) and one ~1440 blocks back (24h difficulty delta). Anchors
+ * may be missing right after startup or lag behind the tip after a transient
+ * fetch failure; both metrics degrade gracefully in that case.
+ *
+ * When per-lane anchors are provided, the headline difficulty fields are
+ * pinned to the permissionless lane so they stop flip-flopping with the lane
+ * of whichever block happens to be the tip.
+ */
+export function calcQbitDifficultyState(
+  latestBlock: { height: number; timestamp: number; bits: number; difficulty: number },
+  spacingAnchor: { height: number; timestamp: number } | null,
+  difficultyAnchor: { height: number; bits: number } | null,
+  targetSpacingMs: number,
+  laneAnchors: AsertLaneAnchors | null = null,
+): QbitDifficultyState {
+  let timeAvgMs = targetSpacingMs;
+  if (spacingAnchor && latestBlock.height > spacingAnchor.height) {
+    const avgMs = ((latestBlock.timestamp - spacingAnchor.timestamp) * 1000) / (latestBlock.height - spacingAnchor.height);
+    // block timestamps are not strictly monotonic; fall back to the target on nonsense windows
+    if (avgMs > 0) {
+      timeAvgMs = Math.floor(avgMs);
+    }
+  }
+
+  let change24h = 0;
+  if (difficultyAnchor && difficultyAnchor.height < latestBlock.height) {
+    try {
+      change24h = calcBitsDifference(difficultyAnchor.bits, latestBlock.bits);
+    } catch (e) {
+      change24h = 0;
+    }
+  }
+
+  const lanes = laneAnchors === null ? null : {
+    permissionless: calcLaneDifficultyState(laneAnchors.permissionless),
+    auxpow: calcLaneDifficultyState(laneAnchors.auxpow),
+  };
+
+  // the tip-block fallback only applies before lane anchors exist (or on the
+  // degenerate all-AuxPoW chain); its cross-lane change24h is unavoidable there
+  const headline = lanes?.permissionless ?? null;
+
+  return {
+    asertActive: true,
+    currentBits: headline ? headline.bits : latestBlock.bits,
+    currentTarget: headline ? headline.target : bitsToTargetHex(latestBlock.bits),
+    currentDifficulty: headline ? headline.difficulty : latestBlock.difficulty,
+    timeAvgMs,
+    targetSpacingMs,
+    change24h: headline ? (headline.change24h ?? 0) : change24h,
+    previousTime: latestBlock.timestamp * 1000,
+    timeAvg: timeAvgMs,
+    adjustedTimeAvg: timeAvgMs,
+    timeOffset: 0,
+    lanes,
   };
 }
 
 class DifficultyAdjustmentApi {
-  public getDifficultyAdjustment(): IDifficultyAdjustment | null {
-    const DATime = blocks.getLastDifficultyAdjustmentTime();
-    const previousRetarget = blocks.getPreviousDifficultyRetarget();
-    const blockHeight = blocks.getCurrentBlockHeight();
+  /**
+   * @param tipBlock overrides the blocks-cache tail as the chain tip. Required
+   * when handling a freshly mined block: the new-block websocket callbacks run
+   * before the block is appended to the cache, so without the override the
+   * payload would describe the previous block.
+   */
+  public getDifficultyAdjustment(
+    tipBlock?: { height: number; timestamp: number; bits: number; difficulty: number; version?: number },
+  ): QbitDifficultyState | null {
     const blocksCache = blocks.getBlocks();
-    const latestBlock = blocksCache[blocksCache.length - 1];
+    const latestBlock = tipBlock ?? blocksCache[blocksCache.length - 1];
     if (!latestBlock) {
       return null;
     }
-    const nowSeconds = Math.floor(new Date().getTime() / 1000);
-    const quarterEpochBlockTime = blocks.getQuarterEpochBlockTime();
+    const anchors: AsertAnchors = blocks.getAsertAnchors();
+    // the database lane anchors can lag the tip by a block (new-block
+    // callbacks run before the row is written), so overlay the tip onto its
+    // own lane to keep that lane's headline current. At equal height the tip
+    // block still wins: a same-height reorg replaces the block behind the
+    // cached anchor.
+    let laneAnchors = blocks.getAsertLaneAnchors();
+    if (laneAnchors && typeof latestBlock.version === 'number') {
+      const tipLane = laneOf(latestBlock.version, config.MEMPOOL.NETWORK);
+      const knownLatest = laneAnchors[tipLane].latest;
+      if (!knownLatest || latestBlock.height >= knownLatest.height) {
+        laneAnchors = {
+          ...laneAnchors,
+          [tipLane]: {
+            ...laneAnchors[tipLane],
+            latest: {
+              height: latestBlock.height,
+              timestamp: latestBlock.timestamp,
+              bits: latestBlock.bits,
+              difficulty: latestBlock.difficulty,
+            },
+          },
+        };
+      }
+    }
 
-    return calcDifficultyAdjustment(
-      DATime, quarterEpochBlockTime, nowSeconds, blockHeight, previousRetarget,
-      config.MEMPOOL.NETWORK, latestBlock.timestamp
+    return calcQbitDifficultyState(
+      {
+        height: latestBlock.height,
+        timestamp: latestBlock.timestamp,
+        bits: latestBlock.bits,
+        difficulty: latestBlock.difficulty,
+      },
+      anchors.hourAgo,
+      anchors.dayAgo,
+      config.MEMPOOL.BLOCK_TARGET_SPACING_SECONDS * 1000,
+      laneAnchors,
     );
   }
 }

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, Input, OnChanges, SimpleChanges, Output, EventEmitter, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, HostListener, Input, OnChanges, SimpleChanges, Output, EventEmitter } from '@angular/core';
 import { Subscription, Observable, of, combineLatest } from 'rxjs';
 import { MempoolBlock } from '@interfaces/websocket.interface';
 import { StateService } from '@app/services/state.service';
@@ -79,10 +79,6 @@ export class MempoolBlocksComponent implements OnInit, OnChanges, OnDestroy {
   maxArrowPosition = 0;
   rightPosition = 0;
   transition = 'background 2s, right 2s, transform 1s';
-  @ViewChild('arrowUp')
-  arrowElement: ElementRef<HTMLDivElement>;
-  acceleratingArrow: boolean = false;
-
   markIndex: number;
   txPosition: MempoolPosition;
   txFeePerVSize: number;
@@ -212,7 +208,6 @@ export class MempoolBlocksComponent implements OnInit, OnChanges, OnDestroy {
 
     this.markBlocksSubscription = this.stateService.markBlock$
       .subscribe((state) => {
-        const oldTxPosition = this.txPosition;
         this.markIndex = undefined;
         this.txPosition = undefined;
         this.txFeePerVSize = undefined;
@@ -221,12 +216,6 @@ export class MempoolBlocksComponent implements OnInit, OnChanges, OnDestroy {
         }
         if (state.mempoolPosition) {
           this.txPosition = state.mempoolPosition;
-          if (this.txPosition.accelerated && !oldTxPosition?.accelerated) {
-            this.acceleratingArrow = true;
-            setTimeout(() => {
-              this.acceleratingArrow = false;
-            }, 2000);
-          }
         }
         if (state.txFeePerVSize) {
           this.txFeePerVSize = state.txFeePerVSize;
@@ -326,7 +315,7 @@ export class MempoolBlocksComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   reduceEmptyBlocksToFitScreen(blocks: MempoolBlock[]): MempoolBlock[] {
-    const innerWidth = this.containerWidth || (this.stateService.env.BASE_MODULE !== 'liquid' && window.innerWidth <= 767.98 ? window.innerWidth : window.innerWidth / 2);
+    const innerWidth = this.containerWidth || (window.innerWidth <= 767.98 ? window.innerWidth : window.innerWidth / 2);
     let blocksAmount = this.stateService.env.MEMPOOL_BLOCKS_AMOUNT;
     if (!this.allBlocks) {
       blocksAmount = Math.min(this.stateService.env.MEMPOOL_BLOCKS_AMOUNT, Math.floor(innerWidth / (this.blockWidth + this.blockPadding)));
@@ -349,7 +338,7 @@ export class MempoolBlocksComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   reduceMempoolBlocksToFitScreen(blocks: MempoolBlock[]): MempoolBlock[] {
-    const innerWidth = this.containerWidth || (this.stateService.env.BASE_MODULE !== 'liquid' && window.innerWidth <= 767.98 ? window.innerWidth : window.innerWidth / 2);
+    const innerWidth = this.containerWidth || (window.innerWidth <= 767.98 ? window.innerWidth : window.innerWidth / 2);
     let blocksAmount = this.stateService.env.MEMPOOL_BLOCKS_AMOUNT;
     if (this.count) {
       blocksAmount = 8;

@@ -14,6 +14,8 @@ import { StateService } from '@app/services/state.service';
 import { MiningService } from '@app/services/mining.service';
 import { StorageService } from '@app/services/storage.service';
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
+import { getQbitSubsidySat, getQbitSubsidyStepInterval } from '@app/shared/qbit-subsidy';
+import { expectedBlocksForTimespan as getExpectedBlocksForTimespan } from '@app/shared/block-target.utils';
 
 @Component({
   selector: 'app-block-fees-subsidy-graph',
@@ -44,7 +46,6 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
 
   statsObservable$: Observable<any>;
   data: any;
-  subsidies: { [key: number]: number } = {};
   isLoading = true;
   formatNumber = formatNumber;
   timespan = '';
@@ -73,12 +74,11 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
     this.radioGroupForm = this.formBuilder.group({ dateSpan: '1y' });
     this.radioGroupForm.controls.dateSpan.setValue('1y');
 
-    this.subsidies = this.initSubsidies();
   }
 
   ngOnInit(): void {
     this.seoService.setTitle($localize`:@@41545303ec98792b738d6237adbd1f3b54a22196:Block Fees Vs Subsidy`);
-    this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.block-fees-subsidy:See the mining fees earned per Bitcoin block compared to the Bitcoin block subsidy, visualized in BTC and USD over time.`);
+    this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.block-fees-subsidy:See the mining fees earned per qbit block compared to the qbit block subsidy, visualized in QBT over time.`);
 
     this.miningWindowPreference = this.miningService.getDefaultTimespan('24h');
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
@@ -118,10 +118,10 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
                   blockHeight: response.body.map(val => val.avgHeight),
                   blockFees: response.body.map(val => val.avgFees / 100_000_000),
                   blockFeesFiat: response.body.filter(val => val['USD'] > 0).map(val => val.avgFees / 100_000_000 * val['USD']),
-                  blockFeesPercent: response.body.map(val => val.avgFees / (val.avgFees + this.subsidyAt(val.avgHeight)) * 100),
+                  blockFeesPercent: response.body.map(val => this.feesPercentAt(val.avgFees, val.avgHeight)),
                   blockSubsidy: response.body.map(val => this.subsidyAt(val.avgHeight) / 100_000_000),
                   blockSubsidyFiat: response.body.filter(val => val['USD'] > 0).map(val => this.subsidyAt(val.avgHeight) / 100_000_000 * val['USD']),
-                  blockSubsidyPercent: response.body.map(val => this.subsidyAt(val.avgHeight) / (val.avgFees + this.subsidyAt(val.avgHeight)) * 100),
+                  blockSubsidyPercent: response.body.map(val => this.subsidyPercentAt(val.avgFees, val.avgHeight)),
                 };
 
                 this.prepareChartOptions();
@@ -136,6 +136,10 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
         }),
         share()
       );
+  }
+
+  expectedBlocksForTimespan(timespan: string): number {
+    return getExpectedBlocksForTimespan(timespan, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
   }
 
   prepareChartOptions() {
@@ -187,11 +191,11 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
           for (let i = data.length - 1; i >= 0; i--) {
             const tick = data[i];
             tooltip += `${tick.marker} ${tick.seriesName.split(' ')[0]}: `;
-            if (this.displayMode === 'normal') {tooltip += `${formatNumber(tick.data, this.locale, '1.0-3')} BTC<br>`;}
+            if (this.displayMode === 'normal') {tooltip += `${formatNumber(tick.data, this.locale, '1.0-3')} QBT<br>`;}
             else if (this.displayMode === 'fiat') {tooltip += `${this.fiatCurrencyPipe.transform(tick.data, null, 'USD') }<br>`;}
             else {tooltip += `${formatNumber(tick.data, this.locale, '1.0-2')}%<br>`;}
           }
-          if (this.displayMode === 'normal') {tooltip += `<div style="margin-left: 2px">${formatNumber(data.reduce((acc, val) => acc + val.data, 0), this.locale, '1.0-3')} BTC</div>`;}
+          if (this.displayMode === 'normal') {tooltip += `<div style="margin-left: 2px">${formatNumber(data.reduce((acc, val) => acc + val.data, 0), this.locale, '1.0-3')} QBT</div>`;}
           else if (this.displayMode === 'fiat') {tooltip += `<div style="margin-left: 2px">${this.fiatCurrencyPipe.transform(data.reduce((acc, val) => acc + val.data, 0), null, 'USD')}</div>`;}
           if (['24h', '3d'].includes(this.zoomTimeSpan)) {
             tooltip += `<small>` + $localize`At block ${'<b style="color: white; margin-left: 2px">' + data[0].axisValue}` + `</small>`;
@@ -298,7 +302,7 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
           axisLabel: {
             color: 'var(--grey)',
             formatter: (val) => {
-              return `${val}${this.displayMode === 'percentage' ? '%' : ' BTC'}`;
+              return `${val}${this.displayMode === 'percentage' ? '%' : ' QBT'}`;
             }
           },
           min: 0,
@@ -476,18 +480,20 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
     return (window.innerWidth <= 767.98);
   }
 
-  initSubsidies(): { [key: number]: number } {
-    let blockReward = 50 * 100_000_000;
-    const subsidies = {};
-    for (let i = 0; i <= 33; i++) {
-      subsidies[i] = blockReward;
-      blockReward = Math.floor(blockReward / 2);
-    }
-    return subsidies;
+  subsidyAt(height: number): number {
+    return Number(getQbitSubsidySat(height, getQbitSubsidyStepInterval(this.stateService.network)));
   }
 
-  subsidyAt(height: number): number {
-    return this.subsidies[Math.floor(Math.min(height / 210000, 33))];
+  feesPercentAt(avgFees: number, height: number): number {
+    const subsidy = this.subsidyAt(height);
+    const total = avgFees + subsidy;
+    return total > 0 ? avgFees / total * 100 : 0;
+  }
+
+  subsidyPercentAt(avgFees: number, height: number): number {
+    const subsidy = this.subsidyAt(height);
+    const total = avgFees + subsidy;
+    return total > 0 ? subsidy / total * 100 : 0;
   }
 
   onZoom() {
@@ -511,10 +517,10 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
         this.data.blockHeight.splice(startIndex, endIndex - startIndex, ...response.body.map(val => val.avgHeight));
         this.data.blockFees.splice(startIndex, endIndex - startIndex, ...response.body.map(val => val.avgFees / 100_000_000));
         this.data.blockFeesFiat.splice(startIndex, endIndex - startIndex, ...response.body.filter(val => val['USD'] > 0).map(val => val.avgFees / 100_000_000 * val['USD']));
-        this.data.blockFeesPercent.splice(startIndex, endIndex - startIndex, ...response.body.map(val => val.avgFees / (val.avgFees + this.subsidyAt(val.avgHeight)) * 100));
+        this.data.blockFeesPercent.splice(startIndex, endIndex - startIndex, ...response.body.map(val => this.feesPercentAt(val.avgFees, val.avgHeight)));
         this.data.blockSubsidy.splice(startIndex, endIndex - startIndex, ...response.body.map(val => this.subsidyAt(val.avgHeight) / 100_000_000));
         this.data.blockSubsidyFiat.splice(startIndex, endIndex - startIndex, ...response.body.filter(val => val['USD'] > 0).map(val => this.subsidyAt(val.avgHeight) / 100_000_000 * val['USD']));
-        this.data.blockSubsidyPercent.splice(startIndex, endIndex - startIndex, ...response.body.map(val => this.subsidyAt(val.avgHeight) / (val.avgFees + this.subsidyAt(val.avgHeight)) * 100));
+        this.data.blockSubsidyPercent.splice(startIndex, endIndex - startIndex, ...response.body.map(val => this.subsidyPercentAt(val.avgFees, val.avgHeight)));
         option.series[0].data = this.data.blockSubsidy;
         option.series[1].data = this.data.blockFees;
         option.series[2].data = this.data.blockSubsidyFiat;

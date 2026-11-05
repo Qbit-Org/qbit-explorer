@@ -1,4 +1,4 @@
-import BlocksRepository from '../repositories/BlocksRepository';
+import BlocksRepository, { IncompleteHashrateWindowError } from '../repositories/BlocksRepository';
 import { setupTestDatabase, waitForDatabase, cleanupTestData, insertTestPool, insertTestBlock } from './test-helpers';
 
 describe('BlocksRepository Integration Tests', () => {
@@ -130,5 +130,42 @@ describe('BlocksRepository Integration Tests', () => {
       expect(block.extras.pool.slug).toBe('test-pool');
     }
   });
-});
 
+  test('should return a complete anchored hashrate window', async () => {
+    for (let height = 900000; height <= 900002; ++height) {
+      await insertTestBlock({
+        height,
+        hash: height.toString(16).padStart(64, '0'),
+        blockTimestamp: new Date((1_700_000_000 + (height - 900000) * 60) * 1000),
+        poolId: defaultPoolId,
+      });
+    }
+
+    const window = await BlocksRepository.$getHashrateWindow(2, 900002);
+
+    expect(window.map(block => block.height)).toEqual([900000, 900001, 900002]);
+  });
+
+  test('should reject hashrate windows with a missing anchor or height gap', async () => {
+    await insertTestBlock({
+      height: 900001,
+      hash: '900001'.padStart(64, '0'),
+      poolId: defaultPoolId,
+    });
+    await insertTestBlock({
+      height: 900002,
+      hash: '900002'.padStart(64, '0'),
+      poolId: defaultPoolId,
+    });
+
+    await expect(BlocksRepository.$getHashrateWindow(2, 900002)).rejects.toBeInstanceOf(IncompleteHashrateWindowError);
+    await expect(BlocksRepository.$getHashrateWindow(2, 900002)).rejects.toThrow('expected 3 including its anchor');
+
+    await insertTestBlock({
+      height: 899999,
+      hash: '899999'.padStart(64, '0'),
+      poolId: defaultPoolId,
+    });
+    await expect(BlocksRepository.$getHashrateWindow(2, 900002)).rejects.toThrow('not consecutive');
+  });
+});

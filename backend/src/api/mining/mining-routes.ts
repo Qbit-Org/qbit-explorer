@@ -3,13 +3,11 @@ import config from '../../config';
 import logger from '../../logger';
 import BlocksAuditsRepository from '../../repositories/BlocksAuditsRepository';
 import BlocksRepository from '../../repositories/BlocksRepository';
-import DifficultyAdjustmentsRepository from '../../repositories/DifficultyAdjustmentsRepository';
 import HashratesRepository from '../../repositories/HashratesRepository';
 import bitcoinClient from '../bitcoin/bitcoin-client';
+import difficultyAdjustment from '../difficulty-adjustment';
 import mining from './mining';
 import PricesRepository from '../../repositories/PricesRepository';
-import AccelerationRepository from '../../repositories/AccelerationRepository';
-import accelerationApi from '../services/acceleration';
 import { handleError } from '../../utils/api';
 
 class MiningRoutes {
@@ -31,6 +29,7 @@ class MiningRoutes {
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/blocks/fee-rates/:interval', this.$getHistoricalBlockFeeRates)
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/blocks/sizes-weights/:interval', this.$getHistoricalBlockSizeAndWeight)
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/difficulty-adjustments/:interval', this.$getDifficultyAdjustments)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'mining/block-spacing/:interval', this.$getBlockSpacing)
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/blocks/predictions/:interval', this.$getHistoricalBlocksHealth)
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/blocks/audit/scores', this.$getBlockAuditScores)
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/blocks/audit/scores/:height', this.$getBlockAuditScores)
@@ -38,13 +37,6 @@ class MiningRoutes {
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/blocks/audit/:hash', this.$getBlockAudit)
       .get(config.MEMPOOL.API_URL_PREFIX + 'mining/blocks/timestamp/:timestamp', this.$getHeightFromTimestamp)
       .get(config.MEMPOOL.API_URL_PREFIX + 'historical-price', this.$getHistoricalPrice)
-
-      .get(config.MEMPOOL.API_URL_PREFIX + 'accelerations/pool/:slug', this.$getAccelerationsByPool)
-      .get(config.MEMPOOL.API_URL_PREFIX + 'accelerations/block/:height', this.$getAccelerationsByHeight)
-      .get(config.MEMPOOL.API_URL_PREFIX + 'accelerations/recent/:interval', this.$getRecentAccelerations)
-      .get(config.MEMPOOL.API_URL_PREFIX + 'accelerations/total', this.$getAccelerationTotals)
-      .get(config.MEMPOOL.API_URL_PREFIX + 'accelerations', this.$getActiveAccelerations)
-      .post(config.MEMPOOL.API_URL_PREFIX + 'acceleration/request/:txid', this.$requestAcceleration)
     ;
   }
 
@@ -53,7 +45,7 @@ class MiningRoutes {
       res.header('Pragma', 'public');
       res.header('Cache-control', 'public');
       res.setHeader('Expires', new Date(Date.now() + 1000 * 300).toUTCString());
-      if (['testnet', 'signet', 'liquidtestnet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
+      if (['testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
         handleError(req, res, 400, 'Prices are not available on testnets.');
         return;
       }
@@ -181,27 +173,67 @@ class MiningRoutes {
   }
 
   private async $getHistoricalHashrate(req: Request, res: Response) {
-    let currentHashrate = 0, currentDifficulty = 0;
+    let currentHashrate = 0;
+    let currentHashratePermissionless = 0;
+    let currentHashrateAuxpow = 0;
+    let currentDifficulty = 0;
+    let currentDifficultyPermissionless: number | null = null;
+    let currentDifficultyAuxpow: number | null = null;
     try {
-      currentHashrate = await bitcoinClient.getNetworkHashPs(1008);
-      currentDifficulty = await bitcoinClient.getDifficulty();
+      const currentHashrates = await mining.$getCurrentHashrates('1w');
+      currentHashrate = currentHashrates.aggregate;
+      currentHashratePermissionless = currentHashrates.permissionless;
+      currentHashrateAuxpow = currentHashrates.auxpow;
     } catch (e) {
-      logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate and difficulty');
+      logger.debug('Indexed blocks are not available, using zeroed values for current hashrate');
+    }
+    // per-lane current difficulty from the lane-aware DAA state; the raw node
+    // getdifficulty flip-flops with whichever lane mined the tip block
+    const laneDifficulties = difficultyAdjustment.getDifficultyAdjustment()?.lanes ?? null;
+    currentDifficultyPermissionless = laneDifficulties?.permissionless?.difficulty ?? null;
+    currentDifficultyAuxpow = laneDifficulties?.auxpow?.difficulty ?? null;
+    if (currentDifficultyPermissionless !== null) {
+      currentDifficulty = currentDifficultyPermissionless;
+    } else {
+      try {
+        currentDifficulty = await bitcoinClient.getDifficulty();
+      } catch (e) {
+        logger.debug('qbit Core is not available, using a zeroed value for current difficulty');
+      }
     }
 
     try {
-      const hashrates = await HashratesRepository.$getNetworkDailyHashrate(req.params.interval);
-      const difficulty = await DifficultyAdjustmentsRepository.$getAdjustments(req.params.interval, false);
-      const blockCount = await BlocksRepository.$blockCount(null, null);
+      const [hashrates, networkHashrates, dailyDifficulty, blockCount] = await Promise.all([
+        HashratesRepository.$getNetworkDailyHashrate(req.params.interval, 'aggregate'),
+        HashratesRepository.$getCompleteNetworkDailyHashrates(req.params.interval),
+        BlocksRepository.$getDailyDifficulty(req.params.interval),
+        BlocksRepository.$blockCount(null, null),
+      ]);
+      const difficultyPermissionless = dailyDifficulty
+        .filter((point) => point.lane === 'permissionless')
+        .map(({ time, height, difficulty }) => ({ time, height, difficulty }));
+      const difficultyAuxpow = dailyDifficulty
+        .filter((point) => point.lane === 'auxpow')
+        .map(({ time, height, difficulty }) => ({ time, height, difficulty }));
       res.header('Pragma', 'public');
       res.header('Cache-control', 'public');
       res.header('X-total-count', blockCount.toString());
       res.setHeader('Expires', new Date(Date.now() + 1000 * 300).toUTCString());
       res.json({
-        hashrates: hashrates,
-        difficulty: difficulty,
-        currentHashrate: currentHashrate,
-        currentDifficulty: currentDifficulty,
+        hashrates,
+        hashratesAggregate: networkHashrates.aggregate,
+        hashratesPermissionless: networkHashrates.permissionless,
+        hashratesAuxpow: networkHashrates.auxpow,
+        // legacy field: pinned to the permissionless (native) lane
+        difficulty: difficultyPermissionless,
+        difficultyPermissionless,
+        difficultyAuxpow,
+        currentHashrate,
+        currentHashratePermissionless,
+        currentHashrateAuxpow,
+        currentDifficulty,
+        currentDifficultyPermissionless,
+        currentDifficultyAuxpow,
       });
     } catch (e) {
       handleError(req, res, 500, 'Failed to get historical hashrate');
@@ -286,15 +318,34 @@ class MiningRoutes {
     }
   }
 
+  /**
+   * qbit retargets every block via ASERT, so there is no retarget-event history.
+   * Keep the URL responding with an empty array for one release so stale clients
+   * degrade gracefully, then remove it.
+   */
   private async $getDifficultyAdjustments(req: Request, res: Response) {
+    res.header('Pragma', 'public');
+    res.header('Cache-control', 'public');
+    res.setHeader('Expires', new Date(Date.now() + 1000 * 300).toUTCString());
+    res.json([]);
+  }
+
+  private async $getBlockSpacing(req: Request, res: Response) {
     try {
-      const difficulty = await DifficultyAdjustmentsRepository.$getRawAdjustments(req.params.interval, true);
+      if (!['1h', '24h', '3d', '1w', '1m', '3m'].includes(req.params.interval)) {
+        handleError(req, res, 400, 'Invalid interval');
+        return;
+      }
+      const spacings = await mining.$getBlockSpacing(req.params.interval);
       res.header('Pragma', 'public');
       res.header('Cache-control', 'public');
-      res.setHeader('Expires', new Date(Date.now() + 1000 * 300).toUTCString());
-      res.json(difficulty.map(adj => [adj.time, adj.height, adj.difficulty, adj.adjustment]));
+      res.setHeader('Expires', new Date(Date.now() + 1000 * 60).toUTCString());
+      res.json({
+        spacings,
+        targetSpacing: config.MEMPOOL.BLOCK_TARGET_SPACING_SECONDS,
+      });
     } catch (e) {
-      handleError(req, res, 500, 'Failed to get historical difficulty adjustments');
+      handleError(req, res, 500, 'Failed to get block spacing');
     }
   }
 
@@ -389,93 +440,6 @@ class MiningRoutes {
     }
   }
 
-  private async $getAccelerationsByPool(req: Request, res: Response): Promise<void> {
-    try {
-      res.header('Pragma', 'public');
-      res.header('Cache-control', 'public');
-      res.setHeader('Expires', new Date(Date.now() + 1000 * 60).toUTCString());
-      if (!config.MEMPOOL_SERVICES.ACCELERATIONS || ['testnet', 'signet', 'liquidtestnet', 'liquid', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-        handleError(req, res, 400, 'Acceleration data is not available.');
-        return;
-      }
-      res.status(200).send(await AccelerationRepository.$getAccelerationInfo(req.params.slug));
-    } catch (e) {
-      handleError(req, res, 500, 'Failed to get accelerations by pool');
-    }
-  }
-
-  private async $getAccelerationsByHeight(req: Request, res: Response): Promise<void> {
-    try {
-      res.header('Pragma', 'public');
-      res.header('Cache-control', 'public');
-      res.setHeader('Expires', new Date(Date.now() + 1000 * 3600 * 24).toUTCString());
-      if (!config.MEMPOOL_SERVICES.ACCELERATIONS || ['testnet', 'signet', 'liquidtestnet', 'liquid', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-        handleError(req, res, 400, 'Acceleration data is not available.');
-        return;
-      }
-      const height = req.params.height === undefined ? undefined : parseInt(req.params.height, 10);
-      res.status(200).send(await AccelerationRepository.$getAccelerationInfo(null, height));
-    } catch (e) {
-      handleError(req, res, 500, 'Failed to get accelerations by height');
-    }
-  }
-
-  private async $getRecentAccelerations(req: Request, res: Response): Promise<void> {
-    try {
-      res.header('Pragma', 'public');
-      res.header('Cache-control', 'public');
-      res.setHeader('Expires', new Date(Date.now() + 1000 * 60).toUTCString());
-      if (!config.MEMPOOL_SERVICES.ACCELERATIONS || ['testnet', 'signet', 'liquidtestnet', 'liquid', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-        handleError(req, res, 400, 'Acceleration data is not available.');
-        return;
-      }
-      res.status(200).send(await AccelerationRepository.$getAccelerationInfo(null, null, req.params.interval));
-    } catch (e) {
-      handleError(req, res, 500, 'Failed to get recent accelerations');
-    }
-  }
-
-  private async $getAccelerationTotals(req: Request, res: Response): Promise<void> {
-    try {
-      res.header('Pragma', 'public');
-      res.header('Cache-control', 'public');
-      res.setHeader('Expires', new Date(Date.now() + 1000 * 60).toUTCString());
-      if (!config.MEMPOOL_SERVICES.ACCELERATIONS || ['testnet', 'signet', 'liquidtestnet', 'liquid', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-        handleError(req, res, 400, 'Acceleration data is not available.');
-        return;
-      }
-      res.status(200).send(await AccelerationRepository.$getAccelerationTotals(<string>req.query.pool, <string>req.query.interval));
-    } catch (e) {
-      handleError(req, res, 500, 'Failed to get acceleration totals');
-    }
-  }
-
-  private async $getActiveAccelerations(req: Request, res: Response): Promise<void> {
-    try {
-      res.header('Pragma', 'public');
-      res.header('Cache-control', 'public');
-      res.setHeader('Expires', new Date(Date.now() + 1000 * 60).toUTCString());
-      if (!config.MEMPOOL_SERVICES.ACCELERATIONS || ['testnet', 'signet', 'liquidtestnet', 'liquid', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-        handleError(req, res, 400, 'Acceleration data is not available.');
-        return;
-      }
-      res.status(200).send(Object.values(accelerationApi.getAccelerations() || {}));
-    } catch (e) {
-      handleError(req, res, 500, 'Failed to get active accelerations');
-    }
-  }
-
-  private async $requestAcceleration(req: Request, res: Response): Promise<void> {
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Cache-control', 'private, no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-    res.setHeader('expires', -1);
-    try {
-      accelerationApi.accelerationRequested(req.params.txid);
-      res.status(200).send();
-    } catch (e) {
-      handleError(req, res, 500, 'Failed to request acceleration');
-    }
-  }
 }
 
 export default new MiningRoutes();

@@ -2,22 +2,22 @@ import { Component, OnInit, OnDestroy, ViewChildren, QueryList, ChangeDetectorRe
 import { Location } from '@angular/common';
 import { ActivatedRoute, ParamMap, Params, Router } from '@angular/router';
 import { ElectrsApiService } from '@app/services/electrs-api.service';
-import { switchMap, tap, throttleTime, catchError, map, shareReplay, startWith, filter, take } from 'rxjs/operators';
+import { switchMap, tap, throttleTime, catchError, map, shareReplay, startWith, take } from 'rxjs/operators';
 import { Observable, of, Subscription, asyncScheduler, EMPTY, combineLatest, forkJoin } from 'rxjs';
 import { StateService } from '@app/services/state.service';
 import { SeoService } from '@app/services/seo.service';
 import { WebsocketService } from '@app/services/websocket.service';
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
-import { Acceleration, BlockAudit, BlockExtended, TransactionStripped } from '@interfaces/node-api.interface';
+import { BlockAudit, BlockExtended, TransactionStripped } from '@interfaces/node-api.interface';
 import { ApiService } from '@app/services/api.service';
 import { BlockOverviewGraphComponent } from '@components/block-overview-graph/block-overview-graph.component';
 import { detectWebGL } from '@app/shared/graphs.utils';
 import { seoDescriptionNetwork } from '@app/shared/common.utils';
 import { PriceService, Price } from '@app/services/price.service';
 import { CacheService } from '@app/services/cache.service';
-import { ServicesApiServices } from '@app/services/services-api.service';
 import { PreloadService } from '@app/services/preload.service';
 import { identifyPrioritizedTransactions } from '@app/shared/transaction.utils';
+import { vsizeToWeight } from '@app/shared/weight-units';
 
 interface ComparisonStats {
   totalFees: number;
@@ -56,7 +56,6 @@ export class BlockComponent implements OnInit, OnDestroy {
   latestBlocks: BlockExtended[] = [];
   oobFees: number = 0;
   strippedTransactions: TransactionStripped[];
-  accelerations: Acceleration[];
   overviewTransitionDirection: string;
   isLoadingOverview = true;
   error: any;
@@ -83,7 +82,6 @@ export class BlockComponent implements OnInit, OnDestroy {
 
   overviewSubscription: Subscription;
   canonicalSubscription: Subscription;
-  accelerationsSubscription: Subscription;
   keyNavigationSubscription: Subscription;
   blocksSubscription: Subscription;
   cacheBlocksSubscription: Subscription;
@@ -94,7 +92,6 @@ export class BlockComponent implements OnInit, OnDestroy {
   childChangeSubscription: Subscription;
   auditPrefSubscription: Subscription;
   isAuditEnabledSubscription: Subscription;
-  oobSubscription: Subscription;
   priceSubscription: Subscription;
   blockConversion: Price;
   canonicalBlock: BlockExtended;
@@ -118,7 +115,6 @@ export class BlockComponent implements OnInit, OnDestroy {
     private apiService: ApiService,
     private priceService: PriceService,
     private cacheService: CacheService,
-    private servicesApiService: ServicesApiServices,
     private cd: ChangeDetectorRef,
     private preloadService: PreloadService,
   ) {
@@ -213,7 +209,6 @@ export class BlockComponent implements OnInit, OnDestroy {
           this.isLoadingOverview = true;
           this.strippedTransactions = undefined;
           this.blockAudit = undefined;
-          this.accelerations = undefined;
 
           let blockInCache: BlockExtended;
           if (isBlockHeight) {
@@ -287,7 +282,7 @@ export class BlockComponent implements OnInit, OnDestroy {
         if( this.stateService.network === 'liquid' || this.stateService.network === 'liquidtestnet' ) {
           this.seoService.setDescription($localize`:@@meta.description.liquid.block:See size, weight, fee range, included transactions, and more for Liquid${seoDescriptionNetwork(this.stateService.network)} block ${block.height}:BLOCK_HEIGHT: (${block.id}:BLOCK_ID:).`);
         } else {
-          this.seoService.setDescription($localize`:@@meta.description.bitcoin.block:See size, weight, fee range, included transactions, audit (expected v actual), and more for Bitcoin${seoDescriptionNetwork(this.stateService.network)} block ${block.height}:BLOCK_HEIGHT: (${block.id}:BLOCK_ID:).`);
+          this.seoService.setDescription($localize`:@@meta.description.bitcoin.block:See size, weight, fee range, included transactions, and more for qbit${seoDescriptionNetwork(this.stateService.network)} block ${block.height}:BLOCK_HEIGHT: (${block.id}:BLOCK_ID:).`);
         }
         this.isLoadingBlock = false;
         this.setBlockSubsidy();
@@ -383,49 +378,6 @@ export class BlockComponent implements OnInit, OnDestroy {
       this.isLoadingOverview = false;
     });
 
-    this.accelerationsSubscription = this.block$.pipe(
-      switchMap((block) => {
-        return this.stateService.env.ACCELERATOR === true && block.height > 819500 && this.stateService.network === ''
-          ? this.servicesApiService.getAllAccelerationHistory$({ blockHeight: block.height })
-            .pipe(catchError(() => {
-              return of([]);
-            }))
-          : of([]);
-      })
-    ).subscribe((accelerations) => {
-      this.accelerations = accelerations;
-      if (accelerations.length && this.strippedTransactions) { // Don't call setupBlockAudit if we don't have transactions yet; it will be called later in overviewSubscription
-        this.setupBlockAudit();
-      }
-    });
-
-    this.oobSubscription = this.block$.pipe(
-      filter(() => this.stateService.env.PUBLIC_ACCELERATIONS === true && this.stateService.network === ''),
-      switchMap((block) => this.apiService.getAccelerationsByHeight$(block.height)
-        .pipe(
-          map(accelerations => {
-            return { block, accelerations };
-          }),
-          catchError(() => {
-            return of({ block, accelerations: [] });
-        }))
-      ),
-    ).subscribe(({ block, accelerations}) => {
-      let totalFees = 0;
-      for (const acc of accelerations) {
-        totalFees += acc.boost_cost;
-      }
-      this.oobFees = totalFees;
-      if (block && this.block && this.blockAudit && block?.height === this.block?.height) {
-        this.blockAudit.feeDelta = this.blockAudit.expectedFees > 0 ? (this.blockAudit.expectedFees - (this.block.extras.totalFees + this.oobFees)) / this.blockAudit.expectedFees : 0;
-      }
-    },
-    (error) => {
-      this.error = error;
-      this.isLoadingBlock = false;
-      this.isLoadingOverview = false;
-    });
-
     this.networkChangedSubscription = this.stateService.networkChanged$
       .subscribe((network) => this.network = network);
 
@@ -489,7 +441,6 @@ export class BlockComponent implements OnInit, OnDestroy {
     this.stateService.markBlock$.next({});
     this.overviewSubscription?.unsubscribe();
     this.canonicalSubscription?.unsubscribe();
-    this.accelerationsSubscription?.unsubscribe();
     this.keyNavigationSubscription?.unsubscribe();
     this.blocksSubscription?.unsubscribe();
     this.cacheBlocksSubscription?.unsubscribe();
@@ -499,7 +450,6 @@ export class BlockComponent implements OnInit, OnDestroy {
     this.childChangeSubscription?.unsubscribe();
     this.auditPrefSubscription?.unsubscribe();
     this.isAuditEnabledSubscription?.unsubscribe();
-    this.oobSubscription?.unsubscribe();
     this.priceSubscription?.unsubscribe();
     this.blockGraphProjected.forEach(graph => {
       graph.destroy();
@@ -648,14 +598,14 @@ export class BlockComponent implements OnInit, OnDestroy {
     for (const tx of staleTransactions) {
       inStale[tx.txid] = tx;
       this.staleStats.totalFees += tx.fee;
-      this.staleStats.totalWeight += tx.vsize * 4;
+      this.staleStats.totalWeight += vsizeToWeight(tx.vsize);
       this.staleStats.totalVsize += tx.vsize;
       this.staleStats.txCount++;
     }
     for (const tx of canonicalTransactions) {
       inCanonical[tx.txid] = tx;
       this.canonicalStats.totalFees += tx.fee;
-      this.canonicalStats.totalWeight += tx.vsize * 4;
+      this.canonicalStats.totalWeight += vsizeToWeight(tx.vsize);
       this.canonicalStats.totalVsize += tx.vsize;
       this.canonicalStats.txCount++;
     }
@@ -686,9 +636,9 @@ export class BlockComponent implements OnInit, OnDestroy {
       }
     }
 
-    // if vsize was rounded, the total weight we calculated isn't exact and can exceed the 4MB limit
-    this.staleStats.totalWeight = Math.min(this.staleStats.totalWeight, 4_000_000);
-    this.canonicalStats.totalWeight = Math.min(this.canonicalStats.totalWeight, 4_000_000);
+    // if vsize was rounded, the total weight we calculated isn't exact and can exceed the configured limit
+    this.staleStats.totalWeight = Math.min(this.staleStats.totalWeight, this.stateService.env.BLOCK_WEIGHT_UNITS);
+    this.canonicalStats.totalWeight = Math.min(this.canonicalStats.totalWeight, this.stateService.env.BLOCK_WEIGHT_UNITS);
 
     this.staleStats.feeDelta = this.canonicalStats.totalFees > 0 ? (this.staleStats.totalFees - this.canonicalStats.totalFees) / this.canonicalStats.totalFees : (this.canonicalStats.totalFees > 0 ? Infinity : -Infinity);
     this.staleStats.weightDelta = this.canonicalStats.totalWeight > 0 ? (this.staleStats.totalWeight - this.canonicalStats.totalWeight) / this.canonicalStats.totalWeight : (this.canonicalStats.totalWeight > 0 ? Infinity : -Infinity);
@@ -702,27 +652,9 @@ export class BlockComponent implements OnInit, OnDestroy {
   setupBlockAudit(): void {
     const transactions = this.strippedTransactions || [];
     const blockAudit = this.blockAudit;
-    const accelerations = this.accelerations || [];
-
-    const acceleratedInBlock = {};
-    for (const acc of accelerations) {
-      if (acc.pools?.some(pool => pool === this.block?.extras?.pool.id)) {
-        acceleratedInBlock[acc.txid] = acc;
-      }
-    }
 
     for (const tx of transactions) {
-      if (acceleratedInBlock[tx.txid]) {
-        tx.acc = true;
-        const acceleration = acceleratedInBlock[tx.txid];
-        const boostCost = acceleration.boostCost || acceleration.bidBoost;
-        const acceleratedFeeRate = Math.max(acceleration.effectiveFee, acceleration.effectiveFee + boostCost) / acceleration.effectiveVsize;
-        if (acceleratedFeeRate > tx.rate) {
-          tx.rate = acceleratedFeeRate;
-        }
-      } else {
-        tx.acc = false;
-      }
+      tx.acc = false;
     }
 
     if (transactions && blockAudit) {

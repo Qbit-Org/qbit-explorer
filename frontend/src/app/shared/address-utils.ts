@@ -17,45 +17,74 @@ export type AddressType = 'fee'
   | 'v0_p2wpkh'
   | 'v0_p2wsh'
   | 'v1_p2tr'
+  | 'v2_p2mr'
   | 'confidential'
   | 'anchor'
   | 'unknown'
 
+export interface AddressNetworkParams {
+  base58: {
+    pubkey: string[];
+    script: string[];
+    confidential?: string[];
+  };
+  bech32: string;
+  bech32Hrp: string;
+  p2pkhVersion: number;
+  p2shVersion: number;
+  confidential?: string;
+}
+
 const ADDRESS_PREFIXES = {
   mainnet: {
     base58: {
-      pubkey: ['1'],
-      script: ['3'],
+      pubkey: ['Q'],
+      script: ['S'],
     },
-    bech32: 'bc1',
+    bech32: 'qb1',
+    bech32Hrp: 'qb',
+    p2pkhVersion: 0x3a,
+    p2shVersion: 0x3f,
   },
   testnet: {
     base58: {
-      pubkey: ['m', 'n'],
-      script: '2',
+      pubkey: ['q'],
+      script: ['s'],
     },
-    bech32: 'tb1',
+    bech32: 'tq1',
+    bech32Hrp: 'tq',
+    p2pkhVersion: 0x78,
+    p2shVersion: 0x7d,
   },
   testnet4: {
     base58: {
-      pubkey: ['m', 'n'],
-      script: '2',
+      pubkey: ['q'],
+      script: ['s'],
     },
-    bech32: 'tb1',
+    bech32: 'tq1',
+    bech32Hrp: 'tq',
+    p2pkhVersion: 0x78,
+    p2shVersion: 0x7d,
   },
   signet: {
     base58: {
-      pubkey: ['m', 'n'],
-      script: '2',
+      pubkey: ['q'],
+      script: ['s'],
     },
-    bech32: 'tb1',
+    bech32: 'tq1',
+    bech32Hrp: 'tq',
+    p2pkhVersion: 0x78,
+    p2shVersion: 0x7d,
   },
   regtest: {
     base58: {
-      pubkey: ['m', 'n'],
-      script: '2',
+      pubkey: ['q'],
+      script: ['s'],
     },
-    bech32: 'bcrt1',
+    bech32: 'qbrt1',
+    bech32Hrp: 'qbrt',
+    p2pkhVersion: 0x78,
+    p2shVersion: 0x7d,
   },
   liquid: {
     base58: {
@@ -64,6 +93,9 @@ const ADDRESS_PREFIXES = {
       confidential: ['V'],
     },
     bech32: 'ex1',
+    bech32Hrp: 'ex',
+    p2pkhVersion: 0x00,
+    p2shVersion: 0x05,
     confidential: 'lq1',
   },
   liquidtestnet: {
@@ -73,9 +105,16 @@ const ADDRESS_PREFIXES = {
       confidential: ['V'], // TODO: check if this is actually correct
     },
     bech32: 'tex1',
+    bech32Hrp: 'tex',
+    p2pkhVersion: 0x6f,
+    p2shVersion: 0xc4,
     confidential: 'tlq1',
   },
 };
+
+export function getAddressNetworkParams(network: string): AddressNetworkParams {
+  return ADDRESS_PREFIXES[network || 'mainnet'] || ADDRESS_PREFIXES.mainnet;
+}
 
 // precompiled regexes for common address types (excluding prefixes)
 const base58Regex = RegExp('^' + BASE58_CHARS + '{26,34}$');
@@ -83,24 +122,32 @@ const confidentialb58Regex = RegExp('^[TJ]' + BASE58_CHARS + '{78}$');
 const p2wpkhRegex = RegExp('^q' + BECH32_CHARS_LW + '{38}$');
 const p2wshRegex = RegExp('^q' + BECH32_CHARS_LW + '{58}$');
 const p2trRegex = RegExp('^p' + BECH32_CHARS_LW + '{58}$');
+const p2mrRegex = RegExp('^z' + BECH32_CHARS_LW + '{58}$');
 const pubkeyRegex = RegExp('^' + `(04${HEX_CHARS}{128})|(0[23]${HEX_CHARS}{64})$`);
 
 export function detectAddressType(address: string, network: string): AddressType {
   network = network || 'mainnet';
+  const addressLower = address.toLowerCase();
+  const prefixes = getAddressNetworkParams(network);
   // normal address types
   const firstChar = address.substring(0, 1);
-  if (ADDRESS_PREFIXES[network].base58.pubkey.includes(firstChar) && base58Regex.test(address.slice(1))) {
+  if (prefixes.base58.pubkey.includes(firstChar) && base58Regex.test(address.slice(1))) {
     return 'p2pkh';
-  } else if (ADDRESS_PREFIXES[network].base58.script.includes(firstChar) && base58Regex.test(address.slice(1))) {
+  } else if (prefixes.base58.script.includes(firstChar) && base58Regex.test(address.slice(1))) {
     return 'p2sh';
-  } else if (address.startsWith(ADDRESS_PREFIXES[network].bech32)) {
-    const suffix = address.slice(ADDRESS_PREFIXES[network].bech32.length);
+  } else if (addressLower.startsWith(prefixes.bech32)) {
+    if (/[a-z]/.test(address) && /[A-Z]/.test(address)) {
+      return 'unknown';
+    }
+    const suffix = addressLower.slice(prefixes.bech32.length);
     if (p2wpkhRegex.test(suffix)) {
       return 'v0_p2wpkh';
     } else if (p2wshRegex.test(suffix)) {
       return 'v0_p2wsh';
     } else if (p2trRegex.test(suffix)) {
       return 'v1_p2tr';
+    } else if (p2mrRegex.test(suffix)) {
+      return 'v2_p2mr';
     }
   }
 
@@ -111,9 +158,9 @@ export function detectAddressType(address: string, network: string): AddressType
 
   // liquid-specific types
   if (network.startsWith('liquid')) {
-    if (ADDRESS_PREFIXES[network].base58.confidential.includes(firstChar) && confidentialb58Regex.test(address.slice(1))) {
+    if (prefixes.base58.confidential.includes(firstChar) && confidentialb58Regex.test(address.slice(1))) {
       return 'confidential';
-    } else if (address.startsWith(ADDRESS_PREFIXES[network].confidential)) {
+    } else if (address.startsWith(prefixes.confidential)) {
       return 'confidential';
     }
   }
@@ -347,7 +394,7 @@ export function compareAddressInfo(a: AddressTypeInfo, b: AddressTypeInfo): Addr
   if (a.type !== b.type) {
     return { status: 'incomparable' };
   }
-  if (!['p2pkh', 'p2sh', 'p2sh-p2wpkh', 'p2sh-p2wsh', 'v0_p2wpkh', 'v0_p2wsh', 'v1_p2tr'].includes(a.type)) {
+  if (!['p2pkh', 'p2sh', 'p2sh-p2wpkh', 'p2sh-p2wsh', 'v0_p2wpkh', 'v0_p2wsh', 'v1_p2tr', 'v2_p2mr'].includes(a.type)) {
     return { status: 'incomparable' };
   }
   const isBase58 = a.type === 'p2pkh' || a.type === 'p2sh';
@@ -355,7 +402,7 @@ export function compareAddressInfo(a: AddressTypeInfo, b: AddressTypeInfo): Addr
   const left = fuzzyPrefixMatch(a.address, b.address);
   const right = fuzzyPrefixMatch(a.address, b.address, true);
   // depending on address type, some number of matching prefix characters are guaranteed
-  const prefixScore = isBase58 ? 1 : (ADDRESS_PREFIXES[a.network || 'mainnet'].bech32.length + 1);
+  const prefixScore = isBase58 ? 1 : (getAddressNetworkParams(a.network).bech32.length + 1);
 
   // add the two scores together
   const totalScore = left.score + right.score - prefixScore;
@@ -393,4 +440,3 @@ export function checkedCompareAddressStrings(a: string, b: string, type: Address
     { address: b, type: type, network: network } as AddressTypeInfo,
   );
 }
-

@@ -6,17 +6,33 @@
     <div class="pool-distribution" *ngIf="(hashrateObservable$ | async) as hashrates; else loadingStats">
       <div class="item">
         <h5 class="card-title" i18n="mining.hashrate">Hashrate (1w)</h5>
-        <p class="card-text">
+        <p class="card-text"
+          data-cy="current-hashrate"
+          [class.hashrate-breakdown-trigger]="hashrates.hasLaneHashrateBreakdown"
+          [attr.tabindex]="hashrates.hasLaneHashrateBreakdown ? 0 : null"
+          [ngbTooltip]="hashrateBreakdown"
+          [tooltipContext]="{ hashrates: hashrates }"
+          [disableTooltip]="!hashrates.hasLaneHashrateBreakdown"
+          container="body"
+          placement="bottom">
           {{ hashrates.currentHashrate | amountShortener: 3 : 'H/s' : false : true }}
+          <fa-icon *ngIf="hashrates.hasLaneHashrateBreakdown" class="hashrate-breakdown-icon"
+            [icon]="['fas', 'info-circle']" [fixedWidth]="true" aria-hidden="true"></fa-icon>
         </p>
       </div>
       <div class="item">
         <h5 class="card-title" i18n="block.difficulty">Difficulty</h5>
-        <p class="card-text" *ngIf="network === 'signet'">
-          {{ hashrates.currentDifficulty | amountShortener : 5 }}
-        </p>
-        <p class="card-text" *ngIf="network !== 'signet'">
-          {{ hashrates.currentDifficulty | amountShortener : 2 }}
+        <p class="card-text"
+          [class.hashrate-breakdown-trigger]="hashrates.hasLaneDifficultyBreakdown"
+          [attr.tabindex]="hashrates.hasLaneDifficultyBreakdown ? 0 : null"
+          [ngbTooltip]="difficultyBreakdown"
+          [tooltipContext]="{ hashrates: hashrates }"
+          [disableTooltip]="!hashrates.hasLaneDifficultyBreakdown"
+          container="body"
+          placement="bottom">
+          {{ hashrates.currentDifficulty | amountShortener : (network === 'signet' ? 5 : 2) }}
+          <fa-icon *ngIf="hashrates.hasLaneDifficultyBreakdown" class="hashrate-breakdown-icon"
+            [icon]="['fas', 'info-circle']" [fixedWidth]="true" aria-hidden="true"></fa-icon>
         </p>
       </div>
     </div>
@@ -32,19 +48,19 @@
 
     <form [formGroup]="radioGroupForm" class="formRadioGroup" *ngIf="(hashrateObservable$ | async) as stats">
       <div class="btn-group btn-group-toggle" name="radioBasic">
-        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= 12960" [class.active]="radioGroupForm.get('dateSpan').value === '3m'">
+        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= expectedBlocksForTimespan('3m')" [class.active]="radioGroupForm.get('dateSpan').value === '3m'">
           <input type="radio" [value]="'3m'" fragment="3m" [routerLink]="['/graphs/mining/hashrate-difficulty' | relativeUrl]" [attr.data-cy]="'3m'" formControlName="dateSpan"> 3M
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= 25920" [class.active]="radioGroupForm.get('dateSpan').value === '6m'">
+        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= expectedBlocksForTimespan('6m')" [class.active]="radioGroupForm.get('dateSpan').value === '6m'">
           <input type="radio" [value]="'6m'" fragment="6m" [routerLink]="['/graphs/mining/hashrate-difficulty' | relativeUrl]" [attr.data-cy]="'6m'" formControlName="dateSpan"> 6M
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= 52560" [class.active]="radioGroupForm.get('dateSpan').value === '1y'">
+        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= expectedBlocksForTimespan('1y')" [class.active]="radioGroupForm.get('dateSpan').value === '1y'">
           <input type="radio" [value]="'1y'" fragment="1y" [routerLink]="['/graphs/mining/hashrate-difficulty' | relativeUrl]" [attr.data-cy]="'1y'" formControlName="dateSpan"> 1Y
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= 105120" [class.active]="radioGroupForm.get('dateSpan').value === '2y'">
+        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= expectedBlocksForTimespan('2y')" [class.active]="radioGroupForm.get('dateSpan').value === '2y'">
           <input type="radio" [value]="'2y'" fragment="2y" [routerLink]="['/graphs/mining/hashrate-difficulty' | relativeUrl]" [attr.data-cy]="'2y'" formControlName="dateSpan"> 2Y
         </label>
-        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= 157680" [class.active]="radioGroupForm.get('dateSpan').value === '3y'">
+        <label class="btn btn-primary btn-sm" *ngIf="stats.blockCount >= expectedBlocksForTimespan('3y')" [class.active]="radioGroupForm.get('dateSpan').value === '3y'">
           <input type="radio" [value]="'3y'" fragment="3y" [routerLink]="['/graphs/mining/hashrate-difficulty' | relativeUrl]" [attr.data-cy]="'3y'" formControlName="dateSpan"> 3Y
         </label>
         <label class="btn btn-primary btn-sm" [class.active]="radioGroupForm.get('dateSpan').value === 'all'">
@@ -54,7 +70,7 @@
     </form>
   </div>
 
-  <div [class]="!widget ? 'chart' : 'chart-widget'" *browserOnly [style]="{ height: widget ? ((height + 20) + 'px') : null, opacity: isLoading ? 0.5 : 1 }" echarts [initOpts]="chartInitOptions" [options]="chartOptions"
+  <div [class]="!widget ? 'chart' : 'chart-widget'" *browserOnly data-cy="hashrate-chart" [style]="{ height: widget ? ((height + 20) + 'px') : null, opacity: isLoading ? 0.5 : 1 }" echarts [initOpts]="chartInitOptions" [options]="chartOptions"
     (chartInit)="onChartInit($event)">
   </div>
   <div class="text-center loadingGraphs" *ngIf="!stateService.isBrowser || isLoading">
@@ -62,6 +78,32 @@
   </div>
 
 </div>
+
+<ng-template #hashrateBreakdown let-hashrates="hashrates">
+  <div data-cy="hashrate-lane-breakdown">
+    <div>
+      <strong i18n="cadence.permissionless|Permissionless mining lane label">Permissionless</strong>:
+      {{ hashrates.currentHashratePermissionless | amountShortener: 3 : 'H/s' : false : true }}
+    </div>
+    <div>
+      <strong i18n="cadence.auxpow|AuxPoW mining lane label">AuxPoW</strong>:
+      {{ hashrates.currentHashrateAuxpow | amountShortener: 3 : 'H/s' : false : true }}
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #difficultyBreakdown let-hashrates="hashrates">
+  <div data-cy="difficulty-lane-breakdown">
+    <div>
+      <strong i18n="cadence.permissionless|Permissionless mining lane label">Permissionless</strong>:
+      {{ hashrates.currentDifficultyPermissionless | amountShortener: 2 }}
+    </div>
+    <div>
+      <strong i18n="cadence.auxpow|AuxPoW mining lane label">AuxPoW</strong>:
+      {{ hashrates.currentDifficultyAuxpow | amountShortener: 2 }}
+    </div>
+  </div>
+</ng-template>
 
 <ng-template #loadingStats>
   <div class="pool-distribution">

@@ -5,27 +5,43 @@ on:
     types: [opened, review_requested, synchronize]
   push:
     branches:
-      - master
+      - main
+      - develop-qbit
+
+# Read-only token; the job needs no secrets, so fork pull requests run it too.
+permissions:
+  contents: read
 
 jobs:
   backend-integration:
     if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
     strategy:
       matrix:
-        node: ["24.13.0"]
+        node: ["26.12.1"]
       fail-fast: false
-    runs-on: mempool-ci
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+      # backend/docker-compose.test.yml publishes MariaDB on this host port,
+      # 33306 by default. 33306 was sometimes already taken on the runner
+      # ("address already in use"), so 0 lets Docker pick a free port.
+      # jest.integration.setup.ts and the server test below read it back with
+      # "docker compose port".
+      MEMPOOL_TEST_DB_HOST_PORT: "0"
+      # A Docker host can run several jobs, so give each its own containers
+      # instead of the "backend" project the directory name implies
+      COMPOSE_PROJECT_NAME: mempool-integration-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
 
     name: Backend Integration Tests - node ${{ matrix.node }}
-    
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: ${{ matrix.node }}/integration
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
           registry-url: "https://registry.npmjs.org"
@@ -36,14 +52,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ matrix.node }}/integration/backend/node_modules
-          key: ${{ runner.os }}-backend-integration-node-${{ matrix.node }}-${{ hashFiles('${{ matrix.node }}/integration/backend/package-lock.json') }}
+          key: ${{ runner.os }}-backend-integration-node-${{ matrix.node }}-${{ hashFiles(format('{0}/integration/backend/package-lock.json', matrix.node)) }}
           restore-keys: |
             ${{ runner.os }}-backend-integration-node-${{ matrix.node }}-
             ${{ runner.os }}-backend-integration-
 
       - name: Read rust-toolchain file from repository
         id: gettoolchain
-        run: echo "::set-output name=toolchain::$(cat ./rust/gbt/rust-toolchain)"
+        run: echo "toolchain=$(cat ./rust/gbt/rust-toolchain)" >> "$GITHUB_OUTPUT"
         working-directory: ${{ matrix.node }}/integration
 
       - name: Cache Rust dependencies
@@ -55,13 +71,13 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             ${{ matrix.node }}/integration/rust/gbt/target/
-          key: ${{ runner.os }}-cargo-integration-${{ hashFiles('${{ matrix.node }}/integration/rust/gbt/**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-integration-${{ hashFiles(format('{0}/integration/rust/gbt/**/Cargo.lock', matrix.node)) }}
           restore-keys: |
             ${{ runner.os }}-cargo-integration-
             ${{ runner.os }}-cargo-
 
       - name: Install ${{ steps.gettoolchain.outputs.toolchain }} Rust toolchain
-        uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
         with:
           toolchain: ${{ steps.gettoolchain.outputs.toolchain }}
 
@@ -90,7 +106,18 @@ jobs:
           MEMPOOL_CONFIG_FILE: ${{ github.workspace }}/${{ matrix.node }}/integration/backend/mempool-config.test.json
 
       - name: Start MariaDB for server test
-        run: docker compose -f docker-compose.test.yml up -d
+        run: |
+          docker compose -f docker-compose.test.yml up -d
+          # Docker picked the host port; give the server a copy of the test
+          # config that uses it
+          published=$(docker compose -f docker-compose.test.yml port db-test 3306)
+          port=${published##*:}
+          if ! [[ $port =~ ^[0-9]+$ ]]; then
+            echo "::error::'docker compose port db-test 3306' printed '$published', not a host port"
+            exit 1
+          fi
+          echo "MariaDB is on host port $port"
+          jq --argjson port "$port" '.DATABASE.PORT = $port' mempool-config.test.json > "$RUNNER_TEMP/mempool-config.server-test.json"
         working-directory: ${{ matrix.node }}/integration/backend
 
       - name: Wait for MariaDB
@@ -129,17 +156,19 @@ jobs:
           fi
         working-directory: ${{ matrix.node }}/integration/backend
         env:
-          MEMPOOL_CONFIG_FILE: ${{ github.workspace }}/${{ matrix.node }}/integration/backend/mempool-config.test.json
+          MEMPOOL_CONFIG_FILE: ${{ runner.temp }}/mempool-config.server-test.json
+
+      # Before the cleanup, which removes the containers and their logs
+      - name: Display logs on failure
+        if: failure()
+        run: |
+          echo "=== MariaDB containers ==="
+          docker compose -f docker-compose.test.yml ps -a || true
+          echo "=== MariaDB logs ==="
+          docker compose -f docker-compose.test.yml logs db-test || true
+        working-directory: ${{ matrix.node }}/integration/backend
 
       - name: Cleanup containers
         if: always()
         run: docker compose -f docker-compose.test.yml down -v
         working-directory: ${{ matrix.node }}/integration/backend
-
-      - name: Display logs on failure
-        if: failure()
-        run: |
-          echo "=== MariaDB logs ==="
-          docker compose -f docker-compose.test.yml logs db-test || true
-        working-directory: ${{ matrix.node }}/integration/backend
-

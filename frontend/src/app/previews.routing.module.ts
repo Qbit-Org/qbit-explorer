@@ -3,7 +3,6 @@ import { RouterModule, Routes } from '@angular/router';
 import { TransactionPreviewComponent } from '@components/transaction/transaction-preview.component';
 import { BlockPreviewComponent } from '@components/block/block-preview.component';
 import { AddressPreviewComponent } from '@components/address/address-preview.component';
-import { WalletPreviewComponent } from '@components/wallet/wallet-preview.component';
 import { PoolPreviewComponent } from '@components/pool/pool-preview.component';
 import { MasterPagePreviewComponent } from '@components/master-page-preview/master-page-preview.component';
 
@@ -22,23 +21,23 @@ const routes: Routes = [
         component: AddressPreviewComponent
       },
       {
-        path: 'wallet/:wallet',
-        children: [],
-        component: WalletPreviewComponent
-      },
-      {
         path: 'tx/:id',
         children: [],
         component: TransactionPreviewComponent
       },
       {
-        path: 'mining/pool/:slug',
-        component: PoolPreviewComponent
+        path: 'mining/pool/prismpool',
+        pathMatch: 'full',
+        redirectTo: 'mining/pool/qbitpool',
       },
       {
-        path: 'lightning',
-        loadChildren: () => import('@app/lightning/lightning-previews.module').then(m => m.LightningPreviewsModule),
-        data: { preload: true },
+        path: 'mining/pool/qbitpoolbysatflow',
+        pathMatch: 'full',
+        redirectTo: 'mining/pool/qbitpool',
+      },
+      {
+        path: 'mining/pool/:slug',
+        component: PoolPreviewComponent
       },
     ],
   }

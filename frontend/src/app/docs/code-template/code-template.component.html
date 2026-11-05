@@ -11,9 +11,6 @@
       <a ngbNavLink (click)="adjustContainerHeight( $event )" role="tab">CommonJS</a>
       <ng-template ngbNavContent>
         <div class="subtitle"><ng-container i18n="API Docs code example">Code Example</ng-container> <app-clipboard [text]="wrapCommonJS(code)"></app-clipboard></div>
-        <div class="links">
-          <a [href]="npmGithubLink()" target="_blank">GitHub Repo</a>
-        </div>
         <pre><code [innerText]="wrapCommonJS(code)"></code></pre>
       </ng-template>
     </li>
@@ -21,16 +18,12 @@
       <a ngbNavLink (click)="adjustContainerHeight( $event )" role="tab">ES Module</a>
       <ng-template ngbNavContent>
         <div class="subtitle"><ng-container i18n="API Docs install lib">Install Package</ng-container> <app-clipboard [text]="wrapImportTemplate()"></app-clipboard></div>
-        <div class="links">
-          <a [href]="npmGithubLink()" target="_blank">GitHub Repo</a>
-          <a [href]="npmModuleLink()" target="_blank">NPM Package</a>
-        </div>
         <pre><code [innerText]="wrapImportTemplate()"></code></pre>
         <div class="subtitle"><ng-container i18n="API Docs code example">Code Example</ng-container> <app-clipboard [text]="wrapEsModule(code)"></app-clipboard></div>
         <pre><code [innerText]="wrapEsModule(code)"></code></pre>
       </ng-template>
     </li>
-    <li ngbNavItem *ngIf="code.codeTemplate.python && network !== 'liquid' && network !== 'liquidtestnet'" role="presentation">
+    <li ngbNavItem *ngIf="code.codeTemplate.python" role="presentation">
       <a ngbNavLink (click)="adjustContainerHeight( $event )" role="tab">Python</a>
       <ng-template ngbNavContent>
         <div class="subtitle"><ng-container i18n="API Docs code example">Code Example</ng-container> <app-clipboard [text]="wrapPythonTemplate(code)"></app-clipboard></div>

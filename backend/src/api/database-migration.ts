@@ -7,7 +7,7 @@ import cpfpRepository from '../repositories/CpfpRepository';
 import { RowDataPacket } from 'mysql2';
 
 class DatabaseMigration {
-  private static currentVersion = 106;
+  private static currentVersion = 112;
   private queryTimeout = 3600_000;
   private statisticsAddedIndexed = false;
   private uniqueLogs: string[] = [];
@@ -107,6 +107,9 @@ class DatabaseMigration {
     await this.$setStatisticsAddedIndexedFlag(databaseSchemaVersion);
 
     const isBitcoin = ['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK);
+    // Preserve the shipped pre-qbit migration history. Config validation prevents
+    // these legacy network values from being selected by a running qbit backend.
+    const legacyNetwork: string = config.MEMPOOL.NETWORK;
 
     await this.$executeQuery(this.getCreateElementsTableQuery(), await this.$checkIfTableExists('elements_pegs'));
     await this.$executeQuery(this.getCreateStatisticsQuery(), await this.$checkIfTableExists('statistics'));
@@ -569,7 +572,7 @@ class DatabaseMigration {
       await this.updateToSchemaVersion(67);
     }
 
-    if (databaseSchemaVersion < 68 && config.MEMPOOL.NETWORK === 'liquid') {
+    if (databaseSchemaVersion < 68 && legacyNetwork === 'liquid') {
       await this.$executeQuery('TRUNCATE TABLE elements_pegs');
       await this.$executeQuery('ALTER TABLE elements_pegs ADD PRIMARY KEY (txid, txindex);');
       await this.$executeQuery(`UPDATE state SET number = 0 WHERE name = 'last_elements_block';`);
@@ -593,7 +596,7 @@ class DatabaseMigration {
       await this.updateToSchemaVersion(70);
     }
 
-    if (databaseSchemaVersion < 71 && config.MEMPOOL.NETWORK === 'liquid') {
+    if (databaseSchemaVersion < 71 && legacyNetwork === 'liquid') {
       await this.$executeQuery('TRUNCATE TABLE elements_pegs');
       await this.$executeQuery('TRUNCATE TABLE federation_txos');
       await this.$executeQuery('SET FOREIGN_KEY_CHECKS = 0');
@@ -779,7 +782,7 @@ class DatabaseMigration {
     }
 
     // elements_pegs indexes
-    if (databaseSchemaVersion < 92 && config.MEMPOOL.NETWORK === 'liquid') {
+    if (databaseSchemaVersion < 92 && legacyNetwork === 'liquid') {
       await this.$executeQuery(`
         ALTER TABLE \`elements_pegs\`
           ADD INDEX \`block\` (\`block\`),
@@ -792,7 +795,7 @@ class DatabaseMigration {
     }
 
     // federation_txos indexes
-    if (databaseSchemaVersion < 93 && config.MEMPOOL.NETWORK === 'liquid') {
+    if (databaseSchemaVersion < 93 && legacyNetwork === 'liquid') {
       await this.$executeQuery(`
         ALTER TABLE \`federation_txos\`
           ADD INDEX \`unspent\` (\`unspent\`),
@@ -1074,7 +1077,7 @@ class DatabaseMigration {
         await this.$executeQuery('ALTER TABLE `blocks_audits` ADD INDEX `time` (`time`)');
       }
 
-      if (config.MEMPOOL.NETWORK !== 'liquid') {
+      if (legacyNetwork !== 'liquid') {
         // Apply all the liquid specific migrations to all other networks
         // Version 68
         await this.$executeQuery('ALTER TABLE elements_pegs ADD PRIMARY KEY (txid, txindex);');
@@ -1183,7 +1186,7 @@ class DatabaseMigration {
 
     // reindex liquid federation addresses and txos when needed, and add hardcoded federation addresses
     // (safe to make this conditional on the network since it doesn't change the database schema)
-    if (databaseSchemaVersion < 105 && config.MEMPOOL.NETWORK === 'liquid') {
+    if (databaseSchemaVersion < 105 && legacyNetwork === 'liquid') {
       // Hardcoded federation addresses
       await this.$executeQuery(`INSERT IGNORE INTO federation_addresses (bitcoinaddress) VALUES ('3G6neksSBMp51kHJ2if8SeDUrzT8iVETWT')`);
       await this.$executeQuery(`INSERT IGNORE INTO federation_addresses (bitcoinaddress) VALUES ('bc1qwnevjp8nsq7adu3hxlvdvslrf242q4vuavfg0y929jp2zntp3vgq7cq6z2')`);
@@ -1204,7 +1207,7 @@ class DatabaseMigration {
 
     // another liquid failure, fix bad timelocks on federation txos
     // (safe to make this conditional on the network since it doesn't change the database schema)
-    if (databaseSchemaVersion < 106 && config.MEMPOOL.NETWORK === 'liquid') {
+    if (databaseSchemaVersion < 106 && legacyNetwork === 'liquid') {
       // In a specific setup it's possible that 3G6neksSBMp51kHJ2if8SeDUrzT8iVETWT and bc1qwnevjp8nsq7adu3hxlvdvslrf242q4vuavfg0y929jp2zntp3vgq7cq6z2
       // were set with a timelock of 2016 instead of 4032
       // This rollbacks the tables to before bc1qwnevjp8nsq7adu3hxlvdvslrf242q4vuavfg0y929jp2zntp3vgq7cq6z2 is used, and 
@@ -1221,6 +1224,127 @@ class DatabaseMigration {
         await this.$executeQuery(`UPDATE state SET number = 929700 WHERE name = 'last_bitcoin_block_audit';`);
       }
       await this.updateToSchemaVersion(106);
+    }
+
+    // qbit retargets every block via ASERT, so the per-epoch retarget table is obsolete;
+    // spacing and difficulty history are computed from the blocks table instead
+    if (databaseSchemaVersion < 107) {
+      await this.$executeQuery('DROP TABLE IF EXISTS `difficulty_adjustments`');
+      await this.updateToSchemaVersion(107);
+    }
+
+    // Persist qbit Cadence lanes and allow one aggregate plus two lane-specific
+    // network hashrate rows at each timestamp. Existing hashrates remain the
+    // aggregate series through the column default. Block lane classification
+    // intentionally uses the canonical top-bit shape and AuxPoW flag only;
+    // chain-ID expectations are network-aware diagnostics in qbit-version.ts,
+    // not part of lane classification.
+    if (databaseSchemaVersion < 108) {
+      if (!await this.$checkIfColumnExists('blocks', 'lane')) {
+        await this.$executeQuery(`ALTER TABLE \`blocks\`
+          ADD \`lane\` ENUM('permissionless', 'auxpow') NOT NULL DEFAULT 'permissionless' AFTER \`version\``);
+      }
+      await this.$executeQuery(`UPDATE \`blocks\`
+        SET \`lane\` = CASE
+          WHEN (\`version\` & 3758096384) = 536870912 AND (\`version\` & 256) != 0 THEN 'auxpow'
+          ELSE 'permissionless'
+        END
+        WHERE \`lane\` != CASE
+          WHEN (\`version\` & 3758096384) = 536870912 AND (\`version\` & 256) != 0 THEN 'auxpow'
+          ELSE 'permissionless'
+        END`);
+      if (!await this.$checkIfIndexExists('blocks', 'lane_block_timestamp')) {
+        await this.$executeQuery('ALTER TABLE `blocks` ADD INDEX `lane_block_timestamp` (`lane`, `blockTimestamp`)');
+      }
+
+      // Older MariaDB defaults can silently attach ON UPDATE CURRENT_TIMESTAMP
+      // to the first TIMESTAMP column. Lane backfill upserts must never move a
+      // historical sample to the current time.
+      await this.$executeQuery('ALTER TABLE `hashrates` MODIFY `hashrate_timestamp` TIMESTAMP NOT NULL DEFAULT 0');
+      if (!await this.$checkIfColumnExists('hashrates', 'lane')) {
+        await this.$executeQuery(`ALTER TABLE \`hashrates\`
+          ADD \`lane\` ENUM('aggregate', 'permissionless', 'auxpow') NOT NULL DEFAULT 'aggregate' AFTER \`type\``);
+      }
+      const hasLegacyHashrateIndex = await this.$checkIfIndexExists('hashrates', 'hashrate_timestamp_pool_id');
+      const hasLaneHashrateIndex = await this.$checkIfIndexExists('hashrates', 'hashrate_timestamp_pool_id_lane');
+      if (hasLegacyHashrateIndex && !hasLaneHashrateIndex) {
+        // Keep the uniqueness transition atomic so an older backend sharing the
+        // database never gets a window in which duplicate aggregate rows can
+        // be inserted.
+        await this.$executeQuery(`ALTER TABLE \`hashrates\`
+          DROP INDEX \`hashrate_timestamp_pool_id\`,
+          ADD UNIQUE \`hashrate_timestamp_pool_id_lane\` (\`hashrate_timestamp\`, \`pool_id\`, \`lane\`)`);
+      } else {
+        if (!hasLaneHashrateIndex) {
+          await this.$executeQuery(`ALTER TABLE \`hashrates\`
+            ADD UNIQUE \`hashrate_timestamp_pool_id_lane\` (\`hashrate_timestamp\`, \`pool_id\`, \`lane\`)`);
+        }
+        if (hasLegacyHashrateIndex) {
+          await this.$executeQuery('ALTER TABLE `hashrates` DROP INDEX `hashrate_timestamp_pool_id`');
+        }
+      }
+      await this.updateToSchemaVersion(108);
+    }
+
+    // AuxPoW-lane pool identifiers: qbit blocks embed the parent-chain
+    // (Bitcoin) coinbase in their AuxPoW payload, and pools can be recognized
+    // from its coinbase tags and payout addresses in addition to their
+    // qbit-side identifiers. Kept in separate columns so parent-chain
+    // evidence is never matched against qbit coinbases (and vice versa).
+    // NULL means "not imported yet" and is treated as an empty list.
+    if (databaseSchemaVersion < 109) {
+      if (!await this.$checkIfColumnExists('pools', 'parent_addresses')) {
+        await this.$executeQuery('ALTER TABLE `pools` ADD `parent_addresses` text NULL AFTER `addresses`');
+      }
+      if (!await this.$checkIfColumnExists('pools', 'parent_regexes')) {
+        await this.$executeQuery('ALTER TABLE `pools` ADD `parent_regexes` text NULL AFTER `regexes`');
+      }
+
+      // blocks.header was sized for an 80-byte pure header (160 hex chars),
+      // which truncated (or, under strict SQL modes, rejected) serialized
+      // AuxPoW headers that carry the parent-chain coinbase. Widen it; the
+      // lazy block migration (BlocksRepository.$migrateBlocksToV2) then
+      // repairs affected AuxPoW-lane rows in place from the node — at any
+      // depth, stale rows included — so no indexed history is dropped.
+      // Permissionless headers are exactly 160 hex chars and were never
+      // truncated.
+      await this.$executeQuery('ALTER TABLE `blocks` MODIFY `header` mediumtext NOT NULL');
+
+      await this.updateToSchemaVersion(109);
+    }
+
+    // Pool payout addresses normally match when they appear anywhere in a
+    // coinbase. Some operator addresses are also used as partial template
+    // payouts, so definitions can instead require the address to receive the
+    // entire positive coinbase reward.
+    if (databaseSchemaVersion < 110) {
+      if (!await this.$checkIfColumnExists('pools', 'address_match_mode')) {
+        await this.$executeQuery('ALTER TABLE `pools` ADD `address_match_mode` ENUM(\'any\', \'full_reward\') NOT NULL DEFAULT \'any\' AFTER `addresses`');
+      }
+      await this.updateToSchemaVersion(110);
+    }
+
+    // Retain the exact positive coinbase payout evidence used by guarded pool
+    // address matching. The older coinbase_addresses set loses output values
+    // and positive outputs without a decodable address, so it cannot safely
+    // reproduce full-reward decisions on later pool-definition migrations.
+    if (databaseSchemaVersion < 111) {
+      if (!await this.$checkIfColumnExists('blocks', 'coinbase_payouts')) {
+        await this.$executeQuery('ALTER TABLE `blocks` ADD `coinbase_payouts` JSON DEFAULT NULL AFTER `coinbase_addresses`');
+      }
+      await this.updateToSchemaVersion(111);
+    }
+
+    // Weekly per-pool hashrate rows were derived from overall block share
+    // times the aggregate network rate, which mixes the two Cadence lanes and
+    // inflates permissionless-lane pools by orders of magnitude. Drop only
+    // those rows so the indexer regenerates them with per-lane attribution:
+    // daily network rows are already lane-correct, and instances with a
+    // finite block index could not rebuild their older daily history.
+    if (databaseSchemaVersion < 112) {
+      await this.$executeQuery(`DELETE FROM hashrates WHERE type = 'weekly'`);
+      this.uniqueLog(logger.notice, `weekly pool rows have been deleted from 'hashrates' for lane-aware re-indexing.`);
+      await this.updateToSchemaVersion(112);
     }
   }
 
@@ -1274,6 +1398,26 @@ class DatabaseMigration {
     const query = `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '${config.DATABASE.DATABASE}' AND TABLE_NAME = '${table}'`;
     const [rows] = await DB.query({ sql: query, timeout: this.queryTimeout });
     return rows[0]['COUNT(*)'] === 1;
+  }
+
+  /** @asyncUnsafe */
+  private async $checkIfColumnExists(table: string, column: string): Promise<boolean> {
+    const query = `SELECT COUNT(*) FROM information_schema.columns
+      WHERE table_schema = '${config.DATABASE.DATABASE}'
+      AND table_name = '${table}'
+      AND column_name = '${column}'`;
+    const [rows] = await DB.query({ sql: query, timeout: this.queryTimeout });
+    return rows[0]['COUNT(*)'] === 1;
+  }
+
+  /** @asyncUnsafe */
+  private async $checkIfIndexExists(table: string, index: string): Promise<boolean> {
+    const query = `SELECT COUNT(*) FROM information_schema.statistics
+      WHERE table_schema = '${config.DATABASE.DATABASE}'
+      AND table_name = '${table}'
+      AND index_name = '${index}'`;
+    const [rows] = await DB.query({ sql: query, timeout: this.queryTimeout });
+    return rows[0]['COUNT(*)'] > 0;
   }
 
   /**
@@ -1335,9 +1479,12 @@ class DatabaseMigration {
   private getMigrationQueriesFromVersion(version: number): string[] {
     const queries: string[] = [];
     const isBitcoin = ['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK);
+    // See $createMissingTablesAndIndexes: these comparisons document schema
+    // history but cannot be selected by the qbit-only runtime configuration.
+    const legacyNetwork: string = config.MEMPOOL.NETWORK;
 
     if (version < 1) {
-      if (config.MEMPOOL.NETWORK !== 'liquid' && config.MEMPOOL.NETWORK !== 'liquidtestnet') {
+      if (legacyNetwork !== 'liquid' && legacyNetwork !== 'liquidtestnet') {
         if (version > 0) {
           logger.notice(`MIGRATIONS: Migrating (shifting) statistics table data`);
         }
@@ -1557,7 +1704,7 @@ class DatabaseMigration {
       ADD segwit_total_txs int unsigned NOT NULL,
       ADD segwit_total_size int unsigned NOT NULL,
       ADD segwit_total_weight int unsigned NOT NULL,
-      ADD header varchar(160) NOT NULL,
+      ADD header mediumtext NOT NULL,
       ADD utxoset_change int NOT NULL,
       ADD utxoset_size int unsigned NULL,
       ADD total_input_amt bigint unsigned NULL
@@ -1800,12 +1947,11 @@ class DatabaseMigration {
 
   /** @asyncUnsafe */
   public async $blocksReindexingTruncate(): Promise<void> {
-    logger.warn(`Truncating pools, blocks, hashrates and difficulty_adjustments tables for re-indexing (using '--reindex-blocks'). You can cancel this command within 5 seconds`);
+    logger.warn(`Truncating pools, blocks and hashrates tables for re-indexing (using '--reindex-blocks'). You can cancel this command within 5 seconds`);
     await Common.sleep$(5000);
 
     await this.$executeQuery(`TRUNCATE blocks`);
     await this.$executeQuery(`TRUNCATE hashrates`);
-    await this.$executeQuery(`TRUNCATE difficulty_adjustments`);
     await this.$executeQuery('DELETE FROM `pools`');
     await this.$executeQuery('ALTER TABLE pools AUTO_INCREMENT = 1');
     await this.$executeQuery(`UPDATE state SET string = NULL WHERE name = 'pools_json_sha'`);

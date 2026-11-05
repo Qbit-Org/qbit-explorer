@@ -2,7 +2,7 @@ import config from '../config';
 import bitcoinApi, { bitcoinCoreApi } from './bitcoin/bitcoin-api-factory';
 import logger from '../logger';
 import memPool from './mempool';
-import { BlockExtended, BlockExtension, BlockSummary, PoolTag, TransactionExtended, TransactionMinerInfo, CpfpSummary, MempoolTransactionExtended, TransactionClassified, BlockAudit, TransactionAudit } from '../mempool.interfaces';
+import { AsertAnchors, AsertLaneAnchors, BlockExtended, BlockExtension, BlockSummary, PoolMatchCoinbaseOutput, PoolTag, TransactionExtended, TransactionMinerInfo, CpfpSummary, MempoolTransactionExtended, TransactionClassified, BlockAudit, TransactionAudit } from '../mempool.interfaces';
 import { Common } from './common';
 import diskCache from './disk-cache';
 import transactionUtils from './transaction-utils';
@@ -21,34 +21,35 @@ import BlocksSummariesRepository from '../repositories/BlocksSummariesRepository
 import BlocksAuditsRepository from '../repositories/BlocksAuditsRepository';
 import cpfpRepository from '../repositories/CpfpRepository';
 import mining from './mining/mining';
-import DifficultyAdjustmentsRepository from '../repositories/DifficultyAdjustmentsRepository';
 import PricesRepository from '../repositories/PricesRepository';
 import priceUpdater from '../tasks/price-updater';
 import chainTips from './chain-tips';
 import websocketHandler from './websocket-handler';
 import redisCache from './redis-cache';
 import rbfCache from './rbf-cache';
-import { calcBitsDifference } from './difficulty-adjustment';
-import AccelerationRepository from '../repositories/AccelerationRepository';
 import { calculateFastBlockCpfp, calculateGoodBlockCpfp } from './cpfp';
 import mempool from './mempool';
 import CpfpRepository from '../repositories/CpfpRepository';
 import { parseDATUMTemplateCreator } from '../utils/bitcoin-script';
 import database from '../database';
 import { getBlockFirstSeenFromLogs, getOldestLogTimestampFromLogs, scanLogsForBlocksFirstSeen } from '../utils/file-read';
+import { decodeQbitBlockVersion } from '../utils/qbit-version';
+import { parseAuxPowParentCoinbase, summarizeAuxPowHeader } from '../utils/qbit-auxpow';
+import { expectedBlocksForSeconds } from '../utils/block-target';
+import { feeRatePerVsize, vsizeToWeight, weightToFractionalVsize } from '../utils/weight-units';
 
 class Blocks {
   private blocks: BlockExtended[] = [];
   private blockSummaries: BlockSummary[] = [];
   private currentBlockHeight = 0;
-  private currentBits = 0;
-  private lastDifficultyAdjustmentTime = 0;
-  private previousDifficultyRetarget = 0;
-  private quarterEpochBlockTime: number | null = null;
-  private newBlockCallbacks: ((block: BlockExtended, txIds: string[], transactions: TransactionExtended[]) => void)[] = [];
+  private initialSyncComplete = false;
+  private asertAnchors: AsertAnchors = { hourAgo: null, dayAgo: null };
+  private asertLaneAnchors: AsertLaneAnchors | null = null;
+  private asertAnchorTip = -1;
   private newAsyncBlockCallbacks: ((block: BlockExtended, txIds: string[], transactions: MempoolTransactionExtended[]) => Promise<void>)[] = [];
   private classifyingBlocks: boolean = false;
   private oldestCoreLogTimestamp: number | undefined | null = undefined;
+  private poolCacheRefreshNeeded: boolean = false;
 
   private mainLoopTimeout: number = 120000;
 
@@ -56,6 +57,54 @@ class Blocks {
 
   public getBlocks(): BlockExtended[] {
     return this.blocks;
+  }
+
+  /**
+   * Re-sync the in-memory tip cache (and its disk/redis copies) with the
+   * database after block rows changed underneath it, e.g. when a pool
+   * definition import re-attributes blocks or a lazy migration repairs
+   * truncated AuxPoW headers.
+   *
+   * @asyncUnsafe
+   */
+  public async $refreshCachedBlocks(): Promise<void> {
+    for (const block of this.blocks) {
+      const reindexedBlock = await this.$indexBlock(block.id);
+      // never shorten a header: a cached block indexed live from the node can
+      // be fuller than a database row still awaiting AuxPoW header repair
+      if ((reindexedBlock.extras.header?.length ?? 0) >= (block.extras.header?.length ?? 0)) {
+        block.extras.pool = reindexedBlock.extras.pool;
+        block.extras.header = reindexedBlock.extras.header;
+        block.extras.auxpow = reindexedBlock.extras.auxpow ?? null;
+      } else {
+        // a row awaiting repair had its pool attributed from the truncated
+        // header, so never let it downgrade a known cached attribution to
+        // Unknown; known attributions (e.g. re-matched through qbit-side
+        // identifiers, which need no header) still propagate
+        if (reindexedBlock.extras.pool.id !== 0 || block.extras.pool.id === 0) {
+          block.extras.pool = reindexedBlock.extras.pool;
+        }
+        // the kept cached header is authoritative; derive the parent data
+        // from it for blocks cached before the auxpow field existed
+        block.extras.auxpow = block.extras.auxpow ?? summarizeAuxPowHeader(block.extras.header);
+      }
+    }
+    void diskCache.$saveCacheToDisk();
+    void redisCache.$updateBlocks(this.blocks);
+  }
+
+  private async $refreshPoolCacheIfNeeded(): Promise<void> {
+    if (!this.poolCacheRefreshNeeded) {
+      return;
+    }
+    try {
+      await this.$refreshCachedBlocks();
+      this.poolCacheRefreshNeeded = false;
+    } catch (e) {
+      // Keep the flag set so the next address-indexing pass retries even
+      // though the atomically updated rows are no longer selected as NULL.
+      logger.warn(`Cannot refresh cached blocks after coinbase pool re-attribution, will retry. Reason: ${(e instanceof Error ? e.message : e)}`);
+    }
   }
 
   public setBlocks(blocks: BlockExtended[]) {
@@ -68,10 +117,6 @@ class Blocks {
 
   public setBlockSummaries(blockSummaries: BlockSummary[]) {
     this.blockSummaries = blockSummaries;
-  }
-
-  public setNewBlockCallback(fn: (block: BlockExtended, txIds: string[], transactions: TransactionExtended[]) => void) {
-    this.newBlockCallbacks.push(fn);
   }
 
   public setNewAsyncBlockCallback(fn: (block: BlockExtended, txIds: string[], transactions: MempoolTransactionExtended[]) => Promise<void>) {
@@ -209,13 +254,10 @@ class Blocks {
    * @returns BlockSummary
    */
   public summarizeBlock(block: IBitcoinApi.VerboseBlock): BlockSummary {
-    if (Common.isLiquid()) {
-      block = this.convertLiquidFees(block);
-    }
     const stripped = block.tx.map((tx: IBitcoinApi.VerboseTransaction) => {
       return {
         txid: tx.txid,
-        vsize: tx.weight / 4,
+        vsize: weightToFractionalVsize(tx.weight),
         fee: tx.fee ? Math.round(tx.fee * 100000000) : 0,
         value: Math.round(tx.vout.reduce((acc, vout) => acc + (vout.value ? vout.value : 0), 0) * 100000000),
         flags: 0,
@@ -235,15 +277,6 @@ class Blocks {
     };
   }
 
-  private convertLiquidFees(block: IBitcoinApi.VerboseBlock): IBitcoinApi.VerboseBlock {
-    block.tx.forEach(tx => {
-      if (!isFinite(Number(tx.fee))) {
-        tx.fee = Object.values(tx.fee || {}).reduce((total, output) => total + output, 0);
-      }
-    });
-    return block;
-  }
-
   /**
    * Return a block with additional data (reward, coinbase, fees...)
    * @param block
@@ -258,6 +291,7 @@ class Blocks {
     const blk: Partial<BlockExtended> = Object.assign({}, block);
     const extras: Partial<BlockExtension> = {};
 
+    extras.cadence = decodeQbitBlockVersion(block.version, config.MEMPOOL.NETWORK);
     extras.reward = transactions[0].vout.reduce((acc, curr) => acc + curr.value, 0);
     extras.coinbaseRaw = coinbaseTx.vin[0].scriptsig;
     extras.orphans = chainTips.getOrphanedBlocksAtHeight(blk.height);
@@ -307,7 +341,7 @@ class Blocks {
       }
     }
 
-    extras.virtualSize = block.weight / 4.0;
+    extras.virtualSize = weightToFractionalVsize(block.weight);
     if (coinbaseTx?.vout.length > 0) {
       extras.coinbaseAddress = coinbaseTx.vout[0].scriptpubkey_address ?? null;
       extras.coinbaseAddresses = [...new Set<string>(coinbaseTx.vout.map(v => v.scriptpubkey_address).filter(a => a) as string[])];
@@ -322,6 +356,7 @@ class Blocks {
 
     const header = await bitcoinClient.getBlockHeader(block.id, false);
     extras.header = header;
+    extras.auxpow = summarizeAuxPowHeader(header);
 
     const coinStatsIndex = indexer.isCoreIndexReady('coinstatsindex');
     if (coinStatsIndex !== null && coinStatsIndex.best_block_height >= block.height) {
@@ -333,51 +368,49 @@ class Blocks {
       extras.totalInputAmt = null;
     }
 
-    if (['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-      let pool: PoolTag;
-      if (coinbaseTx !== undefined) {
-        pool = await this.$findBlockMiner(coinbaseTx);
+    let pool: PoolTag;
+    if (coinbaseTx !== undefined) {
+      pool = await this.$findBlockMiner(coinbaseTx, header);
+    } else {
+      if (config.DATABASE.ENABLED === true) {
+        pool = await poolsRepository.$getUnknownPool();
       } else {
-        if (config.DATABASE.ENABLED === true) {
-          pool = await poolsRepository.$getUnknownPool();
-        } else {
-          pool = poolsParser.unknownPool;
-        }
+        pool = poolsParser.unknownPool;
       }
+    }
 
-      if (!pool) { // We should never have this situation in practise
-        logger.warn(`Cannot assign pool to block ${blk.height} and 'unknown' pool does not exist. ` +
-          `Check your "pools" table entries`);
-      } else {
-        extras.pool = {
-          id: pool.uniqueId,
-          name: pool.name,
-          slug: pool.slug,
-          minerNames: null,
-        };
+    if (!pool) { // We should never have this situation in practise
+      logger.warn(`Cannot assign pool to block ${blk.height} and 'unknown' pool does not exist. ` +
+        `Check your "pools" table entries`);
+    } else {
+      extras.pool = {
+        id: pool.uniqueId,
+        name: pool.name,
+        slug: pool.slug,
+        minerNames: null,
+      };
 
-        if (extras.pool.name === 'OCEAN') {
-          extras.pool.minerNames = parseDATUMTemplateCreator(extras.coinbaseRaw);
-        }
+      if (extras.pool.name === 'OCEAN') {
+        extras.pool.minerNames = parseDATUMTemplateCreator(extras.coinbaseRaw);
       }
+    }
 
-      extras.matchRate = null;
-      extras.expectedFees = null;
-      extras.expectedWeight = null;
-      if (config.MEMPOOL.AUDIT) {
-        const auditScore = await BlocksAuditsRepository.$getBlockAuditScore(block.id);
-        if (auditScore != null) {
-          extras.matchRate = auditScore.matchRate;
-          extras.expectedFees = auditScore.expectedFees;
-          extras.expectedWeight = auditScore.expectedWeight;
-        }
+    extras.matchRate = null;
+    extras.expectedFees = null;
+    extras.expectedWeight = null;
+    if (config.MEMPOOL.AUDIT) {
+      const auditScore = await BlocksAuditsRepository.$getBlockAuditScore(block.id);
+      if (auditScore != null) {
+        extras.matchRate = auditScore.matchRate;
+        extras.expectedFees = auditScore.expectedFees;
+        extras.expectedWeight = auditScore.expectedWeight;
       }
+    }
 
-      if (config.CORE_RPC.DEBUG_LOG_PATH) {
-        const oldestLog = this.getOldestCoreLogTimestamp();
-        if (oldestLog) {
-          extras.firstSeen = getBlockFirstSeenFromLogs(block.id, block.timestamp, oldestLog);
-        }
+    if (config.CORE_RPC.DEBUG_LOG_PATH) {
+      const oldestLog = this.getOldestCoreLogTimestamp();
+      if (oldestLog) {
+        extras.firstSeen = getBlockFirstSeenFromLogs(block.id, block.timestamp, oldestLog);
       }
     }
 
@@ -396,10 +429,10 @@ class Blocks {
     const totalReward = transactions[0].vout.reduce((acc, vout) => acc + vout.value, 0);
     const sortedByFee = transactions.sort((a, b) => a.fee - b.fee);
     const sortedByVsize = transactions.sort((a, b) => a.vsize - b.vsize);
-    const sortedByFeerate = transactions.sort((a, b) => (a.fee / a.weight) - (b.fee / b.weight));
-    const sortedFeerates = sortedByFeerate.map(tx => (tx.fee / (tx.weight / 4)));
+    const sortedByFeerate = transactions.sort((a, b) => feeRatePerVsize(a.fee, a.weight) - feeRatePerVsize(b.fee, b.weight));
+    const sortedFeerates = sortedByFeerate.map(tx => feeRatePerVsize(tx.fee, tx.weight));
     const avgfee = totalFee / transactions.length;
-    const avgfeerate = totalFee / (block.weight / 4);
+    const avgfeerate = totalFee / weightToFractionalVsize(block.weight);
     const avgtxsize = totalVsize / transactions.length;
     const medianfee = sortedByFee[Math.floor(transactions.length / 2)].fee;
     const mediantime = block.timestamp;
@@ -461,11 +494,13 @@ class Blocks {
   /**
    * Try to find which miner found the block
    * @param txMinerInfo
+   * @param blockHeader raw block header hex; for AuxPoW blocks it carries the
+   * parent-chain coinbase, which is matched as a fallback identification
    * @returns
    *
    * @asyncUnsafe
    */
-  private async $findBlockMiner(txMinerInfo: TransactionMinerInfo | undefined): Promise<PoolTag> {
+  private async $findBlockMiner(txMinerInfo: TransactionMinerInfo | undefined, blockHeader?: string): Promise<PoolTag> {
     if (txMinerInfo === undefined || txMinerInfo.vout.length < 1) {
       if (config.DATABASE.ENABLED === true) {
         return await poolsRepository.$getUnknownPool();
@@ -483,7 +518,13 @@ class Blocks {
       pools = poolsParser.miningPools;
     }
 
-    const pool = poolsParser.matchBlockMiner(txMinerInfo.vin[0].scriptsig, addresses || [], pools);
+    const pool = poolsParser.matchBlockMiner(
+      txMinerInfo.vin[0].scriptsig,
+      addresses || [],
+      pools,
+      parseAuxPowParentCoinbase(blockHeader),
+      txMinerInfo.vout
+    );
     if (pool) {
       return pool;
     }
@@ -493,6 +534,20 @@ class Blocks {
     } else {
       return poolsParser.unknownPool;
     }
+  }
+
+  /**
+   * Preserve the compact evidence needed to replay guarded full-reward pool
+   * matches. Zero-value outputs are not payouts, while a positive output with
+   * no decoded address must remain present so it can disprove a full reward.
+   */
+  private getPositiveCoinbasePayouts(transaction?: IEsploraApi.Transaction): PoolMatchCoinbaseOutput[] {
+    return (transaction?.vout ?? [])
+      .filter(output => output.value > 0)
+      .map(output => ({
+        scriptpubkey_address: output.scriptpubkey_address,
+        value: output.value,
+      }));
   }
 
   /**
@@ -644,7 +699,7 @@ class Blocks {
       let totalWeight = 0;
       for (const tx of summary?.transactions || []) {
         totalFees += tx.fee;
-        totalWeight += (tx.vsize * 4);
+        totalWeight += vsizeToWeight(tx.vsize);
       }
       await BlocksAuditsRepository.$setSummary(hash, totalFees, totalWeight);
       const cachedBlock = this.blocks.find(block => block.id === hash);
@@ -811,35 +866,74 @@ class Blocks {
       const unindexedBlocks = await blocksRepository.$getBlocksWithoutCoinbaseAddresses();
 
       if (!unindexedBlocks?.length) {
+        await this.$refreshPoolCacheIfNeeded();
         return;
       }
 
       logger.info(`Indexing missing coinbase addresses for ${unindexedBlocks.length} blocks`);
+
+      let pools: PoolTag[];
+      let unknownPool: PoolTag;
+      if (config.DATABASE.ENABLED === true) {
+        pools = await poolsRepository.$getPools();
+        unknownPool = await poolsRepository.$getUnknownPool();
+      } else {
+        pools = poolsParser.miningPools;
+        unknownPool = poolsParser.unknownPool;
+      }
 
       // Logging
       let count = 0;
       let countThisRun = 0;
       let timer = Date.now() / 1000;
       const startedAt = Date.now() / 1000;
-      for (const { height, hash } of unindexedBlocks) {
-        // Logging
-        const elapsedSeconds = (Date.now() / 1000) - timer;
-        if (elapsedSeconds > 5) {
-          const runningFor = (Date.now() / 1000) - startedAt;
-          const blockPerSeconds = countThisRun / elapsedSeconds;
-          const progress = Math.round(count / unindexedBlocks.length * 10000) / 100;
-          logger.debug(`Indexing coinbase addresses for #${height} | ~${blockPerSeconds.toFixed(2)} blocks/sec | total: ${count}/${unindexedBlocks.length} (${progress}%) | elapsed: ${runningFor.toFixed(2)} seconds`);
-          timer = Date.now() / 1000;
-          countThisRun = 0;
+      try {
+        for (const { height, hash, header, pool_id: currentPoolId } of unindexedBlocks) {
+          // Logging
+          const elapsedSeconds = (Date.now() / 1000) - timer;
+          if (elapsedSeconds > 5) {
+            const runningFor = (Date.now() / 1000) - startedAt;
+            const blockPerSeconds = countThisRun / elapsedSeconds;
+            const progress = Math.round(count / unindexedBlocks.length * 10000) / 100;
+            logger.debug(`Indexing coinbase addresses for #${height} | ~${blockPerSeconds.toFixed(2)} blocks/sec | total: ${count}/${unindexedBlocks.length} (${progress}%) | elapsed: ${runningFor.toFixed(2)} seconds`);
+            timer = Date.now() / 1000;
+            countThisRun = 0;
+          }
+
+          const coinbaseTx = await bitcoinApi.$getCoinbaseTx(hash);
+          const payouts = this.getPositiveCoinbasePayouts(coinbaseTx);
+          const addresses = new Set<string>(payouts.map(v => v.scriptpubkey_address).filter(a => a) as string[]);
+
+          // Pool-definition imports run before this lazy address indexer on
+          // startup. Re-match immediately after filling a legacy NULL row so
+          // guarded address evidence is not left unapplied until some future
+          // definition change. Exact outputs keep split payouts excluded.
+          const txMinerInfo = transactionUtils.stripCoinbaseTransaction(coinbaseTx);
+          const pool = poolsParser.matchBlockMiner(
+            txMinerInfo.vin[0].scriptsig,
+            [...addresses],
+            pools,
+            parseAuxPowParentCoinbase(header),
+            txMinerInfo.vout
+          ) ?? pools.find(candidate => candidate.id === currentPoolId) ?? unknownPool;
+
+          // Save the positive recipient set, exact payout evidence, and its
+          // attribution atomically so an interrupted run cannot permanently
+          // skip the re-match.
+          await blocksRepository.$saveCoinbaseAddressesAndPool(hash, [...addresses], payouts, pool.id);
+          if (pool.id !== currentPoolId) {
+            mining.reindexHashrateRequested = true;
+            this.poolCacheRefreshNeeded = true;
+          }
+
+          // Logging
+          count++;
+          countThisRun++;
         }
-
-        const coinbaseTx = await bitcoinApi.$getCoinbaseTx(hash);
-        const addresses = new Set<string>(coinbaseTx.vout.map(v => v.scriptpubkey_address).filter(a => a) as string[]);
-        await blocksRepository.$saveCoinbaseAddresses(hash, [...addresses]);
-
-        // Logging
-        count++;
-        countThisRun++;
+      } finally {
+        // Refresh assignments already committed earlier in the batch even if
+        // a later block failed and will be retried on the next indexer pass.
+        await this.$refreshPoolCacheIfNeeded();
       }
       logger.notice(`coinbase addresses indexing completed: indexed ${count} blocks`);
     } catch (e) {
@@ -908,7 +1002,7 @@ class Blocks {
           const blockExtended = await this.$getBlockExtended(block, transactions);
 
           newlyIndexed++;
-          await blocksRepository.$saveBlockInDatabase(blockExtended);
+          await blocksRepository.$saveBlockInDatabase(blockExtended, this.getPositiveCoinbasePayouts(transactions[0]));
         }
 
         currentBlockHeight -= chunkSize;
@@ -976,7 +1070,6 @@ class Blocks {
 
     let fastForwarded = false;
     let handledBlocks = 0;
-    const lastBlockHeight = this.currentBlockHeight;
     const blockHeightTip = await bitcoinCoreApi.$getBlockHeightTip();
     this.updateTimerProgress(timer, 'got block height tip');
 
@@ -994,48 +1087,19 @@ class Blocks {
       indexer.reindex(); // Make sure to index the skipped blocks #1619
     }
 
-    if (!this.lastDifficultyAdjustmentTime) {
-      const blockchainInfo = await bitcoinClient.getBlockchainInfo();
-      this.updateTimerProgress(timer, 'got blockchain info for initial difficulty adjustment');
-      if (blockchainInfo.blocks === blockchainInfo.headers) {
-        const heightDiff = blockHeightTip % 2016;
-        const blockHash = await bitcoinApi.$getBlockHash(blockHeightTip - heightDiff);
-        this.updateTimerProgress(timer, 'got block hash for initial difficulty adjustment');
-        const block: IEsploraApi.Block = await bitcoinApi.$getBlock(blockHash);
-        this.updateTimerProgress(timer, 'got block for initial difficulty adjustment');
-        this.lastDifficultyAdjustmentTime = block.timestamp;
-        this.currentBits = block.bits;
-
-        if (blockHeightTip >= 2016) {
-          const previousPeriodBlockHash = await bitcoinApi.$getBlockHash(blockHeightTip - heightDiff - 2016);
-          this.updateTimerProgress(timer, 'got previous block hash for initial difficulty adjustment');
-          const previousPeriodBlock: IEsploraApi.Block = await bitcoinApi.$getBlock(previousPeriodBlockHash);
-          this.updateTimerProgress(timer, 'got previous block for initial difficulty adjustment');
-          if (['liquid', 'liquidtestnet'].includes(config.MEMPOOL.NETWORK)) {
-            this.previousDifficultyRetarget = NaN;
-          } else {
-            this.previousDifficultyRetarget = calcBitsDifference(previousPeriodBlock.bits, block.bits);
-          }
-          logger.debug(`Initial difficulty adjustment data set.`);
-        }
-      } else {
-        logger.debug(`Blockchain headers (${blockchainInfo.headers}) and blocks (${blockchainInfo.blocks}) not in sync. Waiting...`);
-      }
-    }
-
-    const heightChanged = lastBlockHeight !== this.currentBlockHeight;
-    // make sure to update the quarter epoch block time now if we won't do it inside the loop
-    if (this.currentBlockHeight >= blockHeightTip && (heightChanged || this.quarterEpochBlockTime == null)) {
-      await this.updateQuarterEpochBlockTime();
+    // make sure to update the ASERT anchors now if we won't do it inside the loop
+    if (this.currentBlockHeight >= blockHeightTip && this.asertAnchorTip !== this.currentBlockHeight) {
+      await this.$updateAsertAnchors();
+      await this.$updateAsertLaneAnchors();
     }
 
     while (this.currentBlockHeight < blockHeightTip) {
       if (this.currentBlockHeight === 0) {
         this.currentBlockHeight = blockHeightTip;
-        await this.updateQuarterEpochBlockTime();
+        await this.$updateAsertAnchors();
       } else {
         this.currentBlockHeight++;
-        await this.updateQuarterEpochBlockTime();
+        await this.$updateAsertAnchors();
         logger.debug(`New block found (#${this.currentBlockHeight})!`);
       }
 
@@ -1055,7 +1119,10 @@ class Blocks {
 
       let accelerations = Object.values(mempool.getAccelerations());
       if (accelerations?.length > 0) {
-        const pool = await this.$findBlockMiner(transactionUtils.stripCoinbaseTransaction(transactions[0]));
+        // include the raw header so AuxPoW blocks identified only by their
+        // parent-chain coinbase resolve to the same pool as $getBlockExtended
+        const rawHeader = await bitcoinClient.getBlockHeader(blockHash, false);
+        const pool = await this.$findBlockMiner(transactionUtils.stripCoinbaseTransaction(transactions[0]), rawHeader);
         accelerations = accelerations.filter(a => a.pools.includes(pool.uniqueId));
       }
       const cpfpSummary: CpfpSummary = calculateGoodBlockCpfp(block.height, transactions, accelerations.map(a => ({ txid: a.txid, max_bid: a.feeDelta })));
@@ -1068,7 +1135,7 @@ class Blocks {
           await this.$handleReorgs(blockExtended, timer);
         }
 
-        await blocksRepository.$saveBlockInDatabase(blockExtended);
+        await blocksRepository.$saveBlockInDatabase(blockExtended, this.getPositiveCoinbasePayouts(cpfpSummary.transactions[0]));
         this.updateTimerProgress(timer, `saved ${this.currentBlockHeight} to database`);
 
         if (!fastForwarded) {
@@ -1102,40 +1169,14 @@ class Blocks {
         }
       }
 
+      // reorg handling has settled stale flags and the new block row exists,
+      // so the lane anchors read a fully canonical view before the websocket
+      // callbacks publish the difficulty state
+      await this.$updateAsertLaneAnchors();
+
       // start async callbacks
       this.updateTimerProgress(timer, `starting async callbacks for ${this.currentBlockHeight}`);
       const callbackPromises = this.newAsyncBlockCallbacks.map((cb) => cb(blockExtended, txIds, cpfpSummary.transactions));
-
-      if (block.height % 2016 === 0) {
-        if (Common.indexingEnabled()) {
-          let adjustment;
-          if (['liquid', 'liquidtestnet'].includes(config.MEMPOOL.NETWORK)) {
-            adjustment = NaN;
-          } else {
-            adjustment = Math.round(
-              // calcBitsDifference returns +- percentage, +100 returns to positive, /100 returns to ratio.
-              // Instead of actually doing /100, just reduce the multiplier.
-              (calcBitsDifference(this.currentBits, block.bits) + 100) * 10000
-            ) / 1000000; // Remove float point noise
-          }
-
-          await DifficultyAdjustmentsRepository.$saveAdjustments({
-            time: block.timestamp,
-            height: block.height,
-            difficulty: block.difficulty,
-            adjustment,
-          });
-          this.updateTimerProgress(timer, `saved difficulty adjustment for ${this.currentBlockHeight}`);
-        }
-
-        if (['liquid', 'liquidtestnet'].includes(config.MEMPOOL.NETWORK)) {
-          this.previousDifficultyRetarget = NaN;
-        } else {
-          this.previousDifficultyRetarget = calcBitsDifference(this.currentBits, block.bits);
-        }
-        this.lastDifficultyAdjustmentTime = block.timestamp;
-        this.currentBits = block.bits;
-      }
 
       // skip updating the orphan block cache if we've fallen behind the chain tip
       if (this.currentBlockHeight >= blockHeightTip - 2) {
@@ -1160,9 +1201,6 @@ class Blocks {
         this.blockSummaries = this.blockSummaries.slice(-config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 4);
       }
 
-      if (this.newBlockCallbacks.length) {
-        this.newBlockCallbacks.forEach((cb) => cb(blockExtended, txIds, transactions));
-      }
       if (config.MEMPOOL.CACHE_ENABLED && !memPool.hasPriority() && (block.height % config.MEMPOOL.DISK_CACHE_BLOCK_INTERVAL === 0)) {
         void diskCache.$saveCacheToDisk();
       }
@@ -1177,6 +1215,10 @@ class Blocks {
 
       handledBlocks++;
     }
+
+    // this run caught up with the tip the node reported when it started (a
+    // run that fails throws before getting here)
+    this.initialSyncComplete = true;
 
     diskCache.unlock();
 
@@ -1207,17 +1249,74 @@ class Blocks {
     }
   }
 
-  /** @asyncUnsafe */
-  private async updateQuarterEpochBlockTime(): Promise<void> {
-    if (this.currentBlockHeight >= 503) {
-      try {
-        const quarterEpochBlockHash = await bitcoinApi.$getBlockHash(this.currentBlockHeight - 503);
-        const quarterEpochBlock = await bitcoinApi.$getBlock(quarterEpochBlockHash);
-        this.quarterEpochBlockTime = quarterEpochBlock?.timestamp;
-      } catch (e) {
-      this.quarterEpochBlockTime = null;
-        logger.warn('failed to update last epoch block time: ' + (e instanceof Error ? e.message : e));
+  /**
+   * Refresh the two anchor blocks backing the continuous-DAA difficulty state:
+   * one ~1h of blocks behind the tip (rolling block spacing average) and one
+   * ~24h of blocks behind the tip (24h difficulty delta).
+   * @asyncUnsafe
+   */
+  private async $updateAsertAnchors(): Promise<void> {
+    const tipHeight = this.currentBlockHeight;
+    if (tipHeight < 0) {
+      return;
+    }
+    const targetSpacingSeconds = config.MEMPOOL.BLOCK_TARGET_SPACING_SECONDS;
+    const hourAnchorHeight = Math.max(0, tipHeight - expectedBlocksForSeconds(3600, targetSpacingSeconds));
+    const dayAnchorHeight = tipHeight - expectedBlocksForSeconds(86400, targetSpacingSeconds);
+    try {
+      // fetch through core rather than esplora: the tip processed by
+      // $updateBlocks comes from core, so anchors must share its chain view
+      // (esplora can briefly serve the old chain around a reorg)
+      const hourBlock: IEsploraApi.Block = await bitcoinCoreApi.$getBlock(await bitcoinCoreApi.$getBlockHash(hourAnchorHeight));
+      // no day anchor until the chain is a full window deep: a clamped anchor
+      // would report a since-genesis delta while the UI labels it "24h change"
+      let dayBlock: IEsploraApi.Block | null = null;
+      if (dayAnchorHeight >= 0) {
+        dayBlock = dayAnchorHeight === hourAnchorHeight
+          ? hourBlock
+          : await bitcoinCoreApi.$getBlock(await bitcoinCoreApi.$getBlockHash(dayAnchorHeight));
       }
+      this.asertAnchors = {
+        hourAgo: { height: hourBlock.height, timestamp: hourBlock.timestamp },
+        dayAgo: dayBlock ? { height: dayBlock.height, bits: dayBlock.bits } : null,
+      };
+      this.asertAnchorTip = tipHeight;
+    } catch (e) {
+      // keep the previous anchors: their heights are recorded, so a stale window still averages correctly
+      logger.warn('failed to update ASERT difficulty anchors: ' + (e instanceof Error ? e.message : e));
+    }
+  }
+
+  /**
+   * Refresh the per-lane difficulty anchors backing the lane-aware difficulty
+   * state. They need the indexed block table: the lanes interleave
+   * arbitrarily, so "the most recent block of lane X" cannot be derived from
+   * a bounded set of header fetches. Without indexing the difficulty state
+   * simply omits lane data.
+   *
+   * Must run after reorg handling has marked stale rows and the incoming
+   * block is saved: querying earlier would cache lane tips from an abandoned
+   * chain, and the tip overlay in difficulty-adjustment only corrects the
+   * tip block's own lane.
+   * @asyncUnsafe
+   */
+  private async $updateAsertLaneAnchors(invalidateOnFailure = false): Promise<void> {
+    if (!Common.indexingEnabled()) {
+      return;
+    }
+    try {
+      this.asertLaneAnchors = await BlocksRepository.$getAsertLaneAnchors();
+    } catch (e) {
+      if (invalidateOnFailure) {
+        // a reorg just rewrote the canonical chain: the cached anchors may
+        // reference abandoned blocks, and publishing no lane data (frontends
+        // fall back to the legacy single-difficulty view) beats publishing
+        // an orphan's difficulty
+        this.asertLaneAnchors = null;
+      }
+      // otherwise keep the previous lane anchors; the tip overlay in
+      // difficulty-adjustment keeps the tip lane fresh meanwhile
+      logger.warn('failed to update per-lane ASERT difficulty anchors: ' + (e instanceof Error ? e.message : e));
     }
   }
 
@@ -1286,9 +1385,7 @@ class Blocks {
 
       // force re-indexing of block-related data
       await HashratesRepository.$deleteHashratesFromTimestamp(forkTail.timestamp - 604800);
-      await DifficultyAdjustmentsRepository.$deleteAdjustementsFromHeight(forkTail.height);
       await cpfpRepository.$deleteClustersFrom(forkTail.height);
-      await AccelerationRepository.$deleteAccelerationsFrom(forkTail.height);
       chainTips.clearOrphanCacheAboveHeight(forkTail.height);
       this.updateTimerProgress(timer, `deleted stale block data`);
 
@@ -1298,12 +1395,17 @@ class Blocks {
       }
       this.updateTimerProgress(timer, `connected new best chain from ${forkTail.height} to ${this.currentBlockHeight}`);
 
-      await mining.$indexDifficultyAdjustments();
-      this.updateTimerProgress(timer, `reindexed difficulty adjustments`);
-      logger.info(`Re-indexed ${this.currentBlockHeight - forkTail.height} blocks and summaries. Also re-indexed the last difficulty adjustments. Will re-index latest hashrates in a few seconds.`, logger.tags.mining);
+      logger.info(`Re-indexed ${this.currentBlockHeight - forkTail.height} blocks and summaries. Will re-index latest hashrates in a few seconds.`, logger.tags.mining);
       indexer.reindex();
 
-      websocketHandler.handleReorg();
+      // the reorg emission below publishes the difficulty state: the lane
+      // anchors must not reference the abandoned chain, and are dropped
+      // outright if they cannot be refreshed. The incoming block is not saved
+      // yet, but handleReorg passes it as the tip override, which covers its
+      // own lane.
+      await this.$updateAsertLaneAnchors(true);
+
+      websocketHandler.handleReorg(blockExtended);
     }
   }
 
@@ -1332,7 +1434,7 @@ class Blocks {
     }
 
     if (Common.indexingEnabled()) {
-      await blocksRepository.$saveBlockInDatabase(blockExtended);
+      await blocksRepository.$saveBlockInDatabase(blockExtended, this.getPositiveCoinbasePayouts(transactions[0]));
     }
 
     return blockExtended;
@@ -1351,12 +1453,6 @@ class Blocks {
       }
     }
 
-    // Not Bitcoin network, return the block as it from the bitcoin backend
-    if (['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) === false) {
-      return await bitcoinCoreApi.$getBlock(hash);
-    }
-
-    // Bitcoin network, add our custom data on top
     return await this.$indexBlock(hash);
   }
 
@@ -1383,7 +1479,7 @@ class Blocks {
     let height = blockHeight;
     let summary: BlockSummary;
     let summaryVersion = 0;
-    if (cpfpSummary && !Common.isLiquid()) {
+    if (cpfpSummary) {
       summary = {
         id: hash,
         transactions: cpfpSummary.transactions.map(tx => {
@@ -1510,6 +1606,8 @@ class Blocks {
         difficulty: block.difficulty ?? null,
         header: block.extras.header ?? null,
         version: block.version ?? null,
+        cadence: block.extras.cadence ?? decodeQbitBlockVersion(block.version, config.MEMPOOL.NETWORK),
+        auxpow: block.extras.auxpow ?? summarizeAuxPowHeader(block.extras.header),
         bits: block.bits ?? null,
         nonce: block.nonce ?? null,
         size: block.size ?? null,
@@ -1599,7 +1697,7 @@ class Blocks {
   }
 
   public async $getBlockAuditSummary(hash: string): Promise<BlockAudit | null> {
-    if (['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) && Common.auditIndexingEnabled()) {
+    if (Common.auditIndexingEnabled()) {
       return BlocksAuditsRepository.$getBlockAudit(hash);
     } else {
       return null;
@@ -1607,27 +1705,32 @@ class Blocks {
   }
 
   public async $getBlockTxAuditSummary(hash: string, txid: string): Promise<TransactionAudit | null> {
-    if (['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) && Common.auditIndexingEnabled()) {
+    if (Common.auditIndexingEnabled()) {
       return BlocksAuditsRepository.$getBlockTxAudit(hash, txid);
     } else {
       return null;
     }
   }
 
-  public getLastDifficultyAdjustmentTime(): number {
-    return this.lastDifficultyAdjustmentTime;
+  public getAsertAnchors(): AsertAnchors {
+    return this.asertAnchors;
   }
 
-  public getPreviousDifficultyRetarget(): number {
-    return this.previousDifficultyRetarget;
-  }
-
-  public getQuarterEpochBlockTime(): number | null {
-    return this.quarterEpochBlockTime;
+  public getAsertLaneAnchors(): AsertLaneAnchors | null {
+    return this.asertLaneAnchors;
   }
 
   public getCurrentBlockHeight(): number {
     return this.currentBlockHeight;
+  }
+
+  /**
+   * Whether a $updateBlocks run has caught up with the node's tip since
+   * startup. Until then getCurrentBlockHeight() is the initial placeholder (0)
+   * or a block still being fetched, not the tip.
+   */
+  public isInitialSyncComplete(): boolean {
+    return this.initialSyncComplete;
   }
 
 /** @asyncUnsafe */

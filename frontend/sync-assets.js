@@ -5,7 +5,6 @@ const path = require('node:path');
 
 // Configuration
 const LOG_TAG = '[sync-assets]';
-const CONFIG_FILE_NAME = 'mempool-frontend-config.json';
 
 const config = {
   verbose: parseInt(process.env.VERBOSE) === 1,
@@ -41,21 +40,6 @@ const ASSETS_PATH = (() => {
 
   return normalizedPath;
 })();
-
-// Load frontend config
-const loadConfig = () => {
-  try {
-    const rawConfig = fsSync.readFileSync(CONFIG_FILE_NAME, 'utf8');
-    console.log(`${LOG_TAG} ${CONFIG_FILE_NAME} file found, using provided config`);
-    return JSON.parse(rawConfig);
-  } catch (e) {
-    if (e.code !== 'ENOENT') throw e;
-    console.log(`${LOG_TAG} ${CONFIG_FILE_NAME} file not found, using default config`);
-    return {};
-  }
-};
-
-const configContent = loadConfig();
 
 // Utility: Make HTTPS request
 const httpsRequest = (options) => {
@@ -258,116 +242,14 @@ const downloadMiningPoolLogos = async () => {
   }
 };
 
-// Main: Download promo video subtitles
-const downloadPromoVideoSubtitles = async () => {
-  console.log(`${LOG_TAG} \tChecking if promo video subtitles needs downloading or updating...`);
-
-  try {
-    const subtitles = await fetchGitHubContents('/repos/mempool/mempool-promo/contents/subtitles', !!config.githubToken);
-
-    let downloadedCount = 0;
-    const validFiles = subtitles.filter(item => item.type === 'file' && item.download_url);
-
-    for (const subtitle of validFiles) {
-      if (config.verbose) {
-        console.log(`${LOG_TAG} Processing ${subtitle.name}`);
-      }
-
-      const downloaded = await processFileItem(subtitle, {
-        filePath: `${ASSETS_PATH}/promo-video/${subtitle.name}`,
-        remoteHash: subtitle.sha,
-        downloadUrl: subtitle.download_url,
-        cdnPattern: {
-          from: "raw.githubusercontent.com/mempool/mempool-promo/master/subtitles",
-          to: "mempool.space/resources/promo-video"
-        },
-        itemName: subtitle.name,
-        downloadDir: `${ASSETS_PATH}/promo-video/`
-      });
-
-      if (downloaded) downloadedCount++;
-    }
-
-    console.log(`${LOG_TAG} Downloaded ${downloadedCount} and skipped ${validFiles.length - downloadedCount} existing video subtitles`);
-  } catch (e) {
-    throw new Error(`Unable to download video subtitles. Trying again at next restart. Reason: ${e instanceof Error ? e.message : e}`);
-  }
-};
-
-// Main: Download promo video
-const downloadPromoVideo = async () => {
-  console.log(`${LOG_TAG} \tChecking if promo video needs downloading or updating...`);
-
-  try {
-    const contents = await fetchGitHubContents('/repos/mempool/mempool-promo/contents', !!config.githubToken);
-
-    const videoItem = contents.find(item => item.name === 'promo.mp4');
-    if (!videoItem) {
-      console.log(`${LOG_TAG} \tpromo.mp4 not found in repository`);
-      return;
-    }
-
-    await processFileItem(videoItem, {
-      filePath: `${ASSETS_PATH}/promo-video/mempool-promo.mp4`,
-      remoteHash: videoItem.sha,
-      downloadUrl: videoItem.download_url,
-      cdnPattern: {
-        from: "raw.githubusercontent.com/mempool/mempool-promo/master/promo.mp4",
-        to: "mempool.space/resources/promo-video/mempool-promo.mp4"
-      },
-      itemName: 'mempool-promo.mp4',
-      downloadDir: `${ASSETS_PATH}/promo-video/`
-    });
-  } catch (e) {
-    throw new Error(`Unable to download video. Trying again at next restart. Reason: ${e instanceof Error ? e.message : e}`);
-  }
-};
-
-// Download Liquid assets if configured
-const downloadLiquidAssets = () => {
-  if (configContent.BASE_MODULE !== 'liquid') {
-    if (config.verbose) {
-      console.log(`${LOG_TAG} BASE_MODULE is not set to Liquid (currently ${configContent.BASE_MODULE}), skipping downloading assets`);
-    }
-    return;
-  }
-
-  const liquidAssets = [
-    { file: 'assets.json', url: 'https://raw.githubusercontent.com/Blockstream/asset_registry_db/master/index.json' },
-    { file: 'assets.minimal.json', url: 'https://raw.githubusercontent.com/Blockstream/asset_registry_db/master/index.minimal.json' },
-    { file: 'assets-testnet.json', url: 'https://raw.githubusercontent.com/Blockstream/asset_registry_testnet_db/master/index.json' },
-    { file: 'assets-testnet.minimal.json', url: 'https://raw.githubusercontent.com/Blockstream/asset_registry_testnet_db/master/index.minimal.json' }
-  ];
-
-  console.log(`${LOG_TAG} Downloading assets`);
-  liquidAssets.forEach(({ file, url }) => {
-    const fileName = file.replace(/^assets/, 'assets');
-    console.log(`${LOG_TAG} Downloading ${fileName}`);
-    downloadFile(`${ASSETS_PATH}/${fileName}`, url);
-  });
-};
-
 // Main execution
 (async () => {
   try {
-    // Download Liquid assets (non-blocking)
-    downloadLiquidAssets();
-
     // Download GitHub assets sequentially
     if (config.verbose) {
       console.log(`${LOG_TAG} Downloading mining pool logos`);
     }
     await downloadMiningPoolLogos();
-
-    if (config.verbose) {
-      console.log(`${LOG_TAG} Downloading promo video subtitles`);
-    }
-    await downloadPromoVideoSubtitles();
-
-    if (config.verbose) {
-      console.log(`${LOG_TAG} Downloading promo video`);
-    }
-    await downloadPromoVideo();
 
     console.log(`${LOG_TAG} Asset synchronization complete`);
   } catch (error) {

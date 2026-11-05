@@ -2,6 +2,7 @@ import { Ancestor, CpfpCluster, CpfpInfo, CpfpSummary, MempoolTransactionExtende
 import { GraphTx, convertToGraphTx, expandRelativesGraph, initializeRelatives, makeBlockTemplate, mempoolComparator, removeAncestors, setAncestorScores } from './mini-miner';
 import memPool from './mempool';
 import { Acceleration } from './acceleration/acceleration';
+import { vsizeToWeight, weightToFractionalVsize } from '../utils/weight-units';
 
 const CPFP_UPDATE_INTERVAL = 60_000; // update CPFP info at most once per 60s per transaction
 const MAX_CLUSTER_ITERATIONS = 100;
@@ -24,7 +25,7 @@ export function calculateFastBlockCpfp(height: number, transactions: MempoolTran
       let totalVSize = 0;
       clusterTxs.forEach(tx => {
         totalFee += tx?.fee || 0;
-        totalVSize += (tx.weight / 4);
+        totalVSize += weightToFractionalVsize(tx.weight);
       });
       const effectiveFeePerVsize = totalFee / totalVSize;
       let cluster: CpfpCluster;
@@ -129,7 +130,7 @@ export function calculateGoodBlockCpfp(height: number, transactions: MempoolTran
             const relative = {
               txid: relativeTxid,
               fee: txMap[relativeTxid].fee,
-              weight: (txMap[relativeTxid].adjustedVsize * 4) || txMap[relativeTxid].weight,
+              weight: vsizeToWeight(txMap[relativeTxid].adjustedVsize) || txMap[relativeTxid].weight,
             };
             if (matched) {
               descendants.push(relative);
@@ -151,7 +152,7 @@ export function calculateGoodBlockCpfp(height: number, transactions: MempoolTran
       txs: cluster.reverse().map(txid => ({
         txid,
         fee: txMap[txid].fee,
-        weight: (txMap[txid].adjustedVsize * 4) || txMap[txid].weight,
+        weight: vsizeToWeight(txMap[txid].adjustedVsize) || txMap[txid].weight,
       })),
       effectiveFeePerVsize: txMap[root].effectiveFeePerVsize,
     });

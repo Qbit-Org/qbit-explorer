@@ -9,10 +9,12 @@ import transactionUtils from './transaction-utils';
 
 enum NetworkDB {
   mainnet = 0,
-  testnet,
-  signet,
-  liquid,
-  liquidtestnet,
+  testnet = 1,
+  signet = 2,
+  // Keep the retired Liquid slots 3 and 4 unused so upgraded Redis instances
+  // cannot expose old sidechain cache entries on qbit networks.
+  testnet4 = 5,
+  regtest = 6,
 }
 
 class RedisCache {

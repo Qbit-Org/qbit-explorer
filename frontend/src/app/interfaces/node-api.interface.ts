@@ -47,19 +47,83 @@ export interface RbfTree extends RbfInfo {
   replacedBy?: RbfTransaction;
 }
 
+/**
+ * qbit difficulty state: the chain retargets every block via ASERT (2h
+ * halflife), so there is no epoch, no retarget countdown and no progress. This
+ * mirrors the backend QbitDifficultyState payload.
+ */
+/**
+ * Difficulty state of one Cadence lane. The lanes retarget independently at
+ * very different difficulties, so per-lane values must never be mixed.
+ */
+export interface LaneDifficulty {
+  difficulty: number;        // difficulty of the lane's most recent block
+  bits: number;              // nBits of the lane's most recent block
+  target: string;            // 256-bit target of the lane's most recent block, hex encoded
+  height: number;            // height of the lane's most recent block
+  timestamp: number;         // unix seconds of the lane's most recent block
+  change24h: number | null;  // vs the most recent same-lane block mined >= 24h ago; null while the lane is younger
+}
+
 export interface DifficultyAdjustment {
-  progressPercent: number;
-  difficultyChange: number;
-  estimatedRetargetDate: number;
-  remainingBlocks: number;
-  remainingTime: number;
-  previousRetarget: number;
-  previousTime: number;
-  nextRetargetHeight: number;
-  timeAvg: number;
-  adjustedTimeAvg: number;
-  timeOffset: number;
-  expectedBlocks: number;
+  asertActive: boolean;      // sentinel for the ASERT payload shape
+  currentBits: number;       // nBits, pinned to the permissionless lane when lane data is available
+  currentTarget: string;     // 256-bit target, hex encoded, same source block as currentBits
+  currentDifficulty: number; // difficulty, same source block as currentBits
+  timeAvgMs: number;         // rolling average block interval over the last ~60 blocks, both lanes combined
+  targetSpacingMs: number;   // consensus target block interval
+  change24h: number;         // difficulty delta in percent, same lane pinning as currentDifficulty
+  previousTime: number;      // ms-epoch timestamp of the latest block
+  timeAvg: number;           // legacy alias of timeAvgMs, consumed by ETA logic
+  adjustedTimeAvg: number;   // legacy alias of timeAvgMs, consumed by ETA logic
+  timeOffset: number;        // always 0 on qbit, consumed by ETA logic
+  lanes?: {                  // per-lane state; missing/null without indexed lane anchors
+    permissionless: LaneDifficulty | null;
+    auxpow: LaneDifficulty | null;
+  } | null;
+}
+
+export interface BlockSpacing {
+  height: number;
+  timestamp: number;
+  spacingSeconds: number;
+}
+
+export interface BlockSpacingResponse {
+  spacings: BlockSpacing[];
+  targetSpacing: number; // seconds
+}
+
+export interface HashrateHistoryPoint {
+  timestamp: number;
+  avgHashrate: number;
+}
+
+export interface HashrateDifficultyPoint {
+  time: number;
+  height?: number;
+  difficulty: number;
+}
+
+/**
+ * Network hashrate history. The aggregate fields are the legacy API contract;
+ * lane fields are optional so the frontend remains compatible during a rolling
+ * deployment against an older backend.
+ */
+export interface HistoricalHashrateResponse {
+  hashrates: HashrateHistoryPoint[];
+  hashratesAggregate?: HashrateHistoryPoint[];
+  hashratesPermissionless?: HashrateHistoryPoint[];
+  hashratesAuxpow?: HashrateHistoryPoint[];
+  difficulty: HashrateDifficultyPoint[];      // legacy: pinned to the permissionless lane
+  difficultyPermissionless?: HashrateDifficultyPoint[];
+  difficultyAuxpow?: HashrateDifficultyPoint[];
+  currentHashrate: number;
+  currentHashratePermissionless?: number;
+  currentHashrateAuxpow?: number;
+  currentDifficulty: number;                  // legacy: pinned to the permissionless lane
+  currentDifficultyPermissionless?: number | null;
+  currentDifficultyAuxpow?: number | null;
 }
 
 export interface AddressInformation {
@@ -73,59 +137,6 @@ export interface AddressInformation {
   witness_program: string;         //  (string, optional) The hex value of the witness program
   confidential_key?: string;       //  (string) Elements only
   unconfidential?: string;         //  (string) Elements only
-}
-
-export interface LiquidPegs {
-  amount: string;
-  date: string;
-}
-
-export interface CurrentPegs {
-  amount: string;
-  lastBlockUpdate: number;
-  hash: string;
-}
-
-export interface PegsVolume {
-  volume: string;
-  number: number;
-}
-
-export interface FederationAddress {
-  bitcoinaddress: string;
-  balance: string;
-}
-
-export interface FederationUtxo {
-  txid: string;
-  txindex: number;
-  bitcoinaddress: string;
-  amount: number;
-  blocknumber: number;
-  blocktime: number;
-  pegtxid: string;
-  pegindex: number;
-  pegblocktime: number;
-  timelock: number;
-  expiredAt: number;
-  isDust?: boolean;
-}
-
-export interface RecentPeg {
-  txid: string;
-  txindex: number;
-  amount: number;
-  bitcoinaddress: string;
-  bitcointxid: string;
-  bitcoinindex: number;
-  blocktime: number;
-}
-
-export interface AuditStatus {
-  bitcoinBlocks: number;
-  bitcoinHeaders: number;
-  lastBlockAudit: number;
-  isAuditSynced: boolean;
 }
 
 export interface ITranslators { [language: string]: string; }
@@ -142,9 +153,12 @@ export interface SinglePoolStats {
   emptyBlocks: number;
   rank: number;
   share: number;
-  lastEstimatedHashrate: number;
-  lastEstimatedHashrate3d: number;
-  lastEstimatedHashrate1w: number;
+  // lane-aware per-pool estimates from the backend (absolute H/s in the API
+  // response, scaled to display units by MiningService); optional because an
+  // older backend or an indexing failure omits them
+  lastEstimatedHashrate?: number;
+  lastEstimatedHashrate3d?: number;
+  lastEstimatedHashrate1w?: number;
   emptyBlockRatio: string;
   logo: string;
   slug: string;
@@ -190,6 +204,22 @@ export interface PoolStat {
   totalReward: number;
 }
 
+export interface QbitBlockCadence {
+  topBits: number;
+  chainId: number;
+  isAuxpow: boolean;
+  signalBits: number;
+  expectedChainId: number | null;
+  chainIdMatchesExpected: boolean | null;
+}
+
+// Parent-chain (Bitcoin) coinbase data recovered from an AuxPoW block header
+export interface QbitAuxPowParentSummary {
+  parentBlockHash: string;
+  parentCoinbaseRaw: string;
+  parentCoinbaseAddresses: string[];
+}
+
 export interface BlockExtension {
   totalFees?: number;
   medianFee?: number;
@@ -215,6 +245,8 @@ export interface BlockExtension {
     status: 'invalid' | 'active' | 'valid-fork' | 'valid-headers' | 'headers-only';
     prevhash: string;
   }[];
+  cadence?: QbitBlockCadence;
+  auxpow?: QbitAuxPowParentSummary | null;
 }
 
 export interface BlockExtended extends Block {
@@ -299,111 +331,6 @@ export interface AuditScore {
   matchRate?: number;
 }
 
-export interface ITopNodesPerChannels {
-  publicKey: string,
-  alias: string,
-  channels?: number,
-  capacity: number,
-  firstSeen?: number,
-  updatedAt?: number,
-  city?: any,
-  country?: any,
-  subdivision?: any,
-  iso_code?: string,
-  geolocation?: any;
-}
-
-export interface ITopNodesPerCapacity {
-  publicKey: string,
-  alias: string,
-  capacity: number,
-  channels?: number,
-  firstSeen?: number,
-  updatedAt?: number,
-  city?: any,
-  country?: any,
-  subdivision?: any,
-  iso_code?: string,
-  geolocation?: any;
-}
-
-export interface INodesRanking {
-  topByCapacity: ITopNodesPerCapacity[];
-  topByChannels: ITopNodesPerChannels[];
-}
-
-export interface INodesStatisticsEntry {
-  added: string;
-  avg_base_fee_mtokens: number;
-  avg_capacity: number;
-  avg_fee_rate: number;
-  channel_count: number;
-  clearnet_nodes: number;
-  clearnet_tor_nodes: number;
-  id: number;
-  med_base_fee_mtokens: number;
-  med_capacity: number;
-  med_fee_rate: number;
-  node_count: number;
-  tor_nodes: number;
-  total_capacity: number;
-  unannounced_nodes: number;
-}
-
-export interface INodesStatistics {
-  latest: INodesStatisticsEntry;
-  previous: INodesStatisticsEntry;
-}
-
-export interface IOldestNodes {
-  publicKey: string,
-  alias: string,
-  firstSeen: number,
-  channels?: number,
-  capacity: number,
-  updatedAt?: number,
-  city?: any,
-  country?: any,
-  subdivision?: any,
-  iso_code?: string,
-  geolocation?: any;
-}
-
-export interface IChannel {
-  id: number;
-  short_id: string;
-  capacity: number;
-  transaction_id: string;
-  transaction_vout: number;
-  closing_transaction_id: string;
-  closing_reason: string;
-  updated_at: string;
-  closing_date?: string;
-  created: string;
-  status: number;
-  node_left: INode,
-  node_right: INode,
-}
-
-
-export interface INode {
-  alias: string;
-  public_key: string;
-  channels: number;
-  capacity: number;
-  base_fee_mtokens: number;
-  cltv_delta: number;
-  fee_rate: number;
-  is_disabled: boolean;
-  max_htlc_mtokens: number;
-  min_htlc_mtokens: number;
-  updated_at: string;
-  longitude: number;
-  latitude: number;
-  funding_balance?: number;
-  closing_balance?: number;
-}
-
 export interface Acceleration {
   txid: string;
   status: 'requested' | 'accelerating' | 'completed_provisional' | 'completed' | 'failed' | 'failed_provisional';
@@ -481,22 +408,6 @@ export interface TxResult {
   };
   error?: string;
 }
-export interface WalletAddress {
-  address: string;
-  active: boolean;
-  stats: ChainStats;
-  transactions: AddressTxSummary[];
-}
-
-export interface Treasury {
-  id: number,
-  name: string,
-  wallet: string,
-  enterprise: string,
-  verifiedAddresses: string[];
-  balances?: { balance: number, time: number }[];
-}
-
 export interface ChainTip {
   height: number;
   hash: string;

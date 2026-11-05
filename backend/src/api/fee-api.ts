@@ -3,8 +3,10 @@ import { IBitcoinApi } from './bitcoin/bitcoin-api.interface';
 import config from '../config';
 import mempool from './mempool';
 import projectedBlocks from './mempool-blocks';
+import { weightToFractionalVsize } from '../utils/weight-units';
 
-const isLiquid = config.MEMPOOL.NETWORK === 'liquid' || config.MEMPOOL.NETWORK === 'liquidtestnet';
+const DAMPENER_LOW_FULLNESS = 0.5;
+const DAMPENER_HIGH_FULLNESS = 0.95;
 
 interface RecommendedFees {
   fastestFee: number,
@@ -17,10 +19,10 @@ interface RecommendedFees {
 class FeeApi {
   constructor() { }
 
-  minimumIncrement = isLiquid ? 0.1 : 1;
-  minFastestFee = isLiquid ? 0.1 : 1;
-  minHalfHourFee = isLiquid ? 0.1 : 0.5;
-  priorityFactor = isLiquid ? 0 : 0.5;
+  minimumIncrement = 1;
+  minFastestFee = 1;
+  minHalfHourFee = 0.5;
+  priorityFactor = 0.5;
 
   public getRecommendedFee(): RecommendedFees {
     const pBlocks = projectedBlocks.getMempoolBlocks();
@@ -90,11 +92,14 @@ class FeeApi {
 
   private optimizeMedianFee(pBlock: MempoolBlock, nextBlock: MempoolBlock | undefined, previousFee: number | undefined, minFee: number, minIncrement: number = this.minimumIncrement): number {
     const useFee = previousFee ? (pBlock.medianFee + previousFee) / 2 : pBlock.medianFee;
-    if (pBlock.blockVSize <= 500000 || pBlock.medianFee < minFee) {
+    const blockCapacityVSize = weightToFractionalVsize(config.MEMPOOL.BLOCK_WEIGHT_UNITS);
+    const halfFullVSize = blockCapacityVSize * DAMPENER_LOW_FULLNESS;
+    const nearFullVSize = blockCapacityVSize * DAMPENER_HIGH_FULLNESS;
+    if (pBlock.blockVSize <= halfFullVSize || pBlock.medianFee < minFee) {
       return minFee;
     }
-    if (pBlock.blockVSize <= 950000 && !nextBlock) {
-      const multiplier = (pBlock.blockVSize - 500000) / 500000;
+    if (pBlock.blockVSize <= nearFullVSize && !nextBlock) {
+      const multiplier = (pBlock.blockVSize - halfFullVSize) / halfFullVSize;
       return Math.max(this.roundToNearest(useFee * multiplier, minIncrement), minFee);
     }
     return Math.max(this.roundUpToNearest(useFee, minIncrement), minFee);

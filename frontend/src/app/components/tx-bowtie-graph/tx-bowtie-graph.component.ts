@@ -9,6 +9,7 @@ import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pip
 import { AssetsService } from '@app/services/assets.service';
 import { environment } from '@environments/environment';
 import { ElectrsApiService } from '@app/services/electrs-api.service';
+import { formatScriptPubKeyType } from '@app/shared/scriptpubkey-type.utils';
 
 interface SvgLine {
   path: string;
@@ -176,7 +177,7 @@ export class TxBowtieGraphComponent implements OnInit, OnChanges {
         type: v.scriptpubkey_type === 'fee' ? 'fee' : 'output',
         value: this.getOutputValue(v),
         displayValue: v?.value,
-        address: v?.scriptpubkey_address || v?.scriptpubkey_type?.toUpperCase(),
+        address: v?.scriptpubkey_address || formatScriptPubKeyType(v?.scriptpubkey_type, v?.scriptpubkey),
         index: i,
         pegout: v?.pegout?.scriptpubkey_address,
         confidential: (this.isLiquid && v?.value === undefined),
@@ -198,7 +199,7 @@ export class TxBowtieGraphComponent implements OnInit, OnChanges {
         displayValue: v?.prevout?.value,
         txid: v.txid,
         vout: v.vout,
-        address: v?.prevout?.scriptpubkey_address || v?.prevout?.scriptpubkey_type?.toUpperCase(),
+        address: v?.prevout?.scriptpubkey_address || formatScriptPubKeyType(v?.prevout?.scriptpubkey_type, v?.prevout?.scriptpubkey),
         index: i,
         coinbase: v?.is_coinbase,
         pegin: v?.is_pegin,

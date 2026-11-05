@@ -3,6 +3,7 @@ import logger from '../logger';
 import { MempoolTransactionExtended, MempoolBlockWithTransactions } from '../mempool.interfaces';
 import rbfCache from './rbf-cache';
 import transactionUtils from './transaction-utils';
+import { QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT } from '../utils/weight-units';
 
 const PROPAGATION_MARGIN = 180; // in seconds, time since a transaction is first seen after which it is assumed to have propagated to all miners
 
@@ -67,14 +68,14 @@ class Audit {
     }
 
     if (transactions[0]) {
-      displacedWeight += (4000 - transactions[0].weight);
+      displacedWeight += (QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT - transactions[0].weight);
       projectedWeight += transactions[0].weight;
       matchedWeight += transactions[0].weight;
     }
 
     // we can expect an honest miner to include 'displaced' transactions in place of recent arrivals and censored txs
     // these displaced transactions should occupy the first N weight units of the next projected block
-    let displacedWeightRemaining = displacedWeight + 4000;
+    let displacedWeightRemaining = displacedWeight + QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT;
     let index = 0;
     let lastFeeRate = Infinity;
     let failures = 0;
@@ -83,7 +84,7 @@ class Audit {
       const txid = projectedBlocks[blockIndex].transactionIds[index];
       const tx = mempool[txid];
       if (tx) {
-        const fits = (tx.weight - displacedWeightRemaining) < 4000;
+        const fits = (tx.weight - displacedWeightRemaining) < QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT;
         // 0.005 margin of error for any remaining vsize rounding issues
         const feeMatches = tx.effectiveFeePerVsize >= (lastFeeRate - 0.005);
         if (fits || feeMatches) {

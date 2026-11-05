@@ -13,7 +13,7 @@ import { Price } from '@app/services/price.service';
 export class AmountComponent implements OnInit, OnDestroy {
   conversions$: Observable<any>;
   currency: string;
-  viewAmountMode$: Observable<'btc' | 'sats' | 'fiat'>;
+  viewAmountMode$: Observable<'qbt' | 'sats' | 'fiat'>;
   network = '';
 
   stateSubscription: Subscription;

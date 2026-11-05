@@ -14,7 +14,6 @@ export class AssetsService {
 
   getAssetsJson$: Observable<{ array: AssetExtended[]; objects: any}>;
   getAssetsMinimalJson$: Observable<any>;
-  getWorldMapJson$: Observable<any>;
 
   constructor(
     private httpClient: HttpClient,
@@ -67,6 +66,5 @@ export class AssetsService {
       shareReplay(1),
     );
 
-    this.getWorldMapJson$ = this.httpClient.get(apiBaseUrl + '/resources/worldmap.json').pipe(shareReplay());
   }
 }

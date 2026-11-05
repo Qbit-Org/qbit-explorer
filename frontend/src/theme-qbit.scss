@@ -1,0 +1,122 @@
+@use "sass:color";
+
+/* qbit theme: dark content surfaces (block visualizations and ECharts are
+   dark-tuned, and qbit.org itself uses near-black stat cards), with the
+   mempool blue/purple accent family replaced by the qbit greens from the
+   vendored design contract (src/resources/qbit-design/tokens.json):
+   accent #1ab553, accentHover #20c760, link #0f813b. */
+
+/* Theme */
+$bg: #0d120f;
+$active-bg: #000000;
+$hover-bg: #0f1512;
+$fg: #fff;
+$nav-bg: $bg;
+$title-fg: #1ab553;
+
+$taproot: #eba814;
+$taproot-light: #d5a90a;
+$taproot-dark: #9d7c05;
+
+/* Bootstrap */
+$body-bg: $bg;
+$body-color: $fg;
+$gray-800: $bg;
+$gray-700: $fg;
+
+$nav-tabs-link-active-bg: $active-bg;
+
+$primary: #1ab553;
+$secondary: #22322a;
+$tertiary: #0f813b;
+$success: #0aab2f;
+$info: #20c760;
+
+$h5-font-size: 1.15rem !default;
+
+$pagination-bg: $body-bg;
+$pagination-border-color: $gray-800;
+$pagination-disabled-bg:           $fg;
+$pagination-disabled-border-color: $bg;
+$pagination-active-color:          $fg;
+$pagination-active-bg:             $tertiary;
+$pagination-hover-bg:              $hover-bg;
+$pagination-hover-border-color:     $bg;
+$pagination-disabled-bg:          $bg;
+
+$custom-select-indicator-color: $fg;
+
+.input-group-text {
+  background-color: #16211b !important;
+  border: 1px solid #22322a !important;
+}
+
+$link-color:                $info;
+$link-decoration:           none !default;
+$link-hover-color:          color.adjust($link-color, $lightness: -15%) !default;
+$link-hover-decoration:     underline !default;
+
+$dropdown-bg: $bg;
+$dropdown-link-color: $fg;
+
+$dropdown-link-hover-color: $fg;
+$dropdown-link-hover-bg: $active-bg;
+
+$dropdown-link-active-color: $fg;
+$dropdown-link-active-bg: $active-bg;
+
+:root {
+  --bg: #{$bg};
+  --active-bg: #{$active-bg};
+  --hover-bg: #{$hover-bg};
+  --fg: #{$fg};
+  --nav-bg: #{$nav-bg};
+  --title-fg: #{$title-fg};
+
+  --primary: #{$primary};
+  --secondary: #{$secondary};
+  --tertiary: #{$tertiary};
+  --success: #{$success};
+  --info: #{$info};
+  --link-color: #{$link-color};
+  --link-hover-color: #{$link-hover-color};
+  --icon: #f1f1f1;
+  --skeleton-bg: #24322a;
+  --skeleton-bg-light: #52665a;
+
+  --box-bg: #141c17;
+  --stat-box-bg: #0a0f0c;
+  --alert-bg: #0d4023;
+  --transparent-fg: #ffffffbb;
+  --fade-out-box-bg-start: rgba(20, 28, 23, 0);
+  --fade-out-box-bg-end: rgba(20, 28, 23, 1);
+  --opacity: 0.9;
+
+  --testnet: #1d486f;
+  --signet: #6f1d5d;
+  --regtest: #7d7d7d;
+  --liquid: #116761;
+  --liquidtestnet: #494a4a;
+
+  --mainnet-alt: #1ab553;
+  --testnet-alt: #183550;
+  --signet-alt: #471850;
+  --regtest-alt: #4a4a4a;
+  --liquidtestnet-alt: #272e46;
+
+  --taproot: #eba814;
+  --taproot-light: #d5a90a;
+  --taproot-dark: #9d7c05;
+
+  --green: #83fd00;
+  --red: #ff3d00;
+  --yellow: #fff000;
+  --grey: #7e7e7e;
+  --tooltip-grey: #b1b1b1;
+  --orange: #ff9f00;
+
+  --search-button: #0f813b;
+  --search-button-border: #0d6f34;
+  --search-button-focus: #128f42;
+  --search-button-shadow: #1ab55380;
+}

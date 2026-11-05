@@ -21,6 +21,7 @@ export interface MiningStats {
   pools: SinglePoolStats[];
   miningUnits: MiningUnits;
   totalBlockCount: number;
+  minersLuck?: string;
 }
 
 @Injectable({
@@ -128,13 +129,18 @@ export class MiningService {
     const totalEmptyBlockRatio = (totalEmptyBlock / stats.blockCount * 100).toFixed(2);
     const poolsStats = stats.pools.map((poolStat) => {
       return {
+        // spread first: the derived fields below must override the raw H/s
+        // values the backend now ships under the same names
+        ...poolStat,
         share: parseFloat((poolStat.blockCount / stats.blockCount * 100).toFixed(2)),
-        lastEstimatedHashrate: poolStat.blockCount / stats.blockCount * stats.lastEstimatedHashrate / hashrateDivider,
-        lastEstimatedHashrate3d: poolStat.blockCount / stats.blockCount * stats.lastEstimatedHashrate3d / hashrateDivider,
-        lastEstimatedHashrate1w: poolStat.blockCount / stats.blockCount * stats.lastEstimatedHashrate1w / hashrateDivider,
+        // prefer the backend's lane-aware estimate: overall block share times
+        // the aggregate rate misprices pools because the two Cadence lanes
+        // run at very different network hashrates
+        lastEstimatedHashrate: (poolStat.lastEstimatedHashrate ?? (poolStat.blockCount / stats.blockCount * stats.lastEstimatedHashrate)) / hashrateDivider,
+        lastEstimatedHashrate3d: (poolStat.lastEstimatedHashrate3d ?? (poolStat.blockCount / stats.blockCount * stats.lastEstimatedHashrate3d)) / hashrateDivider,
+        lastEstimatedHashrate1w: (poolStat.lastEstimatedHashrate1w ?? (poolStat.blockCount / stats.blockCount * stats.lastEstimatedHashrate1w)) / hashrateDivider,
         emptyBlockRatio: (poolStat.emptyBlocks / poolStat.blockCount * 100).toFixed(2),
         logo: `/resources/mining-pools/` + poolStat.slug + '.svg',
-        ...poolStat
       };
     });
 

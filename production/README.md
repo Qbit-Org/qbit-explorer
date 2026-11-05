@@ -1,294 +1,270 @@
-# Deploying an Enterprise Production Instance
+# Bare-Metal Production Deployment
 
-These instructions are for setting up a serious production Mempool website for Bitcoin (mainnet, testnet, signet), Liquid (mainnet, testnet).
+These notes cover running qbit-explorer directly on a server instead of in the
+containers built from [`docker/`](../docker/). Each instance runs this stack:
 
-Again, this setup is no joke—home users should use [one of the other installation methods](../#installation-methods). Support is only provided to project sponsors through [Mempool Enterprise®](https://mempool.space/enterprise).
-
-You can also have the mempool.space team run a highly-performant and highly-available instance of Mempool for you on their own global ISP infrastructure. See <a href="https://mempool.space/enterprise" target="_blank">Mempool Enterprise®</a> for more details.
-
-### Server Hardware
-
-Mempool v3 is powered by [mempool/electrs](https://github.com/mempool/electrs), which is a beast. 
-
-I recommend a beefy server:
-
-* 20-core CPU (more is better)
-* 64GB RAM (more is better)
-* 4TB SSD (NVMe is better)
-
-### HDD vs SSD vs NVMe
-
-If you don't have a fast SSD or NVMe-backed disk, that's fine—go online and buy some fast new NVMe drives. When they arrive, install them, throw away your old HDDs, and then proceed with the rest of this guide.
-
-## FreeBSD 13
-
-The mempool.space site is powered by FreeBSD with ZFS root and ARC cache for maximum performance. Linux probably works fine too, but why settle?
-
-### Filesystem
-
-For maximum performance, I use 2x 2TB NVMe SSDs in a RAID 0 using ZFS with lots of RAM for the ARC L2 cache.
 ```
-% zpool list -v
-NAME        SIZE  ALLOC   FREE  CKPOINT  EXPANDSZ   FRAG    CAP  DEDUP    HEALTH  ALTROOT
-nvm        3.62T  1.25T  2.38T        -         -     2%    34%  1.00x    ONLINE  -
-  nvd0p3   1.81T   629G  1.20T        -         -     2%  33.9%      -  ONLINE
-  nvd1p3   1.81T   646G  1.18T        -         -     2%  34.8%      -  ONLINE
+qbitd  ->  qbit-electrs  ->  backend (Node.js + MariaDB)  ->  nginx + frontend
 ```
 
-For maximum flexibility of configuration, I recommend separate partitions for each data folder:
-```
-Filesystem                             Size    Used   Avail Capacity  Mounted on
-nvm/bitcoin                          766G    648M    765G     0%    /bitcoin
-nvm/bitcoin/blocks                   1.1T    375G    765G    33%    /bitcoin/blocks
-nvm/bitcoin/chainstate               770G    4.5G    765G     1%    /bitcoin/chainstate
-nvm/bitcoin/electrs                  772G    7.3G    765G     1%    /bitcoin/electrs
-nvm/bitcoin/indexes                  799G     34G    765G     4%    /bitcoin/indexes
-nvm/bitcoin/testnet3                 765G    5.0M    765G     0%    /bitcoin/testnet3
-nvm/bitcoin/testnet3/blocks          786G     21G    765G     3%    /bitcoin/testnet3/blocks
-nvm/bitcoin/testnet3/chainstate      766G    1.1G    765G     0%    /bitcoin/testnet3/chainstate
-nvm/bitcoin/testnet3/indexes         768G    2.9G    765G     0%    /bitcoin/testnet3/indexes
-nvm/electrs                          765G    128K    765G     0%    /electrs
-nvm/electrs/liquid                   765G    104K    765G     0%    /electrs/liquid
-nvm/electrs/liquid/cache             765G    7.8M    765G     0%    /electrs/liquid/newindex/cache
-nvm/electrs/liquid/history           766G    886M    765G     0%    /electrs/liquid/newindex/history
-nvm/electrs/liquid/txstore           775G     10G    765G     1%    /electrs/liquid/newindex/txstore
-nvm/electrs/liquidtestnet            765G    112K    765G     0%    /electrs/liquidtestnet
-nvm/electrs/liquidtestnet/cache      765G     96K    765G     0%    /electrs/liquidtestnet/newindex/cache
-nvm/electrs/liquidtestnet/history    765G     96K    765G     0%    /electrs/liquidtestnet/newindex/history
-nvm/electrs/liquidtestnet/txstore    765G     96K    765G     0%    /electrs/liquidtestnet/newindex/txstore
-nvm/electrs/mainnet                  765G    112K    765G     0%    /electrs/mainnet
-nvm/electrs/mainnet/cache            765G    4.4M    765G     0%    /electrs/mainnet/newindex/cache
-nvm/electrs/mainnet/history          1.0T    300G    765G    28%    /electrs/mainnet/newindex/history
-nvm/electrs/mainnet/txstore          1.3T    530G    765G    41%    /electrs/mainnet/newindex/txstore
-nvm/electrs/signet                   766G    522M    765G     0%    /electrs/signet
-nvm/electrs/testnet                  765G    104K    765G     0%    /electrs/testnet
-nvm/electrs/testnet/cache            765G    1.6M    765G     0%    /electrs/testnet/newindex/cache
-nvm/electrs/testnet/history          784G     19G    765G     2%    /electrs/testnet/newindex/history
-nvm/electrs/testnet/txstore          803G     38G    765G     5%    /electrs/testnet/newindex/txstore
-nvm/elements                         766G    927M    765G     0%    /elements
-nvm/elements/electrs                 766G    716M    765G     0%    /elements/electrs
-nvm/elements/liquidv1                777G     11G    765G     1%    /elements/liquidv1
-nvm/mempool                          789G     24G    765G     3%    /mempool
-nvm/mysql                            766G    648M    765G     0%    /mysql
-tmpfs                                1.0G    1.3M    1.0G     0%    /var/cache/nginx
-```
+Run one explorer instance per qbit network, each on its own host. The node's
+systemd unit runs a single qbitd and the reference nginx configuration serves
+a single network. The frontend links to the other network's explorer through
+`MAINNET_EXPLORER_URL` and `TESTNET4_EXPLORER_URL`.
 
-### Build Dependencies
+The examples use Debian/Ubuntu paths. Adjust them for other systems.
 
-You'll probably need these:
-```
-pkg install -y zsh sudo git screen curl wget neovim rsync nginx openssl openssh-portable py38-pip py38-certbot-nginx boost-libs autoconf automake gmake gcc libevent libtool pkgconf mariadb105-server mariadb105-client
-```
+## Contents
 
-### Node.js + npm
+| File | Purpose |
+| --- | --- |
+| `mempool-config.mainnet.json` | Backend config template for qbit mainnet |
+| `mempool-config.testnet4.json` | Backend config template for qbit testnet4 |
+| `mempool-config.regtest.json` | Backend config template for a private regtest chain |
 
-Build Node.js v24.13.0 and npm v9 from source using `nvm`:
-```
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.0/install.sh | zsh
-source $HOME/.zshrc
-nvm install v24.13.0 --shared-zlib
-nvm alias default node
-```
+The templates point the backend at a local qbitd and qbit-electrs. On every
+network they index all blocks, block summaries, goggles and CPFP data. They
+leave Redis off, so the backend uses its default disk cache: it saves the
+mempool under `MEMPOOL.CACHE_DIR` (`./cache` in `backend/`) and reloads it
+after a restart. They also leave `MEMPOOL.RUST_GBT` off, so the backend builds
+projected blocks with its TypeScript implementation: the Rust builder in
+[`rust/gbt`](../rust/gbt) still applies Bitcoin's witness scale factor of 4
+and would overstate their fee rates fourfold on qbit. Values written as
+`__PLACEHOLDER__` must be replaced with your own credentials. Keep
+`MEMPOOL.OFFICIAL` set to `false`. That flag marks upstream's mempool.space
+instances and adds internal qbitd RPC routes under `/api/v1/internal/`, which
+the reference nginx configuration would expose.
 
-### Rust
+## Ports
 
-Build Rust from latest source:
-```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+| Network | qbitd P2P | qbitd RPC | qbit-electrs `--network` | qbit-electrs REST | Database |
+| --- | ---: | ---: | --- | ---: | --- |
+| mainnet | 8355 | 8352 | `qbit` | 3000 | `mempool` |
+| testnet4 | 48355 | 48352 | `qbittestnet4` | 3004 | `mempool_testnet4` |
+| regtest | 18460 | 18452 | `qbitregtest` | 3002 | `mempool_regtest` |
 
-### Tor
+The REST ports are qbit-electrs defaults. On every network the backend listens
+on 8999, where the reference nginx configuration sends API requests. Keep RPC,
+REST and MariaDB on localhost. The backend has no bind-address setting: it
+listens on port 8999 on every interface, even when `MEMPOOL.UNIX_SOCKET_PATH`
+is also set. Block port 8999 in the host firewall and let only nginx reach it.
+Only nginx and, if you want to serve peers, the qbitd P2P port should accept
+outside connections.
 
-Install Tor add Bitcoin to the `_tor` group:
-```
-pkg install -y tor
-pw user mod bitcoin -G _tor
-```
+## Requirements
 
-Then configure `/usr/local/etc/tor/torrc` as follows:
-```
-RunAsDaemon 1
-SOCKSPort 9050
-ControlPort 9051
-Log notice syslog
+- Fast SSD or NVMe storage with room for an archive qbitd with `txindex` and
+  the qbit-electrs index next to it
+- git, a C/C++ toolchain, `clang` and `cmake`
+- Node.js v26.12.1 (see [`.nvmrc`](../.nvmrc)) and npm
+- Rust through rustup. Installing the backend dependencies compiles
+  [`rust/gbt`](../rust/gbt) with the toolchain pinned in
+  `rust/gbt/rust-toolchain`.
+- MariaDB 10.5 or later
+- nginx
 
-CookieAuthentication 1
-CookieAuthFileGroupReadable 1
-CookieAuthFile /var/db/tor/control_auth_cookie
-DataDirectory /var/db/tor
-DataDirectoryGroupReadable 1
+## qbit node
 
-HiddenServiceDir /var/db/tor/mempool
-HiddenServicePort 80 127.0.0.1:81
-HiddenServiceVersion 3
+Install `qbitd` and `qbit-cli` from [Qbit-Org/qbit](https://github.com/Qbit-Org/qbit)
+and follow its [node guide](https://github.com/Qbit-Org/qbit/blob/main/doc/user/run-node.md).
+The node's systemd unit, `contrib/init/qbitd.service`, reads
+`/etc/qbit/qbit.conf` and keeps its data in `/var/lib/qbit`. It runs as a `qbit`
+user and group. Create them if they don't exist yet (see qbit's
+[init guide](https://github.com/Qbit-Org/qbit/blob/main/doc/deployment/init.md)):
 
-HiddenServiceDir /var/db/tor/liquid
-HiddenServicePort 80 127.0.0.1:83
-HiddenServiceVersion 3
+```sh
+sudo useradd --system --user-group --home-dir /var/lib/qbit --shell /usr/sbin/nologin qbit
 ```
 
-### Bitcoin
+The explorer needs an archive node, so leave block and witness pruning disabled,
+which is the default. Add the following to `qbit.conf`:
 
-Build [Bitcoin Core](https://github.com/bitcoin/bitcoin) from source. Alternatively, install the OS packages:
-```
-pkg install -y bitcoin-daemon bitcoin-utils
-```
-
-Configure your `bitcoin.conf` like this:
-```
-datadir=/bitcoin
+```ini
 server=1
 txindex=1
-listen=1
-discover=1
-par=16
-dbcache=4096
-maxmempool=1337
-mempoolexpiry=999999
-maxconnections=42
-onion=127.0.0.1:9050
-rpcallowip=127.0.0.1
-rpcuser=foo
-rpcpassword=bar
+rpcauth=mempool:<salt>$<hash>
+rpccookiefile=/var/lib/qbit/.cookie
+rpccookieperms=group
 
-[main]
-bind=127.0.0.1:8333
-rpcbind=127.0.0.1:8332
-whitelist=bloomfilter@127.0.0.1
-
-[test]
-daemon=1
-bind=127.0.0.1:18333
-rpcbind=127.0.0.1:18332
-
-[signet]
-daemon=1
-bind=127.0.0.1:38333
-rpcbind=127.0.0.1:38332
+# on a testnet4 or regtest host, select the chain:
+#chain=testnet4
+#chain=regtest
 ```
 
-### Elements
+Generate the `rpcauth` line for the backend with qbit's
+[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py),
+which needs only Python 3: `python3 rpcauth.py mempool`. It prints the line and
+the password, and qbitd stores only the hash. Leave
+`rpcpassword` unset, so that qbitd also writes an RPC cookie for qbit-electrs.
+The two `rpccookie` settings put that cookie at a fixed path, whichever chain
+the host runs, and let the `qbit` group read it. By default it would sit in the
+chain's subdirectory, such as `testnet4/`, which qbitd creates owner-only. RPC
+binds to localhost by default and uses the qbit port for the selected chain.
 
-Build [Elements Core](https://github.com/ElementsProject/elements) from source:
-```
-./autogen.sh
-MAKE=gmake CC=cc CXX=c++ CPPFLAGS=-I/usr/local/include \
-  ./configure --with-gui=no --disable-wallet
-gmake -j19
-gmake install
-```
+Run `qbit-cli` with `-conf=/etc/qbit/qbit.conf`, as root or as a member of the
+`qbit` group, so that it uses the same chain and cookie. Group members also
+need to read `qbit.conf`, so give it to the `qbit` user and group, as qbit's init
+guide suggests. The settings above hold no password, only the `rpcauth` hash:
 
-Configure your `elements.conf` like this:
-```
-server=1
-daemon=1
-listen=1
-rpcuser=foo
-rpcpassword=bar
-mainchainrpchost=127.0.0.1
-mainchainrpcuser=foo
-mainchainrpcpassword=bar
-txindex=1
-
-[liquidv1]
-validatepegin=1
-mainchainrpcport=8332
-
-[liquidtestnet]
-validatepegin=0
-anyonecanspendaremine=0
-initialfreecoins=2100000000000000
-con_dyna_deploy_start=0
-con_max_block_sig_size=150
-checkblockindex=0
-fallbackfee=0.00000100
-con_has_parent_chain=0
-parentgenesisblockhash=NULL
-pubkeyprefix=36
-scriptprefix=19
-blindedprefix=23
-bech32_hrp=tex
-blech32_hrp=tlq
-pchmessagestart=410edd62
-dynamic_epoch_length=1000
-signblockscript=51210217e403ddb181872c32a0cd468c710040b2f53d8cac69f18dad07985ee37e9a7151ae
-evbparams=dynafed:0:::
-addnode=liquid-testnet.blockstream.com:18892
-addnode=liquidtestnet.com:18891
-addnode=liquid.network:18444
+```sh
+sudo chown qbit:qbit /etc/qbit/qbit.conf
+sudo chmod 640 /etc/qbit/qbit.conf
 ```
 
-Start `elementsd` and wait for it to sync the Liquid blockchain.
+## qbit-electrs
 
-### Electrs
+Build [Qbit-Org/qbit-electrs](https://github.com/Qbit-Org/qbit-electrs) and run
+one indexer for each network next to its qbitd:
 
-Install [Electrs](https://github.com/mempool/electrs) from source:
-```
-git clone https://github.com/mempool/electrs
-cd electrs
-git checkout mempool
-```
-
-You'll need one instance per network. Build and run them one at a time:
-```
-./electrs-start-mainnet
-./electrs-start-testnet
-./electrs-start-signet
-./electrs-start-liquid
-./electrs-start-liquidtestnet
-```
-
-### MariaDB
-
-Import the historical mempool fee database snapshot:
-```
-mysql -u root
-create database mempool;
-grant all on mempool.* to 'mempool'@'localhost' identified by 'mempool';
-create database mempool_testnet;
-grant all on mempool_testnet.* to 'mempool_testnet'@'localhost' identified by 'mempool_testnet';
-create database mempool_signet;
-grant all on mempool_signet.* to 'mempool_signet'@'localhost' identified by 'mempool_signet';
-create database mempool_liquid;
-grant all on mempool_liquid.* to 'mempool_liquid'@'localhost' identified by 'mempool_liquid';
-create database mempool_liquidtestnet;
-grant all on mempool_liquidtestnet.* to 'mempool_liquidtestnet'@'localhost' identified by 'mempool_liquidtestnet';
+```sh
+git clone https://github.com/Qbit-Org/qbit-electrs
+cd qbit-electrs
+cargo build --release --bin electrs
+sudo install -m 0755 target/release/electrs /usr/local/bin/qbit-electrs
+sudo useradd --system --user-group --groups qbit --home-dir /var/lib/qbit-electrs \
+  --shell /usr/sbin/nologin qbit-electrs
+sudo install -d -o qbit-electrs -m 0700 /var/lib/qbit-electrs
+sudo -u qbit-electrs /usr/local/bin/qbit-electrs -vv \
+  --network qbit \
+  --daemon-dir /var/lib/qbit \
+  --daemon-rpc-addr 127.0.0.1:8352 \
+  --db-dir /var/lib/qbit-electrs \
+  --jsonrpc-import
 ```
 
+qbit-electrs runs as its own user in the `qbit` group. That user can read the
+node's RPC cookie, which gives full RPC access, but cannot write to the node's
+data directory. Without `--cookie`,
+qbit-electrs reads `.cookie` from the daemon directory, which here gives
+`/var/lib/qbit/.cookie`. Don't pass `--cookie 'user:password'` instead: other
+local users can read command-line arguments through `ps`. In production, run the
+last command under your service manager, ordered after qbitd and restarted on
+failure: qbitd writes a new cookie each time it starts and deletes it when it
+stops.
 
-### Mempool
+For testnet4, use `--network qbittestnet4` and
+`--daemon-rpc-addr 127.0.0.1:48352`. For regtest, use `--network qbitregtest`
+and `--daemon-rpc-addr 127.0.0.1:18452`. Keep `--jsonrpc-import` on every
+chain: qbitd creates its block files owner-only, so the `qbit-electrs` user
+must fetch blocks over RPC instead of reading them. qbit-electrs then uses the
+daemon directory only to find the cookie, so keep `--daemon-dir /var/lib/qbit`
+on every chain too. Without `--http-addr`, the REST API listens on the port from
+the table above, which is where the templates expect it.
 
-After all 3 electrs instances are fully indexed, install your 3 Mempool nodes:
-```
-./mempool-install-all
-./mempool-upgrade-all
-```
+## MariaDB
 
-Finally, start your 3 Mempool backends:
-```
-./mempool-start-all
-```
+Create a database and user for the instance. The backend connects over TCP to
+`127.0.0.1`, so create the account for that host:
 
-### Nginx
-
-Get an SSL certificate using `certbot`:
-```
-certbot --nginx -d mempool.ninja
-```
-
-Make a symlink from `/usr/local/etc/nginx/mempool` to `/mempool/mempool`, copy the `nginx.conf`, and edit as necessary. You probably only need to edit the top-level `nginx.conf` file.
-```
-cd /usr/local/etc/nginx
-ln -s /mempool/mempool
-cp /mempool/mempool/nginx.conf .
-vi nginx.conf
-```
-
-Restart `nginx`:
-```
-service nginx restart
+```sql
+CREATE DATABASE mempool;
+CREATE USER 'mempool'@'127.0.0.1' IDENTIFIED BY '<database password>';
+GRANT ALL PRIVILEGES ON mempool.* TO 'mempool'@'127.0.0.1';
 ```
 
-### Done
+Use `mempool_testnet4` or `mempool_regtest` for the other templates.
 
-If everything went well, your site should look like the one at https://mempool.space/.
+## Backend
+
+```sh
+git clone https://github.com/Qbit-Org/qbit-explorer
+cd qbit-explorer/backend
+npm ci --omit=dev --omit=optional
+npm run build
+cp ../production/mempool-config.mainnet.json mempool-config.json
+chmod 600 mempool-config.json
+```
+
+In `mempool-config.json`, replace `__QBIT_RPC_USER__` and `__QBIT_RPC_PASS__`
+with the `rpcauth` user name and password, and replace the `__MEMPOOL_*_USER__`
+and `__MEMPOOL_*_PASS__` placeholders with the MariaDB user and password. The
+file holds both passwords, so keep it readable only by the user that runs the
+backend. Clone, build and start the backend as that same user, because it
+writes into its own checkout while it runs: its disk cache to `backend/cache`, a
+PID file to `backend/dist` unless `DATABASE.PID_DIR` is set, and any
+`MEMPOOL.EXTERNAL_ASSETS` downloads to `backend/`. The backend reads
+`backend/mempool-config.json`, or the file named by `MEMPOOL_CONFIG_FILE` (an
+absolute path) when that variable is set. Start it with:
+
+```sh
+npm run start-production
+```
+
+`start-production` allows Node.js a 16 GB heap. Use `npm run start` (2 GB) on
+smaller hosts. Run either command under your service manager so the backend
+restarts after a failure or a reboot. See
+[`backend/src/config.ts`](../backend/src/config.ts) for every setting and its
+default.
+
+## Frontend
+
+```sh
+cd ../frontend
+cp mempool-frontend-config.sample.json mempool-frontend-config.json
+npm ci --omit=dev --omit=optional
+npm run build
+sudo mkdir -p /var/www/mempool/browser
+sudo rsync -av --delete dist/mempool/browser/ /var/www/mempool/browser/
+```
+
+The sample config builds a mainnet instance. For a testnet4 instance, set
+`MAINNET_ENABLED` to `false`, `TESTNET4_ENABLED` to `true` and `ROOT_NETWORK`
+to `"testnet4"`. For a regtest instance, set `MAINNET_ENABLED` to `false`,
+`REGTEST_ENABLED` to `true` and `ROOT_NETWORK` to `"regtest"`. Point
+`MAINNET_EXPLORER_URL` and `TESTNET4_EXPLORER_URL` at the explorers you want
+the network selector to link to, or set them to `""` to hide those links.
+
+## nginx
+
+The top-level [`nginx.conf`](../nginx.conf) and
+[`nginx-mempool.conf`](../nginx-mempool.conf) are the reference configuration
+that the Docker frontend image is built from:
+
+```sh
+sudo cp ../nginx.conf /etc/nginx/nginx.conf
+sudo cp ../nginx-mempool.conf /etc/nginx/nginx-mempool.conf
+```
+
+`nginx.conf` listens on `127.0.0.1:80` and runs as `nobody`. Change the
+`listen` directive, add TLS for your domain (for example with
+`certbot --nginx`) and set `user` if your system runs nginx under another
+account.
+
+`nginx-mempool.conf` needs no changes. It proxies the API and WebSocket to the
+backend on `127.0.0.1:8999`, the port every template uses. Its `/qbit-design/`
+location fetches the qbit.org design contract (banner, navigation and design
+tokens) over HTTPS. If the host cannot reach qbit.org, the frontend keeps the
+copy bundled at build time. With `QBIT_SITE_CHROME` set to `false` (see below),
+the frontend doesn't use this location, and you can remove it.
+
+Run `sudo nginx -t` before reloading nginx.
+
+## Frontend customization
+
+By default every instance shows qbit.org's header, banner and footer, and the
+banner and navigation follow what qbit.org publishes. To remove them, set
+`QBIT_SITE_CHROME` to `false` in `mempool-frontend-config.json`. The explorer's
+own section bar and sub-footer stay, and the frontend doesn't contact qbit.org.
+
+The frontend can also load a customization file at build time. Set
+`CUSTOMIZATION` in `mempool-frontend-config.json` to its path, relative to
+`frontend/`, before `npm run build`. The file is JSON and supports these keys:
+
+- `theme`: one of the bundled themes (`qbit`, `default`, `contrast` or
+  `softsimon`), applied instead of the visitor's choice
+- `dashboard.widgets`: a list of `{ "component", "mobileOrder", "props" }`
+  entries that replaces the home dashboard. The components are `fees`,
+  `difficulty`, `goggles`, `incoming`, `replacements`, `blocks`,
+  `transactions`, and `balance`, `address` and `addressTransactions`, which take
+  `props.address`.
+- `enterprise` and `branding`: upstream's white-label mode. In this fork it
+  hides the network selector on every page. Everything else waits until a
+  visitor opens a transaction, tracker or preview page, and lasts until the next
+  full page load. At that point it sets the page title from `branding`, shows
+  the logo on the preview and tracker pages, sets `ACCELERATOR`,
+  `TESTNET_ENABLED`, `SIGNET_ENABLED`, `TESTNET4_ENABLED` and `REGTEST_ENABLED`
+  to `false`, and clears `MAINNET_EXPLORER_URL` and `TESTNET4_EXPLORER_URL`. It
+  does this even when one of those networks is the instance's own
+  `ROOT_NETWORK`, so set `enterprise` only on a mainnet instance. With
+  `enterprise` set to `<name>`, the build uses `src/index.mempool.<name>.html`,
+  which you must add.

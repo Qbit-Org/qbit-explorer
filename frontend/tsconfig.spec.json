@@ -5,8 +5,7 @@
     "types": [
       "jasmine",
       "node",
-      "cypress",
-      "cypress-wait-until"
+      "cypress"
 ]
   },
   "files": [

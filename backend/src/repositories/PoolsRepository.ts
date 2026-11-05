@@ -3,7 +3,7 @@ import poolsParser from '../api/pools-parser';
 import config from '../config';
 import DB from '../database';
 import logger from '../logger';
-import { PoolInfo, PoolTag } from '../mempool.interfaces';
+import { PoolAddressMatchMode, PoolInfo, PoolTag } from '../mempool.interfaces';
 
 class PoolsRepository {
   /**
@@ -11,7 +11,7 @@ class PoolsRepository {
    * @asyncUnsafe
    */
   public async $getPools(): Promise<PoolTag[]> {
-    const [rows] = await DB.query('SELECT id, unique_id as uniqueId, name, addresses, regexes, slug FROM pools');
+    const [rows] = await DB.query('SELECT id, unique_id as uniqueId, name, addresses, regexes, address_match_mode as addressMatchMode, parent_addresses as parentAddresses, parent_regexes as parentRegexes, slug FROM pools');
     return <PoolTag[]>rows;
   }
 
@@ -106,11 +106,18 @@ class PoolsRepository {
 
       if (parse) {
         rows[0].regexes = JSON.parse(rows[0].regexes);
-      }
-      if (['testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-        rows[0].addresses = []; // pools-v2.json only contains mainnet addresses
-      } else if (parse) {
+        // unlike upstream's pools-v2.json, pools-qbit.json carries the
+        // addresses of whichever qbit network the instance runs on, so they
+        // are never cleared for non-mainnet networks
         rows[0].addresses = JSON.parse(rows[0].addresses);
+        // AuxPoW parent-chain identifiers (NULL until an import writes them),
+        // exposed under the PoolTag field names like $getPools does
+        rows[0].parentRegexes = JSON.parse(rows[0].parent_regexes ?? '[]');
+        rows[0].parentAddresses = JSON.parse(rows[0].parent_addresses ?? '[]');
+        rows[0].addressMatchMode = rows[0].address_match_mode ?? 'any';
+        delete rows[0].parent_regexes;
+        delete rows[0].parent_addresses;
+        delete rows[0].address_match_mode;
       }
 
       return rows[0];
@@ -139,11 +146,15 @@ class PoolsRepository {
 
       if (parse) {
         rows[0].regexes = JSON.parse(rows[0].regexes);
-      }
-      if (['testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK)) {
-        rows[0].addresses = []; // pools.json only contains mainnet addresses
-      } else if (parse) {
+        // raw stored addresses are kept for parse=false callers such as
+        // migratePoolsJson, whose change detection compares JSON strings
         rows[0].addresses = JSON.parse(rows[0].addresses);
+        rows[0].parentRegexes = JSON.parse(rows[0].parent_regexes ?? '[]');
+        rows[0].parentAddresses = JSON.parse(rows[0].parent_addresses ?? '[]');
+        rows[0].addressMatchMode = rows[0].address_match_mode ?? 'any';
+        delete rows[0].parent_regexes;
+        delete rows[0].parent_addresses;
+        delete rows[0].address_match_mode;
       }
 
       return rows[0];
@@ -163,11 +174,16 @@ class PoolsRepository {
     try {
       await DB.query(`
         INSERT INTO pools
-        SET name = ?, link = ?, addresses = ?, regexes = ?, slug = ?, unique_id = ?`,
-        [pool.name, pool.link, JSON.stringify(pool.addresses), JSON.stringify(pool.regexes), slug, pool.id]
+        SET name = ?, link = ?, addresses = ?, regexes = ?, address_match_mode = ?, parent_addresses = ?, parent_regexes = ?, slug = ?, unique_id = ?`,
+        [pool.name, pool.link, JSON.stringify(pool.addresses), JSON.stringify(pool.regexes),
+          pool.addressMatchMode ?? 'any', JSON.stringify(pool.parentAddresses ?? []),
+          JSON.stringify(pool.parentRegexes ?? []), slug, pool.id]
       );
     } catch (e: any) {
       logger.err(`Cannot insert new mining pool into db. Reason: ` + (e instanceof Error ? e.message : e));
+      // Let the caller roll back so the pools definition marker is not
+      // committed without the pool row, which would never be retried.
+      throw e;
     }
   }
 
@@ -189,6 +205,7 @@ class PoolsRepository {
       );
     } catch (e: any) {
       logger.err(`Cannot rename mining pool id ${dbId}. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
     }
   }
 
@@ -209,6 +226,7 @@ class PoolsRepository {
       );
     } catch (e: any) {
       logger.err(`Cannot update link for mining pool id ${dbId}. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
     }
 
   }
@@ -221,16 +239,97 @@ class PoolsRepository {
    * @param regexes
    * @asyncSafe
    */
-  public async $updateMiningPoolTags(dbId: number, addresses: string, regexes: string): Promise<void> {
+  public async $updateMiningPoolTags(
+    dbId: number,
+    addresses: string | string[],
+    regexes: string | string[],
+    parentAddresses: string | string[] = [],
+    parentRegexes: string | string[] = [],
+    addressMatchMode: PoolAddressMatchMode = 'any'
+  ): Promise<void> {
     try {
       await DB.query(`
         UPDATE pools
-        SET addresses = ?, regexes = ?
+        SET addresses = ?, regexes = ?, parent_addresses = ?, parent_regexes = ?, address_match_mode = ?
         WHERE id = ?`,
-        [JSON.stringify(addresses), JSON.stringify(regexes), dbId]
+        [JSON.stringify(addresses), JSON.stringify(regexes), JSON.stringify(parentAddresses),
+          JSON.stringify(parentRegexes), addressMatchMode, dbId]
       );
     } catch (e: any) {
       logger.err(`Cannot update mining pool id ${dbId}. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
+    }
+  }
+
+  /**
+   * Delete pool definitions whose unique_id is not in the current definition
+   * set, reassigning their blocks to the Unknown pool first.
+   *
+   * qbit imports its pool definitions from the vendored pools-qbit.json, so
+   * stale definitions (e.g. Bitcoin pools left over in an upgraded database)
+   * must not remain matchable. Returns the number of pools removed.
+   *
+   * @asyncUnsafe
+   */
+  public async $deleteStalePools(keepUniqueIds: number[], unknownPoolId: number, definitionHash: string | null): Promise<number> {
+    try {
+      const keepPlaceholders = keepUniqueIds.map(() => '?').join(',');
+      const [stalePools]: any[] = await DB.query(`
+        SELECT id, name
+        FROM pools
+        WHERE unique_id NOT IN (${keepPlaceholders})`,
+        keepUniqueIds
+      );
+      if (stalePools.length === 0) {
+        return 0;
+      }
+
+      const staleIds = stalePools.map((pool) => pool.id);
+      const stalePlaceholders = staleIds.map(() => '?').join(',');
+      logger.notice(`Removing ${stalePools.length} stale mining pool definitions: ${stalePools.map((pool) => pool.name).join(', ')}`, logger.tags.mining);
+      await DB.query(`
+        UPDATE blocks
+        SET pool_id = ?, definition_hash = ?
+        WHERE pool_id IN (${stalePlaceholders})`,
+        [unknownPoolId, definitionHash, ...staleIds]
+      );
+      await DB.query('DELETE FROM hashrates');
+      await DB.query(`
+        DELETE FROM pools
+        WHERE id IN (${stalePlaceholders})`,
+        staleIds
+      );
+      return stalePools.length;
+    } catch (e: any) {
+      logger.err(`Cannot delete stale mining pools. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
+    }
+  }
+
+  /**
+   * Replace all configured pool definitions with the Unknown pool.
+   *
+   * qbit starts with an empty pool definition file so stale Bitcoin pool regexes
+   * from an upgraded database must not remain matchable.
+   *
+   * @asyncSafe
+   */
+  public async $replacePoolsWithUnknown(unknownPoolId: number, definitionHash: string | null): Promise<void> {
+    try {
+      await DB.query(`
+        UPDATE blocks
+        SET pool_id = ?, definition_hash = ?`,
+        [unknownPoolId, definitionHash]
+      );
+      await DB.query('DELETE FROM hashrates');
+      await DB.query(`
+        DELETE FROM pools
+        WHERE id <> ?`,
+        [unknownPoolId]
+      );
+    } catch (e: any) {
+      logger.err(`Cannot replace mining pools with Unknown. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
     }
   }
 

@@ -12,7 +12,7 @@ import { StateService } from '@app/services/state.service';
 })
 export class AmountSelectorComponent implements OnInit {
   amountForm: UntypedFormGroup;
-  modes = ['btc', 'sats', 'fiat'];
+  modes = ['qbt', 'sats'];
 
   constructor(
     private formBuilder: UntypedFormBuilder,
@@ -22,15 +22,15 @@ export class AmountSelectorComponent implements OnInit {
 
   ngOnInit() {
     this.amountForm = this.formBuilder.group({
-      mode: ['btc']
+      mode: ['qbt']
     });
     this.stateService.viewAmountMode$.subscribe((mode) => {
-      this.amountForm.get('mode')?.setValue(mode);
+      this.amountForm.get('mode')?.setValue(mode === 'sats' ? 'sats' : 'qbt');
     });
   }
 
   changeMode() {
-    const newMode = this.amountForm.get('mode')?.value;
+    const newMode = this.amountForm.get('mode')?.value === 'sats' ? 'sats' : 'qbt';
     this.storageService.setValue('view-amount-mode', newMode);
     this.stateService.viewAmountMode$.next(newMode);
   }

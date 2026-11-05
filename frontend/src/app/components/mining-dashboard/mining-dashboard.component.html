@@ -18,10 +18,10 @@
       </div>
     </div>
 
-    <!-- difficulty adjustment -->
+    <!-- difficulty -->
     <div class="col">
-      <div class="main-title" i18n="dashboard.difficulty-adjustment">Difficulty Adjustment</div>
-      <app-difficulty-mining [attr.data-cy]="'difficulty-adjustment'" [showTitle]="false" [showProgress]="false" [showHalving]="true"></app-difficulty-mining>
+      <div class="main-title" i18n="dashboard.difficulty">Difficulty</div>
+      <app-difficulty-mining [attr.data-cy]="'difficulty-adjustment'" [showTitle]="false" [showStepdown]="true"></app-difficulty-mining>
     </div>
 
     <!-- pool distribution -->
@@ -62,16 +62,16 @@
       </div>
     </div>
 
-    <!-- Difficult adjustments -->
+    <!-- Block spacing -->
     <div class="col">
       <div class="card">
         <div class="card-body">
           <a class="title-link" href="" [routerLink]="['/graphs/mining/hashrate-difficulty' | relativeUrl]">
-            <h5 class="card-title d-inline" i18n="dashboard.adjustments">Adjustments</h5>
+            <h5 class="card-title d-inline" i18n="mining.block-spacing-24h">Block Spacing (24h)</h5>
             <span>&nbsp;</span>
             <fa-icon [icon]="['fas', 'external-link-alt']" [fixedWidth]="true" style="vertical-align: text-top; font-size: 13px; color: var(--title-fg)"></fa-icon>
           </a>
-          <app-difficulty-adjustments-table [attr.data-cy]="'difficulty-adjustments-table'"></app-difficulty-adjustments-table>
+          <app-block-spacing-chart [attr.data-cy]="'block-spacing-chart'" interval="24h" [height]="290"></app-block-spacing-chart>
         </div>
       </div>
     </div>

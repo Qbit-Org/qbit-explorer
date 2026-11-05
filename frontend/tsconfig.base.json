@@ -9,6 +9,8 @@
     "experimentalDecorators": true,
     "module": "ES2020",
     "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
     "importHelpers": true,
     "target": "ES2020",
     "typeRoots": [

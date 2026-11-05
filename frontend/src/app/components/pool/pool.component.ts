@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, Inject, Input, LOCALE_ID, OnInit } 
 import { ActivatedRoute } from '@angular/router';
 import { echarts, EChartsOption } from '@app/graphs/echarts';
 import { BehaviorSubject, Observable, Subscription, combineLatest, of } from 'rxjs';
-import { catchError, distinctUntilChanged, filter, map, share, switchMap, tap } from 'rxjs/operators';
+import { catchError, distinctUntilChanged, map, share, switchMap, tap } from 'rxjs/operators';
 import { BlockExtended, PoolStat } from '@interfaces/node-api.interface';
 import { ApiService } from '@app/services/api.service';
 import { StateService } from '@app/services/state.service';
@@ -12,12 +12,6 @@ import { SeoService } from '@app/services/seo.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import { StratumJob } from '@interfaces/websocket.interface';
 import { WebsocketService } from '@app/services/websocket.service';
-import { MiningService } from '@app/services/mining.service';
-
-interface AccelerationTotal {
-  cost: number,
-  count: number,
-}
 
 @Component({
   selector: 'app-pool',
@@ -38,9 +32,8 @@ export class PoolComponent implements OnInit {
   slugSubscription: Subscription;
   poolStats$: Observable<PoolStat>;
   blocks$: Observable<BlockExtended[]>;
-  oobFees$: Observable<AccelerationTotal[]>;
   job$: Observable<StratumJob | null>;
-  expectedBlockTime$: Observable<number>;
+  expectedBlockTime$: Observable<number | null>;
   isLoading = true;
   error: HttpErrorResponse | null = null;
 
@@ -62,7 +55,6 @@ export class PoolComponent implements OnInit {
     private route: ActivatedRoute,
     public stateService: StateService,
     private websocketService: WebsocketService,
-    private miningService: MiningService,
     private seoService: SeoService,
     public amountShortenerPipe: AmountShortenerPipe,
   ) {
@@ -129,18 +121,6 @@ export class PoolComponent implements OnInit {
         share(),
       );
 
-    this.oobFees$ = this.route.params.pipe(map((params) => params.slug)).pipe(
-      filter(() => this.stateService.env.PUBLIC_ACCELERATIONS === true && this.stateService.network === ''),
-      switchMap(slug => {
-        return combineLatest([
-          this.apiService.getAccelerationTotals$(this.slug, '1w'),
-          this.apiService.getAccelerationTotals$(this.slug, '1m'),
-          this.apiService.getAccelerationTotals$(this.slug),
-        ]);
-      }),
-      filter(oob => oob.length === 3 && oob[2].count > 0)
-    );
-
     if (this.stratumEnabled) {
       this.job$ = combineLatest([
         this.poolStats$.pipe(
@@ -156,12 +136,19 @@ export class PoolComponent implements OnInit {
       );
 
       this.expectedBlockTime$ = combineLatest([
-        this.miningService.getMiningStats('1w'),
         this.poolStats$,
         this.stateService.difficultyAdjustment$
       ]).pipe(
-        map(([miningStats, poolStat, da]) => {
-          return (da.timeAvg / ((poolStat.estimatedHashrate || 0) / (miningStats.lastEstimatedHashrate * 1_000_000_000_000_000_000))) + Date.now() + da.timeOffset;
+        map(([poolStat, da]) => {
+          // block share, not hashrate share: with lane-aware pool hashrates a
+          // pool's share of total work no longer matches its share of blocks
+          // (the Cadence lanes run at very different network hashrates)
+          const blockShare = poolStat.blockShare?.['1w'] || 0;
+          if (blockShare <= 0) {
+            // no recent blocks: no meaningful ETA (template falls back to its placeholder)
+            return null;
+          }
+          return (da.timeAvg / blockShare) + Date.now() + da.timeOffset;
         })
       );
     }

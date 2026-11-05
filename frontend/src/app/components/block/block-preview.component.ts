@@ -10,7 +10,6 @@ import { BlockExtended, TransactionStripped } from '@interfaces/node-api.interfa
 import { ApiService } from '@app/services/api.service';
 import { seoDescriptionNetwork } from '@app/shared/common.utils';
 import { BlockOverviewGraphComponent } from '@components/block-overview-graph/block-overview-graph.component';
-import { ServicesApiServices } from '@app/services/services-api.service';
 
 @Component({
   selector: 'app-block-preview',
@@ -47,7 +46,6 @@ export class BlockPreviewComponent implements OnInit, OnDestroy {
     private seoService: SeoService,
     private openGraphService: OpenGraphService,
     private apiService: ApiService,
-    private servicesApiService: ServicesApiServices,
   ) { }
 
   ngOnInit() {
@@ -106,7 +104,7 @@ export class BlockPreviewComponent implements OnInit, OnDestroy {
         if( this.stateService.network === 'liquid' || this.stateService.network === 'liquidtestnet' ) {
           this.seoService.setDescription($localize`:@@meta.description.liquid.block:See size, weight, fee range, included transactions, and more for Liquid${seoDescriptionNetwork(this.stateService.network)} block ${block.height}:BLOCK_HEIGHT: (${block.id}:BLOCK_ID:).`);
         } else {
-          this.seoService.setDescription($localize`:@@meta.description.bitcoin.block:See size, weight, fee range, included transactions, audit (expected v actual), and more for Bitcoin${seoDescriptionNetwork(this.stateService.network)} block ${block.height}:BLOCK_HEIGHT: (${block.id}:BLOCK_ID:).`);
+          this.seoService.setDescription($localize`:@@meta.description.bitcoin.block:See size, weight, fee range, included transactions, and more for qbit${seoDescriptionNetwork(this.stateService.network)} block ${block.height}:BLOCK_HEIGHT: (${block.id}:BLOCK_ID:).`);
         }
         this.isLoadingBlock = false;
         this.setBlockSubsidy();
@@ -127,41 +125,22 @@ export class BlockPreviewComponent implements OnInit, OnDestroy {
       startWith(null),
       pairwise(),
       switchMap(([prevBlock, block]) => {
-          return forkJoin([
-            this.apiService.getStrippedBlockTransactions$(block.id)
-              .pipe(
-                catchError((err) => {
-                  this.overviewError = err;
-                  this.openGraphService.fail({ event: 'block-viz-' + this.rawId, sessionId: this.ogSession });
-                  return of([]);
-                }),
-                switchMap((transactions) => {
-                  return of(transactions);
-                })
-              ),
-            this.stateService.env.ACCELERATOR === true && block.height > 819500 && this.stateService.network === ''
-              ? this.servicesApiService.getAllAccelerationHistory$({ blockHeight: block.height })
-                .pipe(
-                  catchError(() => {
-                  return of([]);
-                }))
-              : of([])
-          ]);
+          return this.apiService.getStrippedBlockTransactions$(block.id)
+            .pipe(
+              catchError((err) => {
+                this.overviewError = err;
+                this.openGraphService.fail({ event: 'block-viz-' + this.rawId, sessionId: this.ogSession });
+                return of([]);
+              }),
+              switchMap((transactions) => {
+                return of(transactions);
+              })
+            );
         }
       ),
     )
-    .subscribe(([transactions, accelerations]) => {
+    .subscribe((transactions) => {
       this.strippedTransactions = transactions;
-
-      const acceleratedInBlock = {};
-      for (const acc of accelerations) {
-        acceleratedInBlock[acc.txid] = acc;
-      }
-      for (const tx of transactions) {
-        if (acceleratedInBlock[tx.txid]) {
-          tx.acc = true;
-        }
-      }
 
       this.isLoadingOverview = false;
       if (this.blockGraph) {

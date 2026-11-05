@@ -49,6 +49,8 @@ class SyncAssets {
             },
             httpAgent: agent,
             httpsAgent: agent,
+            // stop axios from swapping the SOCKS agent for a proxy from the environment (HTTPS_PROXY, ALL_PROXY)
+            proxy: false,
             responseType: 'stream',
             timeout: 30000
           }).then(function (response) {

@@ -62,6 +62,79 @@ try {
   }
 }
 
+// Re-inject the pre-boot skeleton's contract-bound values from the vendored
+// design contract so the index can never drift from nav.json/tokens.json (the
+// committed span text and the var() fallbacks in the skeleton CSS only cover
+// this step failing)
+try {
+  let indexHtml = fs.readFileSync('src/index.html', 'utf-8');
+  let indexDirty = false;
+
+  const qbitNav = JSON.parse(fs.readFileSync('src/resources/qbit-design/nav.json', 'utf-8'));
+  const bannerText = qbitNav && qbitNav.banner && qbitNav.banner.text;
+  if (typeof bannerText === 'string' && bannerText.length > 0) {
+    const escaped = bannerText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    // replacement callback: contract text is arbitrary, so $-tokens in it
+    // must land literally instead of being interpreted by String.replace
+    const replaced = indexHtml.replace(
+      /(<span class="qbit-preboot-banner-text">)[^<]*(<\/span>)/,
+      (match, open, close) => open + escaped + close
+    );
+    if (replaced !== indexHtml) {
+      indexHtml = replaced;
+      indexDirty = true;
+      console.log('Injected qbit-design banner text into the pre-boot skeleton');
+    }
+  }
+
+  const tokens = JSON.parse(fs.readFileSync('src/resources/qbit-design/tokens.json', 'utf-8'));
+  // the contract's own validation is schema-only, so accept any CSS color
+  // syntax the real chrome would apply (hex, rgb(), color(), named …) and
+  // refuse only characters that could escape the declaration or the style
+  // element; same policy for font stacks
+  const isCssValue = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max && !/[{};<>]/.test(v);
+  const isColor = (v) => isCssValue(v, 64);
+  const isPx = (v) => typeof v === 'number' && isFinite(v) && v > 0;
+  const isFont = (v) => isCssValue(v, 256);
+  const decls = [];
+  if (isColor(tokens?.color?.paper)) { decls.push(`--pb-paper:${tokens.color.paper}`); }
+  if (isColor(tokens?.color?.accent)) { decls.push(`--pb-accent:${tokens.color.accent}`); }
+  if (isColor(tokens?.color?.line)) { decls.push(`--pb-line:${tokens.color.line}`); }
+  if (isPx(tokens?.header?.bannerHeightPx)) { decls.push(`--pb-banner-h:${tokens.header.bannerHeightPx}px`); }
+  if (isPx(tokens?.header?.heightPx)) { decls.push(`--pb-bar-h:${tokens.header.heightPx}px`); }
+  if (isPx(tokens?.header?.maxWidthPx)) { decls.push(`--pb-maxw:${tokens.header.maxWidthPx}px`); }
+  if (isFont(tokens?.font?.mono)) { decls.push(`--pb-mono:${tokens.font.mono}`); }
+  if (decls.length > 0) {
+    const style = `  <style id="qbit-preboot-tokens">:root{${decls.join(';')}}</style>`;
+    indexHtml = indexHtml.replace('</head>', `${style}\n</head>`);
+    indexDirty = true;
+    console.log('Injected qbit-design tokens into the pre-boot skeleton:', decls.length, 'values');
+  }
+
+  // media queries cannot read custom properties, so the skeleton's annotated
+  // breakpoint is rewritten in place from the contract
+  if (isPx(tokens?.header?.mobileBreakpointPx)) {
+    const rewritten = indexHtml.replace(
+      /@media \(max-width: \d+px\) \/\* header\.mobileBreakpointPx \*\//g,
+      `@media (max-width: ${tokens.header.mobileBreakpointPx}px) /* header.mobileBreakpointPx */`
+    );
+    if (rewritten !== indexHtml) {
+      indexHtml = rewritten;
+      indexDirty = true;
+      console.log('Injected qbit-design mobile breakpoint into the pre-boot skeleton');
+    }
+  }
+
+  if (indexDirty) {
+    fs.writeFileSync('src/index.html', indexHtml);
+  }
+} catch (e) {
+  console.log('Warning: Could not inject pre-boot contract values:', e.message);
+}
+
 try {
   const packageJson = fs.readFileSync('package.json');
   packetJsonVersion = JSON.parse(packageJson).version;

@@ -3,6 +3,7 @@ import { SocksProxyAgent } from 'socks-proxy-agent';
 import backendInfo from '../api/backend-info';
 import config from '../config';
 import logger from '../logger';
+import * as http from 'http';
 import * as https from 'https';
 
 /** @asyncUnsafe */
@@ -12,7 +13,9 @@ export async function query(path, throwOnFail: boolean = false): Promise<object 
      'User-Agent': string
    };
    timeout: number;
+   httpAgent?: http.Agent;
    httpsAgent?: https.Agent;
+   proxy?: false;
  };
  const setDelay = (secs: number = 1): Promise<void> => new Promise(resolve => setTimeout(() => resolve(), secs * 1000));
  const axiosOptions: axiosOptions = {
@@ -44,6 +47,10 @@ export async function query(path, throwOnFail: boolean = false): Promise<object 
        }
 
        axiosOptions.httpsAgent = new SocksProxyAgent(socksOptions);
+       // route http:// URLs and https->http redirects through SOCKS as well
+       axiosOptions.httpAgent = axiosOptions.httpsAgent;
+       // stop axios from swapping the SOCKS agent for a proxy from the environment (HTTPS_PROXY, ALL_PROXY)
+       axiosOptions.proxy = false;
      }
 
      const data: AxiosResponse = await axios.get(path, axiosOptions);

@@ -156,7 +156,7 @@ class BitcoinApi implements AbstractBitcoinApi {
     throw new Error('Method getAddress not supported by the Bitcoin RPC API.');
   }
 
-  $getAddressTransactions(address: string, lastSeenTxId: string): Promise<IEsploraApi.Transaction[]> {
+  $getAddressTransactions(address: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]> {
     throw new Error('Method getAddressTransactions not supported by the Bitcoin RPC API.');
   }
 
@@ -280,7 +280,7 @@ class BitcoinApi implements AbstractBitcoinApi {
     return this.$getRawTransaction(txids[0]);
   }
 
-  async $getAddressTransactionSummary(address: string): Promise<IEsploraApi.AddressTxSummary[]> {
+  async $getAddressTransactionSummary(address: string, lastSeenTxId?: string): Promise<IEsploraApi.AddressTxSummary[]> {
     throw new Error('Method getAddressTransactionSummary not supported by the Bitcoin RPC API.');
   }
 
@@ -361,6 +361,7 @@ class BitcoinApi implements AbstractBitcoinApi {
       'witness_v0_keyhash': 'v0_p2wpkh',
       'witness_v0_scripthash': 'v0_p2wsh',
       'witness_v1_taproot': 'v1_p2tr',
+      'witness_v2_p2mr': 'v2_p2mr',
       'nonstandard': 'nonstandard',
       'multisig': 'multisig',
       'anchor': 'anchor',

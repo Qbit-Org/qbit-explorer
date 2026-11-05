@@ -187,7 +187,7 @@ export function uncompressDeltaChange(block: number, delta: MempoolBlockDeltaCom
   };
 }
 
-export function renderSats(value: number, network: string, mode: 'sats' | 'btc' | 'auto' = 'auto'): string {
+export function renderSats(value: number, network: string, mode: 'sats' | 'qbt' | 'auto' = 'auto'): string {
   let prefix = '';
   switch (network) {
     case 'liquid':
@@ -204,13 +204,13 @@ export function renderSats(value: number, network: string, mode: 'sats' | 'btc' 
       prefix = 's';
       break;
   }
-  if (mode === 'btc' || (mode === 'auto' && value >= 1000000)) {
-    return `${amountShortenerPipe.transform(value / 100000000, 2)} ${prefix}BTC`;
+  if (mode === 'qbt' || (mode === 'auto' && value >= 1000000)) {
+    return `${amountShortenerPipe.transform(value / 100000000, 2)} ${prefix}QBT`;
   } else {
     if (prefix.length) {
       prefix += '-';
     }
-    return `${amountShortenerPipe.transform(value, 2)} ${prefix}sats`;
+    return `${amountShortenerPipe.transform(value, 2)} ${prefix}bits`;
   }
 }
 
@@ -226,7 +226,7 @@ export function handleDemoRedirect(route: ActivatedRoute, router: Router) {
   route.queryParams
     .subscribe(params => {
       if (params.next) {
-        const path = ['/', '/acceleration', '/mining', '/lightning'];
+        const path = ['/', '/mining'];
         const index = path.indexOf(params.next);
         if (index >= 0) {
           const nextPath = path[(index + 1) % path.length];

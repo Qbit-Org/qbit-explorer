@@ -9,7 +9,6 @@ import PricesRepository from './repositories/PricesRepository';
 import config from './config';
 import auditReplicator from './replication/AuditReplication';
 import statisticsReplicator from './replication/StatisticsReplication';
-import AccelerationRepository from './repositories/AccelerationRepository';
 import BlocksAuditsRepository from './repositories/BlocksAuditsRepository';
 import BlocksRepository from './repositories/BlocksRepository';
 
@@ -214,7 +213,16 @@ class Indexer {
 
       void this.runSingleTask('blocksPrices');
       await blocks.$indexCoinbaseAddresses();
-      await mining.$indexDifficultyAdjustments();
+      // run lazy block migrations before hashrate generation: repaired AuxPoW
+      // headers can change pool attributions, and requesting the re-index
+      // here lets the same run rebuild hashrate shares from repaired data
+      const migratedBlocks = await BlocksRepository.$migrateBlocks();
+      if (migratedBlocks > 0) {
+        mining.reindexHashrateRequested = true;
+        // the tip cache was populated before the repair and would otherwise
+        // keep serving the stale headers, pools, and auxpow extras
+        await blocks.$refreshCachedBlocks();
+      }
       await mining.$generateNetworkHashrateHistory();
       await mining.$generatePoolHashrateHistory();
       await blocks.$generateBlocksSummariesDatabase();
@@ -223,9 +231,7 @@ class Indexer {
       await blocks.$indexBlocksFirstSeen();
       await auditReplicator.$sync();
       await statisticsReplicator.$sync();
-      await AccelerationRepository.$indexPastAccelerations();
       await BlocksAuditsRepository.$migrateAuditsV0toV1();
-      await BlocksRepository.$migrateBlocks();
       // do not wait for classify blocks to finish
       void blocks.$classifyBlocks();
       runSuccessful = true;

@@ -1,10 +1,10 @@
-# Mempool Backend
+# qbit Explorer Backend
 
 These instructions are mostly intended for developers. 
 
-If you choose to use these instructions for a production setup, be aware that you will still probably need to do additional configuration for your specific OS, environment, use-case, etc. We do our best here to provide a good starting point, but only proceed if you know what you're doing. Mempool only provides support for custom setups to project sponsors through [Mempool Enterprise®](https://mempool.space/enterprise).
+If you choose to use these instructions for a production setup, be aware that you will still probably need to do additional configuration for your specific OS, environment, use-case, etc. We do our best here to provide a good starting point, but only proceed if you know what you're doing.
 
-See other ways to set up Mempool on [the main README](/../../#installation-methods).
+For a complete local qbit stack (qbitd regtest, optional qbit-electrs, MariaDB, backend, and frontend), see [`docs/qbit-local-dev.md`](../docs/qbit-local-dev.md).
 
 Jump to a section in this doc:
 - [Set Up the Backend](#setup)
@@ -12,25 +12,20 @@ Jump to a section in this doc:
 
 ## Setup
 
-### 1. Clone Mempool Repository
+### 1. Clone the Repository
 
-Get the latest Mempool code:
-
-```
-git clone https://github.com/mempool/mempool
-cd mempool
-```
-
-Check out the latest release:
+Get the latest explorer code:
 
 ```
-latestrelease=$(curl -s https://api.github.com/repos/mempool/mempool/releases/latest|grep tag_name|head -1|cut -d '"' -f4)
-git checkout $latestrelease
+git clone https://github.com/Qbit-Org/qbit-explorer
+cd qbit-explorer
 ```
 
-### 2. Configure Bitcoin Core
+`main` is the integration branch; build from it.
 
-Turn on `txindex`, enable RPC, and set RPC credentials in `bitcoin.conf`:
+### 2. Configure qbitd
+
+Turn on `txindex`, enable RPC, and set RPC credentials in `qbit.conf`:
 
 ```
 txindex=1
@@ -39,15 +34,17 @@ rpcuser=mempool
 rpcpassword=mempool
 ```
 
-### 3. Configure Electrum Server
+qbitd serves RPC on port 8352 on mainnet, 48352 on testnet4, and 18452 on regtest.
 
-[Pick an Electrum Server implementation](https://mempool.space/docs/faq#address-lookup-issues), configure it, and make sure it's synced.
+### 3. Configure qbit-electrs
 
-**This step is optional.** You can run Mempool without configuring an Electrum Server for it, but address lookups will be disabled.
+Run [Qbit-Org/qbit-electrs](https://github.com/Qbit-Org/qbit-electrs), the qbit-aware Electrum and Esplora REST indexer, configure it, and make sure it's synced.
+
+**This step is optional.** You can run the backend without qbit-electrs, but address lookups will be disabled.
 
 ### 4. Configure MariaDB
 
-_Mempool needs MariaDB v10.5 or later. If you already have MySQL installed, make sure to migrate any existing databases **before** installing MariaDB._
+_The backend needs MariaDB v10.5 or later. If you already have MySQL installed, make sure to migrate any existing databases **before** installing MariaDB._
 
 Get MariaDB from your operating system's package manager:
 
@@ -73,19 +70,20 @@ MariaDB [(none)]> grant all privileges on mempool.* to 'mempool'@'%' identified 
 Query OK, 0 rows affected (0.00 sec)
 ```
 
-### 5. Prepare Mempool Backend
+### 5. Prepare the Backend
 
 #### Build
 
-_Make sure to use Node.js 20.x and npm 9.x or newer_
+_Use the Node.js version in the repository's `.nvmrc` and the npm that ships with it._
 
-_The build process requires [Rust](https://www.rust-lang.org/tools/install) to be installed._
+_The build process requires [Rust](https://www.rust-lang.org/tools/install) to be installed. `rust/gbt/rust-toolchain` pins the Rust version._
 
 Install dependencies with `npm` and build the backend:
 
 ```
+nvm use
 cd backend
-npm install --no-install-links # npm@9.4.2 and later can omit the --no-install-links
+npm ci
 npm run build
 ```
 
@@ -100,15 +98,16 @@ cp mempool-config.sample.json mempool-config.json
 Edit `mempool-config.json` as needed. 
 
 In particular, make sure:
-- the correct Bitcoin Core RPC credentials are specified in `CORE_RPC`
+- `NETWORK` in `MEMPOOL` matches the qbitd network, for example `mainnet`, `testnet4`, or `regtest`
+- the correct qbitd RPC host, port, and credentials are specified in `CORE_RPC` (the sample uses mainnet port 8352)
 - the correct `BACKEND` is specified in `MEMPOOL`:
-  - "electrum" if you're using [romanz/electrs](https://github.com/romanz/electrs) or [cculianu/Fulcrum](https://github.com/cculianu/Fulcrum)
-  - "esplora" if you're using [mempool/electrs](https://github.com/mempool/electrs)
-  - "none" if you're not using any Electrum Server
+  - "esplora" if you're using the qbit-electrs Esplora REST API (`ESPLORA.REST_API_URL`)
+  - "electrum" if you're using the qbit-electrs Electrum RPC (`ELECTRUM.HOST`, `ELECTRUM.PORT`, `ELECTRUM.TLS_ENABLED`)
+  - "none" if you're not using qbit-electrs
 
-### 6. Run Mempool Backend
+### 6. Run the Backend
 
-Run the Mempool backend:
+Run the backend:
 
 ```
 npm run start
@@ -119,37 +118,21 @@ You can also set env var `MEMPOOL_CONFIG_FILE` to specify a custom config file l
 MEMPOOL_CONFIG_FILE=/path/to/mempool-config.json npm run start
 ```
 
-When it's running, you should see output like this:
+When it's running, you should see it polling the mempool, with output like this:
 
 ```
-Mempool updated in 0.189 seconds
-Updating mempool
-Mempool updated in 0.096 seconds
-Updating mempool
-Mempool updated in 0.099 seconds
-Updating mempool
-Calculated fee for transaction 1 / 10
-Calculated fee for transaction 2 / 10
-Calculated fee for transaction 3 / 10
-Calculated fee for transaction 4 / 10
-Calculated fee for transaction 5 / 10
-Calculated fee for transaction 6 / 10
-Calculated fee for transaction 7 / 10
-Calculated fee for transaction 8 / 10
-Calculated fee for transaction 9 / 10
-Calculated fee for transaction 10 / 10
-Mempool updated in 0.243 seconds
-Updating mempool
+Nov 12 13:35:02 [41552] DEBUG: Updating mempool...
+Nov 12 13:35:02 [41552] DEBUG: Mempool updated in 0.012 seconds. New size: 3 (+1)
 ```
 
-### 7. Set Up Mempool Frontend
-With the backend configured and running, proceed to set up the [Mempool frontend](../frontend#manual-setup).
+### 7. Set Up the Frontend
+With the backend configured and running, proceed to set up the [frontend](../frontend#manual-setup).
 
 ## Development Tips
 
 ### Set Up Backend Watchers
 
-The Mempool backend is static. TypeScript scripts are compiled into the `dist` folder and served through a Node.js web server. 
+The backend is static. TypeScript scripts are compiled into the `dist` folder and served through a Node.js web server.
 
 As a result, for development purposes, you may find it helpful to set up backend watchers to avoid the manual shutdown/recompile/restart command-line cycle.
 
@@ -169,88 +152,98 @@ nodemon src/index.ts --ignore cache/
 
 ### Useful Regtest Commands
 
-Helpful link: https://gist.github.com/System-Glitch/cb4e87bf1ae3fec9925725bb3ebe223a
+See [`docs/qbit-local-dev.md`](../docs/qbit-local-dev.md) for a full regtest setup, including the qbitd flags the backend expects.
 
-Run bitcoind on regtest:
+Run qbitd on regtest:
    ```
-   bitcoind -regtest
+   qbitd -regtest
    ```
 
 Create a new wallet, if needed:
    ```
-   bitcoin-cli -regtest createwallet test
+   qbit-cli -regtest createwallet test
    ```
 
 Load wallet (this command may take a while if you have a lot of UTXOs):
    ```
-   bitcoin-cli -regtest loadwallet test
+   qbit-cli -regtest loadwallet test
    ```
 
 Get a new address:
    ```
-   address=$(bitcoin-cli -regtest getnewaddress)
+   address=$(qbit-cli -regtest getnewaddress)
    ```
 
-Mine blocks to the previously generated address. You need at least 101 blocks before you can spend. This will take some time to execute (~1 min):
+Mine blocks to the previously generated address. qbit coinbase outputs mature after 1,000 blocks, so you need at least 1,001 blocks before you can spend:
    ```
-   bitcoin-cli -regtest generatetoaddress 101 $address
+   qbit-cli -regtest generatetoaddress 1001 $address
    ```
 
-Send 0.1 BTC at 5 sat/vB to another address:
+Send 0.1 QBT at 5 bits/vB to another address:
    ```
-   bitcoin-cli -named -regtest sendtoaddress address=$(bitcoin-cli -regtest getnewaddress) amount=0.1 fee_rate=5
+   qbit-cli -named -regtest sendtoaddress address=$(qbit-cli -regtest getnewaddress) amount=0.1 fee_rate=5
    ```
 
 See more example of `sendtoaddress`:
    ```
-   bitcoin-cli sendtoaddress # will print the help
+   qbit-cli sendtoaddress # will print the help
    ```
 
 Mini script to generate random network activity (random TX count with random tx fee-rate). It's slow so don't expect to use this to test mempool spam, except if you let it run for a long time, or maybe with multiple regtest nodes connected to each other.
    ```
    #!/bin/bash
-   address=$(bitcoin-cli -regtest getnewaddress)
-   bitcoin-cli -regtest generatetoaddress 101 $address
+   address=$(qbit-cli -regtest getnewaddress)
+   qbit-cli -regtest generatetoaddress 1001 $address
    for i in {1..1000000}
    do
       for y in $(seq 1 "$(jot -r 1 1 1000)")
       do
-         bitcoin-cli -regtest -named sendtoaddress address=$address amount=0.01 fee_rate=$(jot -r 1 1 100)
+         qbit-cli -regtest -named sendtoaddress address=$address amount=0.01 fee_rate=$(jot -r 1 1 100)
       done
-      bitcoin-cli -regtest generatetoaddress 1 $address
+      qbit-cli -regtest generatetoaddress 1 $address
       sleep 5
    done
    ```
 
 Generate block at regular interval (every 10 seconds in this example):
    ```
-   watch -n 10 "bitcoin-cli -regtest generatetoaddress 1 $address"
+   watch -n 10 "qbit-cli -regtest generatetoaddress 1 $address"
    ```
 
 ### Mining pools update
 
-By default, mining pools will be not automatically updated regularly (`config.MEMPOOL.AUTOMATIC_POOLS_UPDATE` is set to `false`). 
+By default, mining pools will be not automatically updated regularly (`config.MEMPOOL.AUTOMATIC_POOLS_UPDATE` is set to `false`).
+
+In the qbit fork, the default mining-pool source URLs are blank. Blank URLs make
+the backend load the vendored `pools-qbit.json`, which holds the known qbit pool
+definitions (see `docs/mining-pools.md`). Legacy `mempool/mining-pools` URLs from
+upgraded configs are also treated as disabled so Bitcoin pool regexes are not
+imported into qbit. The pool definition hash stored in the database is derived
+from the vendored file content, so editing `pools-qbit.json` and restarting the
+backend re-imports the definitions and re-indexes block pool assignments
+automatically. Pool definitions dropped from the file are deleted from the
+database on import and their blocks re-attributed. If the vendored pool set is
+empty, all indexed blocks are assigned to `Unknown`, stale pool definition
+hashes are replaced, old pool hashrates are cleared, and non-Unknown pool
+definitions are removed.
 
 To manually update your mining pools, you can use the `--update-pools` command line flag when you run the nodejs backend. For example `npm run start --update-pools`. This will trigger the mining pools update and automatically re-index appropriate blocks.
 
 You can enable the automatic mining pools update by settings `config.MEMPOOL.AUTOMATIC_POOLS_UPDATE` to `true` in your `mempool-config.json`.
 
-When a `coinbase tag` or `coinbase address` change is detected, pool assignments for all relevant blocks (tagged to that pool or the `unknown` mining pool, starting from height 130635) are updated using the new criteria.
+When a `coinbase tag` or `coinbase address` change is detected for a non-empty pool source, pool assignments for all relevant blocks (tagged to that pool or the `unknown` mining pool) are updated using the new criteria.
 
 ### Re-index tables
 
-You can manually force the nodejs backend to drop all data from a specified set of tables for future re-index. This is mostly useful for the mining dashboard and the lightning explorer.
+You can manually force the nodejs backend to drop its indexed block data so it is rebuilt from scratch. This is mostly useful for the mining dashboard.
 
-Use the `--reindex` command to specify a list of comma separated table which will be truncated at start. Note that a 5 seconds delay will be observed before truncating tables in order to give you a chance to cancel (CTRL+C) in case of misuse of the command.
+Use the `--reindex-blocks` flag to truncate the `blocks` and `hashrates` tables at start. The same flag also deletes every row from `pools`, resets its `AUTO_INCREMENT`, and clears the stored pool definition hash (`pools_json_sha` in the `state` table). That forces a pool re-import at startup, before blocks are re-indexed: from `POOLS_JSON_URL` when a remote pool source is configured, otherwise from the vendored `pools-qbit.json` (see [Mining pools update](#mining-pools-update)). Note that a 5 seconds delay will be observed before truncating tables in order to give you a chance to cancel (CTRL+C) in case of misuse of the command.
 
 Usage:
 ```
-npm run start --reindex=blocks,hashrates
+npm run start --reindex-blocks
 ```
 Example output:
 ```
-Feb 13 14:55:27 [63246] WARN: <lightning> Indexed data for "hashrates" tables will be erased in 5 seconds (using '--reindex')
-Feb 13 14:55:32 [63246] NOTICE: <lightning> Table hashrates has been truncated
+Nov 12 14:55:27 [63246] WARN: Truncating pools, blocks and hashrates tables for re-indexing (using '--reindex-blocks'). You can cancel this command within 5 seconds
 ```
-
-Reference: https://github.com/mempool/mempool/pull/1269

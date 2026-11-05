@@ -2,11 +2,14 @@ const configFromFile = require(
     process.env.MEMPOOL_CONFIG_FILE ? process.env.MEMPOOL_CONFIG_FILE : '../mempool-config.json'
 );
 
+export const QBIT_NETWORKS = ['mainnet', 'testnet', 'testnet4', 'signet', 'regtest'] as const;
+export type QbitNetwork = typeof QBIT_NETWORKS[number];
+
 interface IConfig {
   MEMPOOL: {
     ENABLED: boolean;
     OFFICIAL: boolean;
-    NETWORK: 'mainnet' | 'testnet' | 'testnet4' | 'signet' | 'liquid' | 'liquidtestnet' | 'regtest';
+    NETWORK: QbitNetwork;
     BACKEND: 'esplora' | 'electrum' | 'none';
     HTTP_PORT: number;
     UNIX_SOCKET_PATH: string;
@@ -18,6 +21,7 @@ interface IConfig {
     CLEAR_PROTECTION_MINUTES: number;
     RECOMMENDED_FEE_PERCENTILE: number;
     BLOCK_WEIGHT_UNITS: number;
+    BLOCK_TARGET_SPACING_SECONDS: number;
     INITIAL_BLOCKS_AMOUNT: number;
     MEMPOOL_BLOCKS_AMOUNT: number;
     INDEXING_BLOCKS_AMOUNT: number;
@@ -131,8 +135,6 @@ interface IConfig {
   EXTERNAL_DATA_SERVER: {
     MEMPOOL_API: string;
     MEMPOOL_ONION: string;
-    LIQUID_API: string;
-    LIQUID_ONION: string;
   };
   MAXMIND: {
     ENABLED: boolean;
@@ -188,7 +190,8 @@ const defaults: IConfig = {
     'CACHE_ENABLED': true,
     'CLEAR_PROTECTION_MINUTES': 20,
     'RECOMMENDED_FEE_PERCENTILE': 50,
-    'BLOCK_WEIGHT_UNITS': 4000000,
+    'BLOCK_WEIGHT_UNITS': 2000000,
+    'BLOCK_TARGET_SPACING_SECONDS': 60,
     'INITIAL_BLOCKS_AMOUNT': 8,
     'MEMPOOL_BLOCKS_AMOUNT': 8,
     'INDEXING_BLOCKS_AMOUNT': 11000, // 0 = disable indexing, -1 = index all blocks
@@ -201,11 +204,11 @@ const defaults: IConfig = {
     'USER_AGENT': 'mempool',
     'STDOUT_LOG_MIN_PRIORITY': 'debug',
     'AUTOMATIC_POOLS_UPDATE': false,
-    'POOLS_JSON_URL': 'https://raw.githubusercontent.com/mempool/mining-pools/master/pools-v2.json',
-    'POOLS_JSON_TREE_URL': 'https://api.github.com/repos/mempool/mining-pools/git/trees/master',
+    'POOLS_JSON_URL': '',
+    'POOLS_JSON_TREE_URL': '',
     'POOLS_UPDATE_DELAY': 604800, // in seconds, default is one week
     'AUDIT': false,
-    'RUST_GBT': true,
+    'RUST_GBT': false, // rust/gbt still divides weight by 4; it is not ported to qbit's witness scale factor of 1
     'LIMIT_GBT': false,
     'CPFP_INDEXING': false,
     'MAX_BLOCKS_BULK_QUERY': 0,
@@ -232,7 +235,7 @@ const defaults: IConfig = {
   },
   'CORE_RPC': {
     'HOST': '127.0.0.1',
-    'PORT': 8332,
+    'PORT': 8352,
     'USERNAME': 'mempool',
     'PASSWORD': 'mempool',
     'TIMEOUT': 60000,
@@ -242,7 +245,7 @@ const defaults: IConfig = {
   },
   'SECOND_CORE_RPC': {
     'HOST': '127.0.0.1',
-    'PORT': 8332,
+    'PORT': 8352,
     'USERNAME': 'mempool',
     'PASSWORD': 'mempool',
     'TIMEOUT': 60000,
@@ -300,10 +303,8 @@ const defaults: IConfig = {
     'PASSWORD': ''
   },
   'EXTERNAL_DATA_SERVER': {
-    'MEMPOOL_API': 'https://mempool.space/api/v1',
-    'MEMPOOL_ONION': 'http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/api/v1',
-    'LIQUID_API': 'https://liquid.network/api/v1',
-    'LIQUID_ONION': 'http://liquidmom47f6s3m53ebfxn47p76a6tlnxib3wp6deux7wuzotdr6cyd.onion/api/v1'
+    'MEMPOOL_API': '',
+    'MEMPOOL_ONION': ''
   },
   'MAXMIND': {
     'ENABLED': false,
@@ -314,7 +315,7 @@ const defaults: IConfig = {
   'REPLICATION': {
     'ENABLED': false,
     'AUDIT': false,
-    'AUDIT_START_HEIGHT': 774000,
+    'AUDIT_START_HEIGHT': 0,
     'STATISTICS': false,
     'STATISTICS_START_TIME': 1481932800,
     'SERVERS': [],
@@ -368,6 +369,9 @@ class Config implements IConfig {
 
   constructor() {
     const configs = this.merge(configFromFile, defaults);
+    if (!QBIT_NETWORKS.includes(configs.MEMPOOL.NETWORK)) {
+      throw new Error(`Unsupported MEMPOOL.NETWORK "${configs.MEMPOOL.NETWORK}". Supported qbit networks: ${QBIT_NETWORKS.join(', ')}`);
+    }
     this.MEMPOOL = configs.MEMPOOL;
     this.ESPLORA = configs.ESPLORA;
     this.ELECTRUM = configs.ELECTRUM;

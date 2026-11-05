@@ -1,7 +1,6 @@
 import { Component, OnInit, ChangeDetectionStrategy, EventEmitter, Output, ViewChild, HostListener, ElementRef, Input } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { EventType, NavigationStart, Router } from '@angular/router';
-import { AssetsService } from '@app/services/assets.service';
 import { Env, StateService } from '@app/services/state.service';
 import { Observable, of, Subject, zip, BehaviorSubject, combineLatest } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, catchError, map, startWith,  tap } from 'rxjs/operators';
@@ -22,7 +21,6 @@ export class SearchFormComponent implements OnInit {
   @Input() hamburgerOpen = false;
   env: Env;
   network = '';
-  assets: object = {};
   pools: object[] = [];
   isSearching = false;
   isTypeaheading$ = new BehaviorSubject<boolean>(false);
@@ -60,7 +58,6 @@ export class SearchFormComponent implements OnInit {
   constructor(
     private formBuilder: UntypedFormBuilder,
     private router: Router,
-    private assetsService: AssetsService,
     private stateService: StateService,
     private electrsApiService: ElectrsApiService,
     private apiService: ApiService,
@@ -86,9 +83,9 @@ export class SearchFormComponent implements OnInit {
 
     this.stateService.searchFocus$.subscribe(() => {
       if (!this.searchInput) { // Try again a bit later once the view is properly initialized
-        setTimeout(() => this.searchInput.nativeElement.focus(), 100);
-      } else if (this.searchInput) {
-        this.searchInput.nativeElement.focus();
+        setTimeout(() => this.focusIfVisible(), 100);
+      } else {
+        this.focusIfVisible();
       }
     });
 
@@ -96,12 +93,17 @@ export class SearchFormComponent implements OnInit {
       searchText: ['', Validators.required],
     });
 
-    if (this.network === 'liquid' || this.network === 'liquidtestnet') {
-      this.assetsService.getAssetsMinimalJson$
-        .subscribe((assets) => {
-          this.assets = assets;
-        });
-    }
+    // several responsive instances of this form can be mounted at once
+    // (header bar and mobile panel); mirror the shared query text so a search
+    // typed into one instance survives viewport breakpoint crossings. The
+    // trim-aware guard skips the emitting instance itself, and emitEvent
+    // stays false so hidden instances never run their own typeahead
+    this.stateService.searchText$.subscribe((text) => {
+      const control = this.searchForm.get('searchText');
+      if (((control.value ?? '') as string).trim() !== text) {
+        control.setValue(text, { emitEvent: false });
+      }
+    });
 
     const searchText$ = this.searchForm.get('searchText').valueChanges
     .pipe(
@@ -120,24 +122,12 @@ export class SearchFormComponent implements OnInit {
         if (!text.length) {
           return of([
             [],
-            { nodes: [], channels: [] },
             this.pools
           ]);
         }
         this.isTypeaheading$.next(true);
-        if (!this.stateService.networkSupportsLightning()) {
-          return zip(
-            this.electrsApiService.getAddressesByPrefix$(text).pipe(catchError(() => of([]))),
-            [{ nodes: [], channels: [] }],
-            this.getMiningPools()
-          );
-        }
         return zip(
           this.electrsApiService.getAddressesByPrefix$(text).pipe(catchError(() => of([]))),
-          this.apiService.lightningSearch$(text).pipe(catchError(() => of({
-            nodes: [],
-            channels: [],
-          }))),
           this.getMiningPools()
         );
       }),
@@ -155,16 +145,12 @@ export class SearchFormComponent implements OnInit {
         searchResults$.pipe(
         startWith([
           [],
-          {
-            nodes: [],
-            channels: [],
-          },
           this.pools
         ]))
       ]
       ).pipe(
         map((latestData) => {
-          this.pools = latestData[1][2] || [];
+          this.pools = latestData[1][1] || [];
 
           let searchText = latestData[0];
           if (!searchText.length) {
@@ -176,37 +162,25 @@ export class SearchFormComponent implements OnInit {
               address: false,
               otherNetworks: [],
               addresses: [],
-              nodes: [],
-              channels: [],
-              liquidAsset: [],
               pools: []
             };
           }
 
           const result = latestData[1];
           const addressPrefixSearchResults = result[0];
-          const lightningResults = result[1];
-
-          // Do not show date and timestamp results for liquid
-          const isNetworkBitcoin = this.network === '' || this.network === 'testnet' || this.network === 'testnet4' || this.network === 'signet';
 
           const matchesBlockHeight = this.regexBlockheight.test(searchText) && parseInt(searchText) <= this.stateService.latestBlockHeight;
-          const matchesDateTime = this.regexDate.test(searchText) && new Date(searchText).toString() !== 'Invalid Date' && new Date(searchText).getTime() <= Date.now() && isNetworkBitcoin;
-          const matchesUnixTimestamp = this.regexUnixTimestamp.test(searchText) && parseInt(searchText) <= Math.floor(Date.now() / 1000) && isNetworkBitcoin;
+          const matchesDateTime = this.regexDate.test(searchText) && new Date(searchText).toString() !== 'Invalid Date' && new Date(searchText).getTime() <= Date.now();
+          const matchesUnixTimestamp = this.regexUnixTimestamp.test(searchText) && parseInt(searchText) <= Math.floor(Date.now() / 1000);
           const matchesTxId = this.regexTransaction.test(searchText) && !this.regexBlockhash.test(searchText);
           const matchesBlockHash = this.regexBlockhash.test(searchText);
           const matchesAddress = !matchesTxId && this.regexAddress.test(searchText);
-          const publicKey = matchesAddress && searchText.startsWith('0');
-          const otherNetworks = findOtherNetworks(searchText, this.network as any || 'mainnet', this.env);
-          const liquidAsset = this.assets ? (this.assets[searchText] || []) : [];
+          const isPublicKey = matchesAddress && searchText.startsWith('0');
+          const otherNetworks = isPublicKey ? [] : findOtherNetworks(searchText, this.network as any || 'mainnet', this.env);
           const pools = this.pools.filter(pool => pool['name'].toLowerCase().includes(searchText.toLowerCase())).slice(0, 10);
 
           if (matchesDateTime && searchText.indexOf('/') !== -1) {
             searchText = searchText.replace(/\//g, '-');
-          }
-
-          if (publicKey) {
-            otherNetworks.length = 0;
           }
 
           return {
@@ -218,12 +192,8 @@ export class SearchFormComponent implements OnInit {
             txId: matchesTxId,
             blockHash: matchesBlockHash,
             address: matchesAddress,
-            publicKey: publicKey,
             addresses: matchesAddress && addressPrefixSearchResults.length === 1 && searchText === addressPrefixSearchResults[0] ? [] : addressPrefixSearchResults, // If there is only one address and it matches the search text, don't show it in the dropdown
             otherNetworks: otherNetworks,
-            nodes: lightningResults.nodes,
-            channels: lightningResults.channels,
-            liquidAsset: liquidAsset,
             pools: pools
           };
         })
@@ -232,6 +202,15 @@ export class SearchFormComponent implements OnInit {
 
   handleKeyDown($event): void {
     this.searchResults.handleKeyDown($event);
+  }
+
+  // several instances of the search form can be mounted at once (header bar
+  // and mobile panel); only the one that is actually rendered may take focus
+  focusIfVisible(): void {
+    const input = this.searchInput?.nativeElement;
+    if (input && input.offsetParent !== null) {
+      input.focus();
+    }
   }
 
   itemSelected(): void {
@@ -243,10 +222,6 @@ export class SearchFormComponent implements OnInit {
       this.search(result);
     } else if (typeof result === 'number' && result <= this.stateService.latestBlockHeight) {
       this.navigate('/block/', result.toString());
-    } else if (result.alias) {
-      this.navigate('/lightning/node/', result.public_key);
-    } else if (result.short_id) {
-      this.navigate('/lightning/channel/', result.id);
     } else if (result.network) {
       if (result.isNetworkAvailable) {
         this.navigate('/address/', result.address, undefined, result.network);
@@ -274,23 +249,7 @@ export class SearchFormComponent implements OnInit {
         parseInt(searchText) <= this.stateService.latestBlockHeight ? this.navigate('/block/', searchText) : this.isSearching = false;
       } else if (this.regexTransaction.test(searchText)) {
         const matches = this.regexTransaction.exec(searchText);
-        if (this.network === 'liquid' || this.network === 'liquidtestnet') {
-          if (this.assets[matches[0]]) {
-            this.navigate('/assets/asset/', matches[0]);
-          }
-          this.electrsApiService.getAsset$(matches[0])
-            .subscribe(
-              () => { this.navigate('/assets/asset/', matches[0]); },
-              () => {
-                this.electrsApiService.getBlock$(matches[0])
-                  .subscribe(
-                    (block) => { this.navigate('/block/', matches[0], { state: { data: { block } } }); },
-                    () => { this.navigate('/tx/', matches[0]); });
-              }
-            );
-        } else {
-          this.navigate('/tx/', matches[0]);
-        }
+        this.navigate('/tx/', matches[0]);
       } else if (this.regexDate.test(searchText) || this.regexUnixTimestamp.test(searchText)) {
         let timestamp: number;
         this.regexDate.test(searchText) ? timestamp = Math.floor(new Date(searchText).getTime() / 1000) : timestamp = searchText;
@@ -311,7 +270,7 @@ export class SearchFormComponent implements OnInit {
 
 
   navigate(url: string, searchText: string, extras?: any, swapNetwork?: string) {
-    if (needBaseModuleChange(this.env.BASE_MODULE as 'liquid' | 'mempool', swapNetwork as Network)) {
+    if (needBaseModuleChange(this.env.BASE_MODULE as 'mempool', swapNetwork as Network)) {
       window.location.href = getTargetUrl(swapNetwork as Network, searchText, this.env);
     } else {
       this.router.navigate([this.relativeUrlPipe.transform(url, swapNetwork), searchText], extras);

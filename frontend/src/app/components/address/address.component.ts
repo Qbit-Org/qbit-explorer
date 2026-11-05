@@ -126,14 +126,9 @@ export class AddressComponent implements OnInit, OnDestroy {
   taprootPsbtExpanded: boolean = false;
   psbtForm: UntypedFormGroup;
   psbtError?: string;
-  accelerationsSubscription: Subscription;
-  acceleratedTxids: Set<string> | null = null;
-
   fullyLoaded = false;
   chainStats: AddressStats;
   mempoolStats: AddressStats;
-
-  exampleChannel?: any;
 
   now = Date.now() / 1000;
   balancePeriod: 'all' | '1m' = 'all';
@@ -157,7 +152,6 @@ export class AddressComponent implements OnInit, OnDestroy {
     this.network = this.stateService.network;
     this.networkChangeSubscription = this.stateService.networkChanged$.subscribe((network) => {
       this.network = network;
-      this.updateAccelerationSubscription();
     });
     this.websocketService.want(['blocks']);
     this.psbtForm = this.formBuilder.group({ psbt: [''], tapleaf: [''], taptree: [''], ikey: [''] });
@@ -178,8 +172,6 @@ export class AddressComponent implements OnInit, OnDestroy {
         map((indicators) => indicators['address-' + this.addressString] !== undefined ? indicators['address-' + this.addressString] : 0)
       );
 
-    this.updateAccelerationSubscription();
-
     this.mainSubscription = this.route.paramMap
       .pipe(
         switchMap((params: ParamMap) => {
@@ -191,7 +183,6 @@ export class AddressComponent implements OnInit, OnDestroy {
           this.transactions = null;
           this.utxos = null;
           this.addressInfo = null;
-          this.exampleChannel = null;
           this.tapTreeIncomplete = false;
           this.taprootPsbtExpanded = false;
           this.psbtForm?.reset({ psbt: '', tapleaf: '', taptree: '', ikey: '' });
@@ -202,7 +193,7 @@ export class AddressComponent implements OnInit, OnDestroy {
             this.addressString = this.addressString.toLowerCase();
           }
           this.seoService.setTitle($localize`:@@address.component.browser-title:Address: ${this.addressString}:INTERPOLATION:`);
-          this.seoService.setDescription($localize`:@@meta.description.bitcoin.address:See mempool transactions, confirmed transactions, balance, and more for ${this.stateService.network==='liquid'||this.stateService.network==='liquidtestnet'?'Liquid':'Bitcoin'}${seoDescriptionNetwork(this.stateService.network)} address ${this.addressString}:INTERPOLATION:.`);
+          this.seoService.setDescription($localize`:@@meta.description.bitcoin.address:See mempool transactions, confirmed transactions, balance, and more for ${this.stateService.network==='liquid'||this.stateService.network==='liquidtestnet'?'Liquid':'qbit'}${seoDescriptionNetwork(this.stateService.network)} address ${this.addressString}:INTERPOLATION:.`);
 
           this.addressTypeInfo = new AddressTypeInfo(this.stateService.network || 'mainnet', this.addressString);
 
@@ -624,34 +615,6 @@ export class AddressComponent implements OnInit, OnDestroy {
     this.isMobile = window.innerWidth < 768;
   }
 
-  private updateAccelerationSubscription(): void {
-    if (this.stateService.env.ACCELERATOR_BUTTON && this.network === '') {
-      if (!this.accelerationsSubscription) {
-        this.websocketService.ensureTrackAccelerations();
-        this.acceleratedTxids = new Set();
-        this.accelerationsSubscription = this.stateService.accelerations$.subscribe((delta) => {
-          if (!this.acceleratedTxids) {
-            this.acceleratedTxids = new Set();
-          }
-          if (delta.reset) {
-            this.acceleratedTxids.clear();
-          } else {
-            for (const txid of delta.removed) {
-              this.acceleratedTxids.delete(txid);
-            }
-          }
-          for (const acceleration of delta.added) {
-            this.acceleratedTxids.add(acceleration.txid);
-          }
-        });
-      }
-    } else {
-      this.accelerationsSubscription?.unsubscribe();
-      this.accelerationsSubscription = null;
-      this.acceleratedTxids = null;
-    }
-  }
-
   ngOnDestroy(): void {
     this.mainSubscription.unsubscribe();
     this.mempoolTxSubscription.unsubscribe();
@@ -660,7 +623,5 @@ export class AddressComponent implements OnInit, OnDestroy {
     this.websocketService.stopTrackingAddress();
     this.fragmentSubscription?.unsubscribe();
     this.networkChangeSubscription?.unsubscribe();
-    this.accelerationsSubscription?.unsubscribe();
-    this.websocketService.stopTrackAccelerations();
   }
 }

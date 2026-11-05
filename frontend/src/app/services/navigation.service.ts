@@ -19,12 +19,6 @@ export class NavigationService {
         { name: 'signet', path: this.stateService.env.ROOT_NETWORK === 'signet' ? '/' : '/signet' },
         { name: 'regtest', path: this.stateService.env.ROOT_NETWORK === 'regtest' ? '/' : '/regtest' },
       ],
-    },
-    liquid: {
-      subnets: [
-        { name: 'liquid', path: '' },
-        { name: 'liquidtestnet', path: '/testnet' },
-      ],
     }
   };
   networks = Object.keys(this.networkModules);
@@ -61,7 +55,7 @@ export class NavigationService {
     return true;
   }
 
-  // For each network (bitcoin/liquid), find and save the longest url path compatible with the current route
+  // Find and save the longest URL path compatible with each qbit network.
   updateSubnetPaths(root: ActivatedRouteSnapshot): void {
     let path = '';
     const networkPaths = {};
@@ -69,7 +63,7 @@ export class NavigationService {
     // traverse the router state tree until all network paths are set, or we reach the end of the tree
     while (!this.networks.reduce((acc, network) => acc && !!networkPaths[network], true) && route) {
       // 'networkSpecific' paths may correspond to valid routes on other networks, but aren't directly compatible
-      // (e.g. we shouldn't link a mainnet transaction page to the same txid on testnet or liquid)
+      // (e.g. we shouldn't link a mainnet transaction page to the same txid on a test network)
       if (route.data?.networkSpecific) {
         this.networks.forEach(network => {
           if (networkPaths[network] == null) {

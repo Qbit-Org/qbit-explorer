@@ -1,10 +1,10 @@
-import { Component, EmbeddedViewRef, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 export const MempoolErrors = {
   'bad_request': `Your request was not valid. Please try again.`,
   'internal_server_error': `Something went wrong, please try again later`,
-  'temporarily_unavailable': `Acceleration temporarily unavailable`,
+  'temporarily_unavailable': `Service temporarily unavailable`,
   'acceleration_duplicated': `This transaction has already been accelerated.`,
   'acceleration_outbid': `Your fee delta is too low.`,
   'cannot_accelerate_tx': `Cannot accelerate this transaction.`,
@@ -16,7 +16,7 @@ export const MempoolErrors = {
   'mempool_rejected_raw_tx': `Our mempool rejected this transaction`,
   'no_mining_pool_available': `No mining pool available at the moment`,
   'not_available': `You current subscription does not allow you to access this feature.`,
-  'not_enough_balance': ``,
+  'not_enough_balance': `Your balance is too low.`,
   'not_verified': `You must verify your account to use this feature.`,
   'recommended_fees_not_available': `Recommended fees are not available right now.`,
   'too_many_relatives': `This transaction has too many relatives.`,
@@ -47,7 +47,6 @@ export function isMempoolError(error: string) {
   standalone: false,
 })
 export class MempoolErrorComponent implements OnInit {
-  @ViewChild('lowBalance', { static: true }) lowBalance!: TemplateRef<any>;
   @Input() error: string;
   @Input() alertClass = 'alert-danger';
   @Input() textOnly = false;
@@ -58,18 +57,6 @@ export class MempoolErrorComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-     // Special hack for the i18n string with a href link inside
-     const embeddedViewRef: EmbeddedViewRef<any> = this.lowBalance.createEmbeddedView({});
-     embeddedViewRef.detectChanges();
-     const rawHtml = embeddedViewRef.rootNodes.map((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        return node.textContent;
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        return node.outerHTML;
-      }
-      return '';
-    }).join('');
-     MempoolErrors['not_enough_balance'] = rawHtml;
      if (Object.keys(MempoolErrors).includes(this.error)) {
       this.errorContent = this.sanitizer.bypassSecurityTrustHtml(MempoolErrors[this.error]);
     } else {

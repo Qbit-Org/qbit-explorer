@@ -18,7 +18,7 @@ export interface AbstractBitcoinApi {
   $getBlock(hash: string): Promise<IEsploraApi.Block>;
   $getRawBlock(hash: string): Promise<Buffer>;
   $getAddress(address: string): Promise<IEsploraApi.Address>;
-  $getAddressTransactions(address: string, lastSeenTxId: string): Promise<IEsploraApi.Transaction[]>;
+  $getAddressTransactions(address: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]>;
   $getAddressUtxos(address: string): Promise<IEsploraApi.UTXO[]>;
   $getAddressPrefix(prefix: string): string[];
   $getScriptHash(scripthash: string): Promise<IEsploraApi.ScriptHash>;
@@ -33,7 +33,7 @@ export interface AbstractBitcoinApi {
   $getBatchedOutspendsInternal(txId: string[]): Promise<IEsploraApi.Outspend[][]>;
   $getOutSpendsByOutpoint(outpoints: { txid: string, vout: number }[]): Promise<IEsploraApi.Outspend[]>;
   $getCoinbaseTx(blockhash: string): Promise<IEsploraApi.Transaction>;
-  $getAddressTransactionSummary(address: string): Promise<IEsploraApi.AddressTxSummary[]>;
+  $getAddressTransactionSummary(address: string, lastSeenTxId?: string): Promise<IEsploraApi.AddressTxSummary[]>;
 
   startHealthChecks(): void;
   getHealthStatus(): HealthCheckHost[];

@@ -1,6 +1,5 @@
 const bitcoinNetworks = ['', 'testnet', 'testnet4', 'signet'];
-const liquidNetworks = ['liquid', 'liquidtestnet'];
-const lightningNetworks = ['', 'testnet', 'signet'];
+const liquidNetworks: string[] = [];
 const miningTimeIntervals = '<code>24h</code>, <code>3d</code>, <code>1w</code>, <code>1m</code>, <code>3m</code>, <code>6m</code>, <code>1y</code>, <code>2y</code>, <code>3y</code>';
 
 const emptyCodeSample = {
@@ -702,7 +701,7 @@ export const wsApiDocsData = [
     fragment: 'track-addresses',
     title: 'Track Addresses',
     description: {
-      default: 'Subscribe to multiple addresses to receive live updates on new transactions having these addresses in input or output. Limits on the maximum number of tracked addresses apply. For higher tracking limits, consider upgrading to an <a href=\'https://mempool.space/enterprise\'>enterprise sponsorship</a>.'
+      default: 'Subscribe to multiple addresses to receive live updates on new transactions having these addresses in input or output. Limits on the maximum number of tracked addresses may apply on this instance.'
     },
     payload: `{
   "track-addresses": [
@@ -1296,7 +1295,7 @@ export const wsApiDocsData = [
     fragment: 'track-txs',
     title: 'Track Transactions',
     description: {
-      default: 'Subscribe to multiple transactions to receive live updates on their status and position in the mempool. Limits on the maximum number of tracked addresses apply. For higher tracking limits, consider upgrading to an <a href=\'https://mempool.space/enterprise\'>enterprise sponsorship</a>.'
+      default: 'Subscribe to multiple transactions to receive live updates on their status and position in the mempool. Limits on the maximum number of tracked transactions may apply on this instance.'
     },
     payload: `{
       "track-txs": [
@@ -1489,7 +1488,7 @@ export const wsApiDocsData = [
     fragment: 'track-mempool',
     title: 'Track Mempool',
     description: {
-      default: 'Subscribe to new mempool events, such as new transactions entering the mempool. Available fields: <code>added</code>, <code>removed</code>, <code>mined</code>, <code>replaced</code>. <br> Because this is potentially a lot of data, consider using the <code>track-mempool-txids</code> endpoint described below instead, or upgrade to an <a href=\'https://mempool.space/enterprise\'>enterprise sponsorship</a>.'
+      default: 'Subscribe to new mempool events, such as new transactions entering the mempool. Available fields: <code>added</code>, <code>removed</code>, <code>mined</code>, <code>replaced</code>. <br> Because this is potentially a lot of data, consider using the <code>track-mempool-txids</code> endpoint described below instead.'
     },
     payload: '{ "track-mempool": true }',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -2463,9 +2462,9 @@ export const restApiDocsData = [
     category: 'general',
     httpRequestMethod: 'GET',
     fragment: 'get-difficulty-adjustment',
-    title: 'GET Difficulty Adjustment',
+    title: 'GET Difficulty',
     description: {
-      default: 'Returns details about difficulty adjustment.'
+      default: 'Returns the current qbit difficulty state. qbit retargets every block via ASERT (2h halflife), so there is no epoch progress or scheduled retarget; the payload reports the latest difficulty/target, the rolling average block interval over the last ~60 blocks, and the difficulty delta vs ~1440 blocks ago.'
     },
     urlString: '/v1/difficulty-adjustment',
     showConditions: bitcoinNetworks,
@@ -2493,15 +2492,16 @@ export const restApiDocsData = [
           commonJS: [],
           curl: [],
           response: `{
-  progressPercent: 44.397234501112074,
-  difficultyChange: 98.45932018381687,
-  estimatedRetargetDate: 1627762478,
-  remainingBlocks: 1121,
-  remainingTime: 665977,
-  previousRetarget: -4.807005268478962,
-  nextRetargetHeight: 741888,
-  timeAvg: 302328,
-  adjustedTimeAvg: 302328,
+  asertActive: true,
+  currentBits: 486604799,
+  currentTarget: "00000000ffff0000000000000000000000000000000000000000000000000000",
+  currentDifficulty: 1.52,
+  timeAvgMs: 61250,
+  targetSpacingMs: 60000,
+  change24h: 1.84,
+  previousTime: 1752192000000,
+  timeAvg: 61250,
+  adjustedTimeAvg: 61250,
   timeOffset: 0
 }`
         },
@@ -2510,15 +2510,16 @@ export const restApiDocsData = [
           commonJS: [],
           curl: [],
           response: `{
-  progressPercent: 44.397234501112074,
-  difficultyChange: 98.45932018381687,
-  estimatedRetargetDate: 1627762478,
-  remainingBlocks: 1121,
-  remainingTime: 665977,
-  previousRetarget: -4.807005268478962,
-  nextRetargetHeight: 741888,
-  timeAvg: 302328,
-  adjustedTimeAvg: 302328,
+  asertActive: true,
+  currentBits: 486604799,
+  currentTarget: "00000000ffff0000000000000000000000000000000000000000000000000000",
+  currentDifficulty: 1.52,
+  timeAvgMs: 61250,
+  targetSpacingMs: 60000,
+  change24h: 1.84,
+  previousTime: 1752192000000,
+  timeAvg: 61250,
+  adjustedTimeAvg: 61250,
   timeOffset: 0
 }`
         },
@@ -2527,15 +2528,16 @@ export const restApiDocsData = [
           commonJS: [],
           curl: [],
           response: `{
-  progressPercent: 44.397234501112074,
-  difficultyChange: 98.45932018381687,
-  estimatedRetargetDate: 1627762478,
-  remainingBlocks: 1121,
-  remainingTime: 665977,
-  previousRetarget: -4.807005268478962,
-  nextRetargetHeight: 741888,
-  timeAvg: 302328,
-  adjustedTimeAvg: 302328,
+  asertActive: true,
+  currentBits: 486604799,
+  currentTarget: "00000000ffff0000000000000000000000000000000000000000000000000000",
+  currentDifficulty: 1.52,
+  timeAvgMs: 61250,
+  targetSpacingMs: 60000,
+  change24h: 1.84,
+  previousTime: 1752192000000,
+  timeAvg: 61250,
+  adjustedTimeAvg: 61250,
   timeOffset: 0
 }`
         },
@@ -2544,15 +2546,16 @@ export const restApiDocsData = [
           commonJS: [],
           curl: [],
           response: `{
-  progressPercent: 44.397234501112074,
-  difficultyChange: 98.45932018381687,
-  estimatedRetargetDate: 1627762478,
-  remainingBlocks: 1121,
-  remainingTime: 665977,
-  previousRetarget: -4.807005268478962,
-  nextRetargetHeight: 741888,
-  timeAvg: 302328,
-  adjustedTimeAvg: 302328,
+  asertActive: true,
+  currentBits: 486604799,
+  currentTarget: "00000000ffff0000000000000000000000000000000000000000000000000000",
+  currentDifficulty: 1.52,
+  timeAvgMs: 61250,
+  targetSpacingMs: 60000,
+  change24h: 1.84,
+  previousTime: 1752192000000,
+  timeAvg: 61250,
+  adjustedTimeAvg: 61250,
   timeOffset: 0
 }`
         }
@@ -2566,7 +2569,7 @@ export const restApiDocsData = [
     fragment: 'get-price',
     title: 'GET Price',
     description: {
-      default: 'Returns bitcoin latest price denominated in main currencies.'
+      default: 'Returns the latest QBT price denominated in main currencies.'
     },
     urlString: '/v1/prices',
     showConditions: [''],
@@ -2607,7 +2610,7 @@ export const restApiDocsData = [
     fragment: 'get-historical-price',
     title: 'GET Historical Price',
     description: {
-      default: 'Returns bitcoin historical price denominated in main currencies. Available query parameters: <code>currency</code>, <code>timestamp</code>. If no parameter is provided, the full price history for all currencies is returned.'
+      default: 'Returns historical QBT prices denominated in main currencies. Available query parameters: <code>currency</code>, <code>timestamp</code>. If no parameter is provided, the full price history for all currencies is returned.'
     },
     urlString: '/v1/historical-price?currency=EUR&timestamp=1500000000',
     showConditions: [''],
@@ -2689,17 +2692,17 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          commonJS: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          curl: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
+          esModule: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          commonJS: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          curl: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
           response: `{
-  address: "1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv",
+  address: "qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h",
   chain_stats: {
-    funded_txo_count: 5,
-    funded_txo_sum: 15007599040,
-    spent_txo_count: 5,
-    spent_txo_sum: 15007599040,
-    tx_count: 7
+    funded_txo_count: 71,
+    funded_txo_sum: 773647491,
+    spent_txo_count: 70,
+    spent_txo_sum: 770387671,
+    tx_count: 71
   },
   mempool_stats: {
     funded_txo_count: 0,
@@ -2711,17 +2714,17 @@ export const restApiDocsData = [
 }`
         },
         codeSampleTestnet: {
-          esModule: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          commonJS: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          curl: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
+          esModule: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          commonJS: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          curl: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
           response: `{
-  address: "tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee",
+  address: "tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns",
   chain_stats: {
-    funded_txo_count: 6747,
-    funded_txo_sum: 84313783821,
+    funded_txo_count: 9,
+    funded_txo_sum: 9957056,
     spent_txo_count: 0,
     spent_txo_sum: 0,
-    tx_count: 6747
+    tx_count: 9
   },
   mempool_stats: {
     funded_txo_count: 0,
@@ -2826,48 +2829,48 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          commonJS: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          curl: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
+          esModule: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          commonJS: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          curl: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
           response: `[
   {
-    txid: "dba43fd04b7ae3df8e5b596f2e7fab247c58629d622e3a5213f03a5a09684430",
-    version: 1,
+    txid: "053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b",
+    version: 2,
     locktime: 0,
     vin: [ [Object] ],
-    vout: [ [Object], [Object] ],
-    size: 255,
-    weight: 1020,
-    fee: 10000,
+    vout: [ [Object], [Object], [Object] ],
+    size: 3924,
+    weight: 3924,
+    fee: 51394,
     status: {
       confirmed: true,
-      block_height: 326148,
-      block_hash: "00000000000000001e4118adcfbb02364bc13c41c210d8811e4f39aeb3687e36",
-      block_time: 1413798020
+      block_height: 161388,
+      block_hash: "0000000000000001375acbbf5381a88f9de4a13f9383ad3d03707b274f03b277",
+      block_time: 1793833342
     }
   },
   ...
 ]`
         },
         codeSampleTestnet: {
-          esModule: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          commonJS: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          curl: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
+          esModule: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          commonJS: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          curl: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
           response: `[
     {
-      txid: "3e6afd67862ce9fe3eb55268a3107f495415ff1b5d1933c928507e9bdf7a21e6",
+      txid: "264e3ae1eedd4f1ed900a9ff0bff0b6d59c27d6e1e7c9f7197be50e617441c96",
       version: 2,
       locktime: 0,
-      vin: [],
-      vout: [],
-      size: 211,
-      weight: 736,
-      fee: 0,
+      vin: [ [Object] ],
+      vout: [ [Object], [Object], ... ],
+      size: 287672,
+      weight: 287672,
+      fee: 287672,
       status: {
         confirmed: true,
-        block_height: 2091086,
-        block_hash: "00000000340f3667cce7032d084973ca29bdd0d858ec363ed894ad4c8ed09ebc",
-        block_time: 1630607773
+        block_height: 202344,
+        block_hash: "a9855f9a4ef0aaa670e7821361d511288df5fd45ec672c80ce69c856fc5a6241",
+        block_time: 1793833005
     }
   },
   ...
@@ -3258,39 +3261,39 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: [`1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY`],
-          commonJS: [`1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY`],
-          curl: [`1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY`],
+          esModule: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          commonJS: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          curl: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
           response: `[
   {
-    txid: "12f96289f8f9cd51ccfe390879a46d7eeb0435d9e0af9297776e6bdf249414ff",
-    vout: 0,
+    txid: "053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b",
+    vout: 2,
     status: {
       confirmed: true,
-      block_height: 698642,
-      block_hash: "00000000000000000007839f42e0e86fd53c797b64b7135fcad385158c9cafb8",
-      block_time: 1630561459
+      block_height: 161388,
+      block_hash: "0000000000000001375acbbf5381a88f9de4a13f9383ad3d03707b274f03b277",
+      block_time: 1793833342
     },
-    value: 644951084
+    value: 3259820
   },
   ...
 ]`
         },
         codeSampleTestnet: {
-          esModule: [`tb1q4kgratttzjvkxfmgd95z54qcq7y6hekdm3w56u`],
-          commonJS: [`tb1q4kgratttzjvkxfmgd95z54qcq7y6hekdm3w56u`],
-          curl: [`tb1q4kgratttzjvkxfmgd95z54qcq7y6hekdm3w56u`],
+          esModule: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          commonJS: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          curl: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
           response: `[
   {
-    txid: "c404bc4ba89e9423ff772cb45268ba6fba8b713f809484c1216f1a657aafa088",
-    vout: 1,
+    txid: "a4f91b9b2afb7104d698fff4edb1de990caf554e37093bf4b1efc6447634f6f8",
+    vout: 625,
     status: {
       confirmed: true,
-      block_height: 2086944,
-      block_hash: "000000000000039a27007892b0f3ac646afa4eb3ef3d4a4e75e8bdf636b4d006",
-      block_time: 1630159123
+      block_height: 202339,
+      block_hash: "00000000000008e2c15b425074bfaee7871c5badbb83df7c0175691a6d7ee1fd",
+      block_time: 1793832709
     },
-    value: 1973787
+    value: 10000
   },
   ...
 ]`
@@ -3376,25 +3379,27 @@ export const restApiDocsData = [
           esModule: ``,
         },
         codeSampleMainnet: {
-          curl: [`1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY`],
+          curl: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
           response: `{
   isvalid: true,
-  address: "1KFHE7w8BhaENAswwryaoccDb6qcT6DbYY",
-  scriptPubKey: "76a914c825a1ecf2a6830c4401620c3a16f1995057c2ab88ac",
-  isscript: false,
-  iswitness: false
+  address: "qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h",
+  scriptPubKey: "522090d63fc95a05fe378059f18a9808cfef4f6568eda9e7146f0f2f852e22c7f007",
+  isscript: true,
+  iswitness: true,
+  witness_version: 2,
+  witness_program: "90d63fc95a05fe378059f18a9808cfef4f6568eda9e7146f0f2f852e22c7f007"
 }`
         },
         codeSampleTestnet: {
-          curl: [`tb1q4kgratttzjvkxfmgd95z54qcq7y6hekdm3w56u`],
+          curl: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
           response: `{
   isvalid: true,
-  address: "tb1q4kgratttzjvkxfmgd95z54qcq7y6hekdm3w56u",
-  scriptPubKey: "0014ad903ead6b149963276869682a54180789abe6cd",
-  isscript: false,
+  address: "tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns",
+  scriptPubKey: "5220d117f1c6142e8ae7b8222ec56c38d4f01919b648b0ef229f6b28be717a5dd10a",
+  isscript: true,
   iswitness: true,
-  witness_version: 0,
-  witness_program: "ad903ead6b149963276869682a54180789abe6cd"
+  witness_version: 2,
+  witness_program: "d117f1c6142e8ae7b8222ec56c38d4f01919b648b0ef229f6b28be717a5dd10a"
 }`
         },
         codeSampleSignet: {
@@ -3881,7 +3886,7 @@ export const restApiDocsData = [
     fragment: 'get-block-v1',
     title: 'GET Block (v1)',
     description: {
-      default: 'Returns details about a block using Mempool\'s Node.js backend.',
+      default: 'Returns details about a block using this explorer\'s Node.js backend.',
     },
     urlString: '/v1/block/:hash',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -4497,7 +4502,7 @@ export const restApiDocsData = [
     fragment: 'get-block-tip-height',
     title: 'GET Block Tip Height',
     description: {
-      default: 'Returns the height of the last block.'
+      default: 'Returns the height of the last block. Answers 503 after a restart until the backend has caught up with the node.'
     },
     urlString: '/blocks/tip/height',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -5087,7 +5092,7 @@ export const restApiDocsData = [
     fragment: 'get-blocks-v1',
     title: 'GET Blocks (v1)',
     description: {
-      default: 'Returns details on the past 15 blocks from Mempool\'s Node.js backend. Includes fee and mining details in an <code>extras</code> field. If <code>:startHeight</code> is specified, the past 15 blocks before (and including) <code>:startHeight</code> are returned.'
+      default: 'Returns details on the past 15 blocks from this explorer\'s Node.js backend. Includes fee and mining details in an <code>extras</code> field. If <code>:startHeight</code> is specified, the past 15 blocks before (and including) <code>:startHeight</code> are returned.'
     },
     urlString: '/v1/blocks[/:startHeight]',
     showConditions: bitcoinNetworks,
@@ -5311,7 +5316,7 @@ export const restApiDocsData = [
     fragment: 'get-blocks-bulk',
     title: 'GET Blocks (Bulk)',
     description: {
-      default: '<p>Returns details on the range of blocks between <code>:minHeight</code> and <code>:maxHeight</code>, inclusive, up to 10 blocks. If <code>:maxHeight</code> is not specified, it defaults to the current tip.</p><p>To return data for more than 10 blocks, consider becoming an <a href=\'https://mempool.space/enterprise\'>enterprise sponsor</a>.</p>'
+      default: '<p>Returns details on the range of blocks between <code>:minHeight</code> and <code>:maxHeight</code>, inclusive, up to 10 blocks. If <code>:maxHeight</code> is not specified, it defaults to the current tip.</p>'
     },
     urlString: '/v1/blocks-bulk/:minHeight[/:maxHeight]',
     showConditions: bitcoinNetworks,
@@ -5623,7 +5628,7 @@ export const restApiDocsData = [
     fragment: 'get-blocks-v1',
     title: 'GET Blocks (v1)',
     description: {
-      default: 'Returns details on the past 15 blocks from Mempool\'s Node.js backend. If <code>:startHeight</code> is specified, the past 15 blocks before (and including) <code>:startHeight</code> are returned.'
+      default: 'Returns details on the past 15 blocks from this explorer\'s Node.js backend. If <code>:startHeight</code> is specified, the past 15 blocks before (and including) <code>:startHeight</code> are returned.'
     },
     urlString: '/v1/blocks[/:startHeight]',
     showConditions: liquidNetworks,
@@ -6354,7 +6359,7 @@ export const restApiDocsData = [
     fragment: 'get-hashrate',
     title: 'GET Hashrate',
     description: {
-      default: '<p>Returns network-wide hashrate and difficulty figures over the specified trailing <code>:timePeriod</code>:</p><ul><li>Current (real-time) hashrate</li><li>Current (real-time) difficulty</li><li>Historical daily average hashrates</li><li>Historical difficulty</li></ul><p>Valid values for <code>:timePeriod</code> are ' + miningTimeIntervals.substr(52) + '. If no time interval is specified, all available data is returned.</p><p>Be sure that <code>INDEXING_BLOCKS_AMOUNT</code> is set properly in your backend config so that enough blocks are indexed to properly serve your request.</p>'
+      default: '<p>Returns network-wide hashrate and difficulty figures over the specified trailing <code>:timePeriod</code>:</p><ul><li>Current aggregate, permissionless-lane, and AuxPoW-lane hashrates</li><li>Current difficulty</li><li>Historical daily average aggregate and per-lane hashrates</li><li>Historical difficulty</li></ul><p>The legacy <code>hashrates</code> and <code>currentHashrate</code> fields remain the full aggregate values. Lane-aware clients can consume the timestamp-aligned <code>hashratesAggregate</code>, <code>hashratesPermissionless</code>, and <code>hashratesAuxpow</code> series; timestamps awaiting lane backfill remain available through legacy <code>hashrates</code> but are omitted from the aligned trio. Current lane values are exposed through <code>currentHashratePermissionless</code> and <code>currentHashrateAuxpow</code>.</p><p>Valid values for <code>:timePeriod</code> are ' + miningTimeIntervals.substr(52) + '. If no time interval is specified, all available data is returned.</p><p>Be sure that <code>INDEXING_BLOCKS_AMOUNT</code> is set properly in your backend config so that enough blocks are indexed to properly serve your request.</p>'
     },
     urlString: '/v1/mining/hashrate/[:timePeriod]',
     showConditions: bitcoinNetworks,
@@ -6385,14 +6390,58 @@ export const restApiDocsData = [
       "avgHashrate": 189877203506913000000
     }
   ],
+  "hashratesAggregate": [
+    {
+      "timestamp": 1652486400,
+      "avgHashrate": 236499762108771800000
+    },
+    {
+      "timestamp": 1652572800,
+      "avgHashrate": 217473276787331300000
+    },
+    {
+      "timestamp": 1652659200,
+      "avgHashrate": 189877203506913000000
+    }
+  ],
+  "hashratesPermissionless": [
+    {
+      "timestamp": 1652486400,
+      "avgHashrate": 177374821581578850000
+    },
+    {
+      "timestamp": 1652572800,
+      "avgHashrate": 163104957590498480000
+    },
+    {
+      "timestamp": 1652659200,
+      "avgHashrate": 142407902630184750000
+    }
+  ],
+  "hashratesAuxpow": [
+    {
+      "timestamp": 1652486400,
+      "avgHashrate": 59124940527192950000
+    },
+    {
+      "timestamp": 1652572800,
+      "avgHashrate": 54368319196832820000
+    },
+    {
+      "timestamp": 1652659200,
+      "avgHashrate": 47469300876728250000
+    }
+  ],
   "difficulty": [
     {
-      "timestamp": 1652468330,
+      "time": 1652468330,
       "difficulty": 31251101365711.12,
       "height": 736249
     }
   ],
   "currentHashrate": 252033247355212300000,
+  "currentHashratePermissionless": 189024935516409230000,
+  "currentHashrateAuxpow": 63008311838803070000,
   "currentDifficulty": 31251101365711.12
 }`
         },
@@ -6415,14 +6464,58 @@ export const restApiDocsData = [
       "avgHashrate": 510731129917436.6
     }
   ],
+  "hashratesAggregate": [
+    {
+      "timestamp": 1652745600,
+      "avgHashrate": 385829751259101.6
+    },
+    {
+      "timestamp": 1652832000,
+      "avgHashrate": 657984995406460.8
+    },
+    {
+      "timestamp": 1652918400,
+      "avgHashrate": 510731129917436.6
+    }
+  ],
+  "hashratesPermissionless": [
+    {
+      "timestamp": 1652745600,
+      "avgHashrate": 289372313444326.2
+    },
+    {
+      "timestamp": 1652832000,
+      "avgHashrate": 493488746554845.6
+    },
+    {
+      "timestamp": 1652918400,
+      "avgHashrate": 383048347438077.4
+    }
+  ],
+  "hashratesAuxpow": [
+    {
+      "timestamp": 1652745600,
+      "avgHashrate": 96457437814775.4
+    },
+    {
+      "timestamp": 1652832000,
+      "avgHashrate": 164496248851615.2
+    },
+    {
+      "timestamp": 1652918400,
+      "avgHashrate": 127682782479359.2
+    }
+  ],
   "difficulty": [
     {
-      "timestamp": 1652691434,
+      "time": 1652691434,
       "difficulty": 26119369.29706616,
       "height": 2225402
     }
   ],
   "currentHashrate": 781149965464814.4,
+  "currentHashratePermissionless": 585862474098610.8,
+  "currentHashrateAuxpow": 195287491366203.6,
   "currentDifficulty": 55580658.55098472
 }`
         },
@@ -6445,19 +6538,63 @@ export const restApiDocsData = [
       "avgHashrate": 20312.75493978447
     }
   ],
+  "hashratesAggregate": [
+    {
+      "timestamp": 1652745600,
+      "avgHashrate": 21304.18163251096
+    },
+    {
+      "timestamp": 1652832000,
+      "avgHashrate": 22034.51091213679
+    },
+    {
+      "timestamp": 1652918400,
+      "avgHashrate": 20312.75493978447
+    }
+  ],
+  "hashratesPermissionless": [
+    {
+      "timestamp": 1652745600,
+      "avgHashrate": 15978.13622438322
+    },
+    {
+      "timestamp": 1652832000,
+      "avgHashrate": 16525.88318410259
+    },
+    {
+      "timestamp": 1652918400,
+      "avgHashrate": 15234.56620483835
+    }
+  ],
+  "hashratesAuxpow": [
+    {
+      "timestamp": 1652745600,
+      "avgHashrate": 5326.04540812774
+    },
+    {
+      "timestamp": 1652832000,
+      "avgHashrate": 5508.6277280342
+    },
+    {
+      "timestamp": 1652918400,
+      "avgHashrate": 5078.18873494612
+    }
+  ],
   "difficulty": [
     {
-      "timestamp": 1652692199,
+      "time": 1652692199,
       "difficulty": 0.002868721424409158,
       "height": 90533
     },
     {
-      "timestamp": 1652796655,
+      "time": 1652796655,
       "difficulty": 0.00286032350920122,
       "height": 90720
     }
   ],
   "currentHashrate": 23490.95654668005,
+  "currentHashratePermissionless": 17618.21741001004,
+  "currentHashrateAuxpow": 5872.73913667001,
   "currentDifficulty": 0.00286032350920122
 }`
         },
@@ -6470,18 +6607,18 @@ export const restApiDocsData = [
     type: 'endpoint',
     category: 'mining',
     httpRequestMethod: 'GET',
-    fragment: 'get-difficulty-adjustments',
-    title: 'GET Difficulty Adjustments',
+    fragment: 'get-block-spacing',
+    title: 'GET Block Spacing',
     description: {
-      default: '<p>Returns the record of difficulty adjustments over the specified trailing <code>:interval</code>:</p><ul><li>Block timestamp</li><li>Block height</li><li>Difficulty</li><li>Difficulty change</li></ul><p>If no time interval is specified, all available data is returned.'
+      default: '<p>Returns the observed spacing between consecutive blocks over the specified trailing <code>:interval</code> (<code>1h</code>, <code>24h</code>, <code>3d</code>, <code>1w</code>, <code>1m</code>, or <code>3m</code>), along with the consensus target spacing in seconds. Long windows are averaged into fixed-size height buckets to bound the response size.</p>'
     },
-    urlString: '/v1/mining/difficulty-adjustments/[:interval]',
+    urlString: '/v1/mining/block-spacing/:interval',
     showConditions: bitcoinNetworks,
     showJsExamples: showJsExamplesDefaultFalse,
     codeExample: {
       default: {
         codeTemplate: {
-          curl: `/api/v1/mining/difficulty-adjustments/1m`,
+          curl: `/api/v1/mining/block-spacing/24h`,
           commonJS: ``,
           esModule: ``
         },
@@ -6489,71 +6626,61 @@ export const restApiDocsData = [
           esModule: [],
           commonJS: [],
           curl: [],
-          response: `[
-  [
-    1703311464,
-    822528,
-    72006146478567.1,
-    1.06983
+          response: `{
+  "spacings": [
+    {
+      "height": 118201,
+      "timestamp": 1752105693,
+      "spacingSeconds": 47
+    },
+    {
+      "height": 118202,
+      "timestamp": 1752105780,
+      "spacingSeconds": 87
+    },
+    {
+      "height": 118203,
+      "timestamp": 1752105841,
+      "spacingSeconds": 61
+    }
   ],
-  [
-    1702180644,
-    820512,
-    67305906902031.39,
-    0.990408
-  ],
-  [
-    1700957763,
-    818496,
-    67957790298897.88,
-    1.0507
-  ]
-]`
+  "targetSpacing": 60
+}`
         },
         codeSampleTestnet: {
           esModule: [],
           commonJS: [],
           curl: [],
-          response: `[
-  [
-    1703429523,
-    2544008,
-    105074715.9955905,
-    105075000
+          response: `{
+  "spacings": [
+    {
+      "height": 118201,
+      "timestamp": 1752105693,
+      "spacingSeconds": 47
+    },
+    {
+      "height": 118202,
+      "timestamp": 1752105780,
+      "spacingSeconds": 87
+    }
   ],
-  [
-    1703426009,
-    2544005,
-    1,
-    0
-  ],
-  [
-    1703422944,
-    2544000,
-    105074715.9955905,
-    105075000
-  ],
-  ...
-]`
+  "targetSpacing": 60
+}`
         },
         codeSampleSignet: {
           esModule: [],
           commonJS: [],
           curl: [],
-          response: `[
-  [
-    1702402252,
-    173376,
-    0.002967416960321784,
-    1.01893
+          response: `{
+  "spacings": [
+    {
+      "height": 118201,
+      "timestamp": 1752105693,
+      "spacingSeconds": 47
+    }
   ],
-  [
-    1701214807,
-    171360,
-    0.002912289751655253,
-    0.9652
-  ]
-]`
+  "targetSpacing": 60
+}`
         },
         codeSampleLiquid: emptyCodeSample,
         codeSampleLiquidTestnet: emptyCodeSample,
@@ -7737,7 +7864,7 @@ export const restApiDocsData = [
     fragment: 'get-recommended-fees-precise',
     title: 'GET Recommended Fees (Precise)',
     description: {
-      default: 'Returns our currently-suggested feerates with up to 3 decimal places, including sub-sat feerates down to 0.1 s/vb.'
+      default: 'Returns our currently-suggested feerates with up to 3 decimal places, including sub-bit feerates down to 0.1 bits/vB.'
     },
     urlString: '/v1/fees/precise',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -7929,7 +8056,7 @@ export const restApiDocsData = [
     fragment: 'get-mempool-transaction-ids',
     title: 'GET Mempool Transaction IDs',
     description: {
-      default: 'Get the full list of txids in the mempool as an array. The order of the txids is arbitrary and does not match bitcoind.'
+      default: 'Get the full list of txids in the mempool as an array. The order of the txids is arbitrary and does not match qbitd.'
     },
     urlString: '/mempool/txids',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -8657,7 +8784,7 @@ export const restApiDocsData = [
     fragment: 'get-transaction-merkleblock-proof',
     title: 'GET Transaction Merkleblock Proof',
     description: {
-      default: 'Returns a merkle inclusion proof for the transaction using <a href=\'https://bitcoin.org/en/glossary/merkle-block\'>bitcoind\'s merkleblock</a> format.'
+      default: 'Returns a merkle inclusion proof for the transaction using qbitd\'s merkleblock format.'
     },
     urlString: '/tx/:txid/merkleblock-proof',
     showConditions: bitcoinNetworks,
@@ -9481,3091 +9608,6 @@ export const restApiDocsData = [
       }
     }
   },
-  {
-    type: 'category',
-    category: 'lightning',
-    fragment: 'lightning',
-    title: 'Lightning',
-    showConditions: lightningNetworks
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-lightning-network-stats',
-    title: 'GET Network Stats',
-    description: {
-      default: '<p>Returns network-wide stats such as total number of channels and nodes, total capacity, and average/median fee figures.</p><p>Pass one of the following for <code>:interval</code>: <code>latest</code>, <code>24h</code>, <code>3d</code>, <code>1w</code>, <code>1m</code>, <code>3m</code>, <code>6m</code>, <code>1y</code>, <code>2y</code>, <code>3y</code>.</p>'
-    },
-    urlString: '/v1/lightning/statistics/:interval',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/statistics/%{1}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`latest`],
-          response: `{
-  "latest": {
-    "id": 163,
-    "added": "2022-08-30T00:00:00.000Z",
-    "channel_count": 81690,
-    "node_count": 15851,
-    "total_capacity": 460820222344,
-    "tor_nodes": 11455,
-    "clearnet_nodes": 2305,
-    "unannounced_nodes": 974,
-    "avg_capacity": 5641085,
-    "avg_fee_rate": 497,
-    "avg_base_fee_mtokens": 915,
-    "med_capacity": 1500000,
-    "med_fee_rate": 40,
-    "med_base_fee_mtokens": 100,
-    "clearnet_tor_nodes": 1117
-  }
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`latest`],
-          response: `{
-  "latest": {
-    "id": 13,
-    "added": "2022-08-30T00:00:00.000Z",
-    "channel_count": 5101,
-    "node_count": 1806,
-    "total_capacity": 43341092977,
-    "tor_nodes": 288,
-    "clearnet_nodes": 736,
-    "unannounced_nodes": 656,
-    "avg_capacity": 8496588,
-    "avg_fee_rate": 354,
-    "avg_base_fee_mtokens": 1183,
-    "med_capacity": 1148313,
-    "med_fee_rate": 1,
-    "med_base_fee_mtokens": 1000,
-    "clearnet_tor_nodes": 126
-  }
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`latest`],
-          response: `{
-  "latest": {
-    "id": 13,
-    "added": "2022-08-30T00:00:00.000Z",
-    "channel_count": 33,
-    "node_count": 24,
-    "total_capacity": 161821884,
-    "tor_nodes": 5,
-    "clearnet_nodes": 11,
-    "unannounced_nodes": 6,
-    "avg_capacity": 4903693,
-    "avg_fee_rate": 38,
-    "avg_base_fee_mtokens": 1061,
-    "med_capacity": 2000000,
-    "med_fee_rate": 1,
-    "med_base_fee_mtokens": 1000,
-    "clearnet_tor_nodes": 2
-  }
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-lightning-nodes-channels',
-    title: 'GET Nodes/Channels',
-    description: {
-      default: '<p>Returns Lightning nodes and channels that match a full-text, case-insensitive search <code>:query</code> across node aliases, node pubkeys, channel IDs, and short channel IDs.</p>'
-    },
-    urlString: '/v1/lightning/search?searchText=:query',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/search?searchText=%{1}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`ACINQ`],
-          response: `{
-  "nodes": [
-    {
-      "public_key": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
-      "alias": "ACINQ",
-      "capacity": 35920090247,
-      "channels": 2907
-    },
-    {
-      "public_key": "03d3902b46d6ab9558a76cbf91b27d093c0a3c54e59f33c7eb4bd643dbb3b1b5b0",
-      "alias": "Acinq",
-      "capacity": null,
-      "channels": null
-    }
-  ],
-  "channels": []
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`lnd`],
-          response: `{
-  "nodes": [
-    {
-      "public_key": "02be8f360e57600486b93dd33ea0872a4e14a259924ba4084f27d693a77d151158",
-      "alias": "lndus1.dev.zaphq.io",
-      "capacity": 762968876,
-      "channels": 27
-    },
-    {
-      "public_key": "028c3640c57ffe47eb41db8225968833c5032f297aeba98672d6f7037090d59e3f",
-      "alias": "lndus0.next.zaphq.io",
-      "capacity": 641040063,
-      "channels": 26
-    }
-  ],
-  "channels": []
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`guggero`],
-          response: `{
-  "nodes": [
-    {
-      "public_key": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-      "alias": "guggero",
-      "capacity": 66577093,
-      "channels": 12,
-      "status": 1
-    }
-  ],
-  "channels": []
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-lightning-nodes-country',
-    title: 'GET Nodes in Country',
-    description: {
-      default: '<p>Returns a list of Lightning nodes running on clearnet in the requested <code>:country</code>, where <code>:country</code> is an ISO Alpha-2 country code.</p>'
-    },
-    urlString: '/v1/lightning/nodes/country/:country',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/country/%{1}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`ch`],
-          response: `{
-  "country": {
-    "de": "Schweiz",
-    "en": "Switzerland",
-    "es": "Suiza",
-    "fr": "Suisse",
-    "ja": "スイス連邦",
-    "pt-BR": "Suíça",
-    "ru": "Швейцария",
-    "zh-CN": "瑞士"
-  },
-  "nodes": [
-    {
-      "public_key": "033d8656219478701227199cbd6f670335c8d408a92ae88b962c49d4dc0e83e025",
-      "capacity": 54339697486,
-      "channels": 991,
-      "alias": "bfx-lnd0",
-      "first_seen": 1574813156,
-      "updated_at": 1661814056,
-      "city": {
-        "de": "Zürich",
-        "en": "Zurich",
-        "es": "Zúrich",
-        "fr": "Zurich",
-        "ja": "チューリッヒ",
-        "pt-BR": "Zurique",
-        "ru": "Цюрих",
-        "zh-CN": "苏黎世"
-      },
-      "country": {
-        "de": "Schweiz",
-        "en": "Switzerland",
-        "es": "Suiza",
-        "fr": "Suisse",
-        "ja": "スイス連邦",
-        "pt-BR": "Suíça",
-        "ru": "Швейцария",
-        "zh-CN": "瑞士"
-      },
-      "iso_code": "CH",
-      "subdivision": {
-        "de": "Zürich",
-        "en": "Zurich",
-        "fr": "Zurich"
-      }
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`ch`],
-          response: `{
-  "country": {
-    "de": "Schweiz",
-    "en": "Switzerland",
-    "es": "Suiza",
-    "fr": "Suisse",
-    "ja": "スイス連邦",
-    "pt-BR": "Suíça",
-    "ru": "Швейцария",
-    "zh-CN": "瑞士"
-  },
-  "nodes": [
-    {
-      "public_key": "0200a7f20e51049363cb7f2a0865fe072464d469dca0ac34c954bb3d4b552b6e95",
-      "capacity": 94802991,
-      "channels": 15,
-      "alias": "looptest",
-      "first_seen": 1601298108,
-      "updated_at": 1661857089,
-      "city": {
-        "de": "Thun",
-        "en": "Thun",
-        "es": "Thun",
-        "fr": "Thoune",
-        "ja": "トゥーン",
-        "pt-BR": "Tune",
-        "ru": "Тун",
-        "zh-CN": "图恩"
-      },
-      "country": {
-        "de": "Schweiz",
-        "en": "Switzerland",
-        "es": "Suiza",
-        "fr": "Suisse",
-        "ja": "スイス連邦",
-        "pt-BR": "Suíça",
-        "ru": "Швейцария",
-        "zh-CN": "瑞士"
-      },
-      "iso_code": "CH",
-      "subdivision": {
-        "de": "Bern",
-        "en": "Bern",
-        "fr": "Berne"
-      }
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`us`],
-          response: `{
-  "country": {
-    "de": "Vereinigte Staaten",
-    "en": "United States",
-    "es": "Estados Unidos",
-    "fr": "États Unis",
-    "ja": "アメリカ",
-    "pt-BR": "EUA",
-    "ru": "США",
-    "zh-CN": "美国"
-  },
-  "nodes": [
-    {
-      "public_key": "03f70ac4525c0014bbf380c069ce82d70946d37a56c027a2ed18609a3e60c3b353",
-      "capacity": 2000000,
-      "channels": 1,
-      "alias": "",
-      "first_seen": 1637708194,
-      "updated_at": 0,
-      "city": {
-        "en": "Oak Park",
-        "ru": "Оук-Парк"
-      },
-      "country": {
-        "de": "Vereinigte Staaten",
-        "en": "United States",
-        "es": "Estados Unidos",
-        "fr": "États Unis",
-        "ja": "アメリカ",
-        "pt-BR": "EUA",
-        "ru": "США",
-        "zh-CN": "美国"
-      },
-      "iso_code": "US",
-      "subdivision": {
-        "en": "Illinois",
-        "es": "Illinois",
-        "fr": "Illinois",
-        "ja": "イリノイ州",
-        "pt-BR": "Ilinóis",
-        "ru": "Иллинойс",
-        "zh-CN": "伊利诺伊州"
-      }
-    },
-    {
-      "public_key": "0397b15fd867541c53a3a5e27c021f7acad582684d05d120af572266c92c8a0313",
-      "capacity": 19802,
-      "channels": 1,
-      "alias": "pseudozach",
-      "first_seen": 1637620444,
-      "updated_at": 1637721257,
-      "city": {
-        "de": "Atlanta",
-        "en": "Atlanta",
-        "es": "Atlanta",
-        "fr": "Atlanta",
-        "ja": "アトランタ",
-        "pt-BR": "Atlanta",
-        "ru": "Атланта",
-        "zh-CN": "亚特兰大"
-      },
-      "country": {
-        "de": "Vereinigte Staaten",
-        "en": "United States",
-        "es": "Estados Unidos",
-        "fr": "États Unis",
-        "ja": "アメリカ",
-        "pt-BR": "EUA",
-        "ru": "США",
-        "zh-CN": "美国"
-      },
-      "iso_code": "US",
-      "subdivision": {
-        "en": "Georgia",
-        "es": "Georgia",
-        "fr": "Géorgie",
-        "ja": "ジョージア州",
-        "pt-BR": "Geórgia",
-        "ru": "Джорджия",
-        "zh-CN": "乔治亚"
-      }
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-country-node-stats',
-    title: 'GET Node Stats Per Country',
-    description: {
-      default: '<p>Returns aggregate capacity and number of clearnet nodes per country. Capacity figures are in satoshis.</p>'
-    },
-    urlString: '/v1/lightning/nodes/countries',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/countries`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "name": {
-      "de": "Vereinigte Staaten",
-      "en": "United States",
-      "es": "Estados Unidos",
-      "fr": "États Unis",
-      "ja": "アメリカ",
-      "pt-BR": "EUA",
-      "ru": "США",
-      "zh-CN": "美国"
-    },
-    "iso": "US",
-    "count": 2775,
-    "share": 34.53,
-    "capacity": "372732844657"
-  },
-  {
-    "name": {
-      "de": "Frankreich",
-      "en": "France",
-      "es": "Francia",
-      "fr": "France",
-      "ja": "フランス共和国",
-      "pt-BR": "França",
-      "ru": "Франция",
-      "zh-CN": "法国"
-    },
-    "iso": "FR",
-    "count": 972,
-    "share": 12.09,
-    "capacity": "7740713270"
-  },
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "name": {
-      "de": "Vereinigte Staaten",
-      "en": "United States",
-      "es": "Estados Unidos",
-      "fr": "États Unis",
-      "ja": "アメリカ",
-      "pt-BR": "EUA",
-      "ru": "США",
-      "zh-CN": "美国"
-    },
-    "iso": "US",
-    "count": 304,
-    "share": 37.95,
-    "capacity": "23906225936"
-  },
-  {
-    "name": {
-      "de": "Deutschland",
-      "en": "Germany",
-      "es": "Alemania",
-      "fr": "Allemagne",
-      "ja": "ドイツ連邦共和国",
-      "pt-BR": "Alemanha",
-      "ru": "Германия",
-      "zh-CN": "德国"
-    },
-    "iso": "DE",
-    "count": 85,
-    "share": 10.61,
-    "capacity": "1878052329"
-  },
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "name": {
-      "de": "Vereinigte Staaten",
-      "en": "United States",
-      "es": "Estados Unidos",
-      "fr": "États Unis",
-      "ja": "アメリカ",
-      "pt-BR": "EUA",
-      "ru": "США",
-      "zh-CN": "美国"
-    },
-    "iso": "US",
-    "count": 4,
-    "share": 36.36,
-    "capacity": "2059317"
-  },
-  {
-    "name": {
-      "de": "Japan",
-      "en": "Japan",
-      "es": "Japón",
-      "fr": "Japon",
-      "ja": "日本",
-      "pt-BR": "Japão",
-      "ru": "Япония",
-      "zh-CN": "日本"
-    },
-    "iso": "JP",
-    "count": 2,
-    "share": 18.18,
-    "capacity": "107710417"
-  },
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-isp-nodes',
-    title: 'GET ISP Nodes',
-    description: {
-      default: '<p>Returns a list of nodes hosted by a specified <code>:isp</code>, where <code>:isp</code> is an ISP\'s ASN.</p>'
-    },
-    urlString: '/v1/lightning/nodes/isp/:isp',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/isp/%{1}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`16509`],
-          response: `{
-  "isp": "Amazon.com",
-  "nodes": [
-    {
-      "public_key": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
-      "capacity": 36010390247,
-      "channels": 2907,
-      "alias": "ACINQ",
-      "first_seen": 1522941222,
-      "updated_at": 1661274935,
-      "city": null,
-      "country": {
-        "de": "Vereinigte Staaten",
-        "en": "United States",
-        "es": "Estados Unidos",
-        "fr": "États Unis",
-        "ja": "アメリカ",
-        "pt-BR": "EUA",
-        "ru": "США",
-        "zh-CN": "美国"
-      },
-      "iso_code": "US",
-      "subdivision": null
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`16509`],
-          response: `{
-  "isp": "Amazon.com",
-  "nodes": [
-    {
-      "public_key": "03933884aaf1d6b108397e5efe5c86bcf2d8ca8d2f700eda99db9214fc2712b134",
-      "capacity": 2041664924,
-      "channels": 70,
-      "alias": "endurance",
-      "first_seen": 1566809576,
-      "updated_at": 1660926529,
-      "city": null,
-      "country": {
-        "de": "Vereinigte Staaten",
-        "en": "United States",
-        "es": "Estados Unidos",
-        "fr": "États Unis",
-        "ja": "アメリカ",
-        "pt-BR": "EUA",
-        "ru": "США",
-        "zh-CN": "美国"
-      },
-      "iso_code": "US",
-      "subdivision": null
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`7684`],
-          response: `{
-  "isp": "SAKURA Internet",
-  "nodes": [
-    {
-      "public_key": "02dadf6c28f3284d591cd2a4189d1530c1ff82c07059ebea150a33ab76e7364b4a",
-      "capacity": 51155987,
-      "channels": 15,
-      "alias": "珠美ノード⚡@wakiyamap",
-      "first_seen": 1612221581,
-      "updated_at": 1662382573,
-      "city": null,
-      "country": {
-        "de": "Japan",
-        "en": "Japan",
-        "es": "Japón",
-        "fr": "Japon",
-        "ja": "日本",
-        "pt-BR": "Japão",
-        "ru": "Япония",
-        "zh-CN": "日本"
-      },
-      "iso_code": "JP",
-      "subdivision": null
-    }
-  ]
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-isp-node-stats',
-    title: 'GET Node Stats Per ISP',
-    description: {
-      default: '<p>Returns aggregate capacity, number of nodes, and number of channels per ISP. Capacity figures are in satoshis.</p>'
-    },
-    urlString: '/v1/lightning/nodes/isp-ranking',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/isp-ranking`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "clearnetCapacity": 417154330493,
-  "torCapacity": 36605381932,
-  "unknownCapacity": 6678700534,
-  "ispRanking": [
-    [
-      "14061",           //ASN
-      "DigitalOcean",    //ISP name
-      43681728521,       //aggregate capacity, in sats
-      5028,              //total number of channels
-      192                //number of nodes
-    ],
-    [
-      "701",
-      "Verizon Internet Services",
-      3047086363,
-      507,
-      55
-    ],
-    [
-      "396982,15169",
-      "Google Cloud",
-      139554933568,
-      2747,
-      78
-    ],
-    ...
-  ]
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "clearnetCapacity": 21714967205,
-  "torCapacity": 1183591190,
-  "unknownCapacity": 965032372,
-  "ispRanking": [
-    [
-      "14080",                  //ASN
-      "Telmex Colombia S.A.",   //ISP Name
-      220063321,                //aggregate capacity, in sats
-      98,                       //total number of channels
-      1                         //number of nodes
-    ],
-    [
-      "16509,14618",
-      "Amazon.com",
-      5590657952,
-      445,
-      41
-    ],
-    ...
-  ]
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "clearnetCapacity": 126914725,
-  "torCapacity": 1000000,
-  "unknownCapacity": 31150000,
-  "ispRanking": [
-    [
-      "1136",
-      "KPN",
-      99878,
-      1,
-      1
-    ],
-    [
-      "24940",
-      "Hetzner Online GmbH",
-      34877093,
-      6,
-      1
-    ],
-    ...
-  ]
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-top-100-nodes',
-    title: 'GET Top 100 Nodes',
-    description: {
-      default: '<p>Returns two lists of the top 100 nodes: one ordered by liquidity (aggregate channel capacity) and the other ordered by connectivity (number of open channels).</p>'
-    },
-    urlString: '/v1/lightning/nodes/rankings',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/rankings`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "topByCapacity": [
-    {
-      "publicKey": "033d8656219478701227199cbd6f670335c8d408a92ae88b962c49d4dc0e83e025",
-      "alias": "bfx-lnd0",
-      "capacity": 54361697486
-    },
-    {
-      "publicKey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
-      "alias": "ACINQ",
-      "capacity": 36010516297
-    },
-    ...
-  ],
-  "topByChannels": [
-    {
-      "publicKey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
-      "alias": "ACINQ",
-      "channels": 2908
-    },
-    {
-      "publicKey": "035e4ff418fc8b5554c5d9eea66396c227bd429a3251c8cbc711002ba215bfc226",
-      "alias": "WalletOfSatoshi.com",
-      "channels": 2771
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "topByCapacity": [
-    {
-      "publicKey": "038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9",
-      "alias": "aranguren.org",
-      "capacity": 17155095532
-    },
-    {
-      "publicKey": "0225ff2ae6a3d9722b625072503c2f64f6eddb78d739379d2ee55a16b3b0ed0a17",
-      "alias": "STRANGEIRON",
-      "capacity": 7038263480
-    },
-    ...
-  ],
-  "topByChannels": [
-    {
-      "publicKey": "038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9",
-      "alias": "aranguren.org",
-      "channels": 489
-    },
-    {
-      "publicKey": "030425d8babe3ab6dfc065e69dd8b10ce6738c86ea7d634324c913e21620fa5eaf",
-      "alias": "MTest441",
-      "channels": 258
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "topByCapacity": [
-    {
-      "publicKey": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-      "alias": "guggero",
-      "capacity": 66577093
-    },
-    {
-      "publicKey": "0271cf3881e6eadad960f47125434342e57e65b98a78afa99f9b4191c02dd7ab3b",
-      "alias": "eclair@wakiyamap",
-      "capacity": 56554430
-    },
-    ...
-  ],
-  "topByChannels": [
-    {
-      "publicKey": "02dadf6c28f3284d591cd2a4189d1530c1ff82c07059ebea150a33ab76e7364b4a",
-      "alias": "珠美ノード⚡@wakiyamap",
-      "channels": 15
-    },
-    {
-      "publicKey": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-      "alias": "guggero",
-      "channels": 12
-    },
-    ...
-  ]
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-top-100-nodes-liquidity',
-    title: 'GET Top 100 Nodes by Liquidity',
-    description: {
-      default: '<p>Returns a list of the top 100 nodes by liquidity (aggregate channel capacity).</p>'
-    },
-    urlString: '/v1/lightning/nodes/rankings/liquidity',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/rankings/liquidity`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "033d8656219478701227199cbd6f670335c8d408a92ae88b962c49d4dc0e83e025",
-    "alias": "bfx-lnd0",
-    "capacity": 54361697486,
-    "channels": 993,
-    "firstSeen": 1574813156,
-    "updatedAt": 1661814056,
-    "city": {
-      "de": "Zürich",
-      "en": "Zurich",
-      "es": "Zúrich",
-      "fr": "Zurich",
-      "ja": "チューリッヒ",
-      "pt-BR": "Zurique",
-      "ru": "Цюрих",
-      "zh-CN": "苏黎世"
-    },
-    "country": {
-      "de": "Schweiz",
-      "en": "Switzerland",
-      "es": "Suiza",
-      "fr": "Suisse",
-      "ja": "スイス連邦",
-      "pt-BR": "Suíça",
-      "ru": "Швейцария",
-      "zh-CN": "瑞士"
-    }
-  },
-  {
-    "publicKey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
-    "alias": "ACINQ",
-    "capacity": 36010516297,
-    "channels": 2908,
-    "firstSeen": 1522941222,
-    "updatedAt": 1661274935,
-    "city": null,
-    "country": {
-      "de": "Vereinigte Staaten",
-      "en": "United States",
-      "es": "Estados Unidos",
-      "fr": "États Unis",
-      "ja": "アメリカ",
-      "pt-BR": "EUA",
-      "ru": "США",
-      "zh-CN": "美国"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9",
-    "alias": "aranguren.org",
-    "capacity": 17155095532,
-    "channels": 489,
-    "firstSeen": 1521457251,
-    "updatedAt": 1662035238,
-    "city": {
-      "de": "Melbourne",
-      "en": "Melbourne",
-      "es": "Melbourne",
-      "fr": "Melbourne",
-      "ja": "メルボルン",
-      "pt-BR": "Melbourne",
-      "ru": "Мельбурн",
-      "zh-CN": "墨尔本"
-    },
-    "country": {
-      "de": "Australien",
-      "en": "Australia",
-      "es": "Australia",
-      "fr": "Australie",
-      "ja": "オーストラリア",
-      "pt-BR": "Austrália",
-      "ru": "Австралия",
-      "zh-CN": "澳大利亚"
-    }
-  },
-  {
-    "publicKey": "0225ff2ae6a3d9722b625072503c2f64f6eddb78d739379d2ee55a16b3b0ed0a17",
-    "alias": "STRANGEIRON",
-    "capacity": 7038263480,
-    "channels": 95,
-    "firstSeen": 1651725065,
-    "updatedAt": 1661958465,
-    "city": {
-      "de": "Melbourne",
-      "en": "Melbourne",
-      "es": "Melbourne",
-      "fr": "Melbourne",
-      "ja": "メルボルン",
-      "pt-BR": "Melbourne",
-      "ru": "Мельбурн",
-      "zh-CN": "墨尔本"
-    },
-    "country": {
-      "de": "Australien",
-      "en": "Australia",
-      "es": "Australia",
-      "fr": "Australie",
-      "ja": "オーストラリア",
-      "pt-BR": "Austrália",
-      "ru": "Австралия",
-      "zh-CN": "澳大利亚"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-    "alias": "guggero",
-    "capacity": 66577093,
-    "channels": 12,
-    "firstSeen": 1608832520,
-    "updatedAt": 1662440260,
-    "city": null,
-    "country": {
-      "de": "Deutschland",
-      "en": "Germany",
-      "es": "Alemania",
-      "fr": "Allemagne",
-      "ja": "ドイツ連邦共和国",
-      "pt-BR": "Alemanha",
-      "ru": "Германия",
-      "zh-CN": "德国"
-    }
-  },
-  {
-    "publicKey": "0271cf3881e6eadad960f47125434342e57e65b98a78afa99f9b4191c02dd7ab3b",
-    "alias": "eclair@wakiyamap",
-    "capacity": 56554430,
-    "channels": 4,
-    "firstSeen": 1628031165,
-    "updatedAt": 1648064593,
-    "city": {
-      "de": "Ōsaka",
-      "en": "Osaka",
-      "es": "Osaka",
-      "fr": "Osaka",
-      "ja": "大阪市",
-      "pt-BR": "Osaka",
-      "ru": "Осака"
-    },
-    "country": {
-      "de": "Japan",
-      "en": "Japan",
-      "es": "Japón",
-      "fr": "Japon",
-      "ja": "日本",
-      "pt-BR": "Japão",
-      "ru": "Япония",
-      "zh-CN": "日本"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-top-100-nodes-connectivity',
-    title: 'GET Top 100 Nodes by Connectivity',
-    description: {
-      default: '<p>Returns a list of the top 100 nodes by connectivity (number of open channels).</p>'
-    },
-    urlString: '/v1/lightning/nodes/rankings/connectivity',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/rankings/connectivity`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f",
-    "alias": "ACINQ",
-    "channels": 2908,
-    "capacity": 36010516297,
-    "firstSeen": 1522941222,
-    "updatedAt": 1661274935,
-    "city": null,
-    "country": {
-      "de": "Vereinigte Staaten",
-      "en": "United States",
-      "es": "Estados Unidos",
-      "fr": "États Unis",
-      "ja": "アメリカ",
-      "pt-BR": "EUA",
-      "ru": "США",
-      "zh-CN": "美国"
-    }
-  },
-  {
-    "publicKey": "035e4ff418fc8b5554c5d9eea66396c227bd429a3251c8cbc711002ba215bfc226",
-    "alias": "WalletOfSatoshi.com",
-    "channels": 2772,
-    "capacity": 15464503162,
-    "firstSeen": 1601429940,
-    "updatedAt": 1661812116,
-    "city": {
-      "de": "Vancouver",
-      "en": "Vancouver",
-      "es": "Vancouver",
-      "fr": "Vancouver",
-      "ja": "バンクーバー市",
-      "pt-BR": "Vancôver",
-      "ru": "Ванкувер"
-    },
-    "country": {
-      "de": "Kanada",
-      "en": "Canada",
-      "es": "Canadá",
-      "fr": "Canada",
-      "ja": "カナダ",
-      "pt-BR": "Canadá",
-      "ru": "Канада",
-      "zh-CN": "加拿大"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9",
-    "alias": "aranguren.org",
-    "channels": 489,
-    "capacity": 17155095532,
-    "firstSeen": 1521457251,
-    "updatedAt": 1662035238,
-    "city": {
-      "de": "Melbourne",
-      "en": "Melbourne",
-      "es": "Melbourne",
-      "fr": "Melbourne",
-      "ja": "メルボルン",
-      "pt-BR": "Melbourne",
-      "ru": "Мельбурн",
-      "zh-CN": "墨尔本"
-    },
-    "country": {
-      "de": "Australien",
-      "en": "Australia",
-      "es": "Australia",
-      "fr": "Australie",
-      "ja": "オーストラリア",
-      "pt-BR": "Austrália",
-      "ru": "Австралия",
-      "zh-CN": "澳大利亚"
-    }
-  },
-  {
-    "publicKey": "030425d8babe3ab6dfc065e69dd8b10ce6738c86ea7d634324c913e21620fa5eaf",
-    "alias": "MTest441",
-    "channels": 258,
-    "capacity": 4113430492,
-    "firstSeen": 1640955758,
-    "updatedAt": 1662035216,
-    "city": null,
-    "country": null
-  },
-  {
-    "publicKey": "0270685ca81a8e4d4d01beec5781f4cc924684072ae52c507f8ebe9daf0caaab7b",
-    "alias": "0270685ca81a8e4d4d01",
-    "channels": 164,
-    "capacity": 638119030,
-    "firstSeen": 1535613050,
-    "updatedAt": 1662034882,
-    "city": {
-      "de": "Clifton",
-      "en": "Clifton",
-      "ja": "クリフトン",
-      "pt-BR": "Clifton",
-      "ru": "Клифтон",
-      "zh-CN": "克利夫頓"
-    },
-    "country": {
-      "de": "Vereinigte Staaten",
-      "en": "United States",
-      "es": "Estados Unidos",
-      "fr": "États Unis",
-      "ja": "アメリカ",
-      "pt-BR": "EUA",
-      "ru": "США",
-      "zh-CN": "美国"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "02dadf6c28f3284d591cd2a4189d1530c1ff82c07059ebea150a33ab76e7364b4a",
-    "alias": "珠美ノード⚡@wakiyamap",
-    "channels": 15,
-    "capacity": 51155987,
-    "firstSeen": 1612221581,
-    "updatedAt": 1662382573,
-    "city": null,
-    "country": {
-      "de": "Japan",
-      "en": "Japan",
-      "es": "Japón",
-      "fr": "Japon",
-      "ja": "日本",
-      "pt-BR": "Japão",
-      "ru": "Япония",
-      "zh-CN": "日本"
-    }
-  },
-  {
-    "publicKey": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-    "alias": "guggero",
-    "channels": 12,
-    "capacity": 66577093,
-    "firstSeen": 1608832520,
-    "updatedAt": 1662440260,
-    "city": null,
-    "country": {
-      "de": "Deutschland",
-      "en": "Germany",
-      "es": "Alemania",
-      "fr": "Allemagne",
-      "ja": "ドイツ連邦共和国",
-      "pt-BR": "Alemanha",
-      "ru": "Германия",
-      "zh-CN": "德国"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-top-100-oldest-nodes',
-    title: 'GET Top 100 Oldest Nodes',
-    description: {
-      default: '<p>Returns a list of the top 100 oldest nodes.</p>'
-    },
-    urlString: '/v1/lightning/nodes/rankings/age',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/rankings/age`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "02d4531a2f2e6e5a9033d37d548cff4834a3898e74c3abe1985b493c42ebbd707d",
-    "alias": "coinfinity.co",
-    "channels": 13,
-    "capacity": 35945717,
-    "firstSeen": 1518001533,
-    "updatedAt": 1661713804,
-    "city": {
-      "de": "Brüssel",
-      "en": "Brussels",
-      "es": "Bruselas",
-      "fr": "Bruxelles",
-      "ja": "ブリュッセル",
-      "pt-BR": "Bruxelas",
-      "ru": "Брюссель",
-      "zh-CN": "布鲁塞尔"
-    },
-    "country": {
-      "de": "Belgien",
-      "en": "Belgium",
-      "es": "Bélgica",
-      "fr": "Belgique",
-      "ja": "ベルギー王国",
-      "pt-BR": "Bélgica",
-      "ru": "Бельгия",
-      "zh-CN": "比利时"
-    }
-  },
-  {
-    "publicKey": "024bd94f0425590434538fd21d4e58982f7e9cfd8f339205a73deb9c0e0341f5bd",
-    "alias": "CL.rompert.com🔵 ",
-    "channels": 2,
-    "capacity": 600000,
-    "firstSeen": 1520596684,
-    "updatedAt": 1603261631,
-    "city": {
-      "de": "Clifton",
-      "en": "Clifton",
-      "ja": "クリフトン",
-      "pt-BR": "Clifton",
-      "ru": "Клифтон",
-      "zh-CN": "克利夫頓"
-    },
-    "country": {
-      "de": "Vereinigte Staaten",
-      "en": "United States",
-      "es": "Estados Unidos",
-      "fr": "États Unis",
-      "ja": "アメリカ",
-      "pt-BR": "EUA",
-      "ru": "США",
-      "zh-CN": "美国"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9",
-    "alias": "aranguren.org",
-    "channels": 489,
-    "capacity": 17155095532,
-    "firstSeen": 1521457251,
-    "updatedAt": 1662035238,
-    "city": {
-      "de": "Melbourne",
-      "en": "Melbourne",
-      "es": "Melbourne",
-      "fr": "Melbourne",
-      "ja": "メルボルン",
-      "pt-BR": "Melbourne",
-      "ru": "Мельбурн",
-      "zh-CN": "墨尔本"
-    },
-    "country": {
-      "de": "Australien",
-      "en": "Australia",
-      "es": "Australia",
-      "fr": "Australie",
-      "ja": "オーストラリア",
-      "pt-BR": "Austrália",
-      "ru": "Австралия",
-      "zh-CN": "澳大利亚"
-    }
-  },
-  {
-    "publicKey": "0277622bf4c497475960bf91bd3c673a4cb4e9b589cebfde9700c197b3989cc1b8",
-    "alias": "CoinGate",
-    "channels": 11,
-    "capacity": 91768515,
-    "firstSeen": 1525964963,
-    "updatedAt": 1661991683,
-    "city": {
-      "de": "Frankfurt am Main",
-      "en": "Frankfurt am Main",
-      "es": "Francfort",
-      "fr": "Francfort-sur-le-Main",
-      "ja": "フランクフルト・アム・マイン",
-      "pt-BR": "Frankfurt am Main",
-      "ru": "Франкфурт",
-      "zh-CN": "法兰克福"
-    },
-    "country": {
-      "de": "Deutschland",
-      "en": "Germany",
-      "es": "Alemania",
-      "fr": "Allemagne",
-      "ja": "ドイツ連邦共和国",
-      "pt-BR": "Alemanha",
-      "ru": "Германия",
-      "zh-CN": "德国"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  {
-    "publicKey": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-    "alias": "guggero",
-    "channels": 12,
-    "capacity": 66577093,
-    "firstSeen": 1608832520,
-    "updatedAt": 1662440260,
-    "city": null,
-    "country": {
-      "de": "Deutschland",
-      "en": "Germany",
-      "es": "Alemania",
-      "fr": "Allemagne",
-      "ja": "ドイツ連邦共和国",
-      "pt-BR": "Alemanha",
-      "ru": "Германия",
-      "zh-CN": "德国"
-    }
-  },
-  {
-    "publicKey": "03870a4c4c54a9b2e705023d706843ffbac5b0e95e2b80d4b02dc7a9efb5380322",
-    "alias": "03870a4c4c54a9b2e705",
-    "channels": 2,
-    "capacity": 30000000,
-    "firstSeen": 1608832520,
-    "updatedAt": 0,
-    "city": null,
-    "country": null
-  },
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-node-stats',
-    title: 'GET Node Stats',
-    description: {
-      default: '<p>Returns details about a node with the given <code>:pubKey</code>.</p>'
-    },
-    urlString: '/v1/lightning/nodes/:pubKey',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/%{1}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`033ac2f9f7ff643c235cc247c521663924aff73b26b38118a6c6821460afcde1b3`],
-          response: `{
-  "public_key": "033ac2f9f7ff643c235cc247c521663924aff73b26b38118a6c6821460afcde1b3",
-  "alias": "Red.de.Rayos",
-  "first_seen": 1521504055,
-  "updated_at": 1661869523,
-  "color": "#68f442",
-  "sockets": "84.44.203.181:9735",
-  "as_number": 8422,
-  "city_id": 2886242,
-  "country_id": 2921044,
-  "subdivision_id": 2861876,
-  "longitude": 6.9489,
-  "latitude": 50.9298,
-  "iso_code": "DE",
-  "as_organization": "NetCologne GmbH",
-  "city": {
-    "de": "Köln",
-    "en": "Cologne",
-    "es": "Colonia",
-    "fr": "Cologne",
-    "ja": "ケルン",
-    "pt-BR": "Colônia",
-    "ru": "Кёльн",
-    "zh-CN": "科隆"
-  },
-  "country": {
-    "de": "Deutschland",
-    "en": "Germany",
-    "es": "Alemania",
-    "fr": "Allemagne",
-    "ja": "ドイツ連邦共和国",
-    "pt-BR": "Alemanha",
-    "ru": "Германия",
-    "zh-CN": "德国"
-  },
-  "subdivision": {
-    "de": "Nordrhein-Westfalen",
-    "en": "North Rhine-Westphalia",
-    "es": "Renania del Norte-Westfalia",
-    "fr": "Rhénanie du Nord-Westphalie",
-    "ru": "Северный Рейн-Вестфалия"
-  },
-  "active_channel_count": 55,
-  "capacity": "31505027",
-  "opened_channel_count": 55,
-  "closed_channel_count": 111
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`03f060953bef5b777dc77e44afa3859d022fc1a77c55138deb232ad7255e869c00`],
-          response: `{
-  "public_key": "03f060953bef5b777dc77e44afa3859d022fc1a77c55138deb232ad7255e869c00",
-  "alias": "Boltz",
-  "first_seen": 1551006126,
-  "updated_at": 1662033208,
-  "color": "#ff9800",
-  "sockets": "35.237.24.136:9735,idz7qlezif6hgmjkpmuelnsssyxea2lwan562a5gla7jmlxsl5cb2cad.onion:9735",
-  "as_number": 396982,
-  "city_id": 4589387,
-  "country_id": 6252001,
-  "subdivision_id": 4597040,
-  "longitude": -79.9746,
-  "latitude": 32.8608,
-  "iso_code": "US",
-  "as_organization": "Google Cloud",
-  "city": {
-    "en": "North Charleston",
-    "ja": "ノースチャールストン",
-    "pt-BR": "North Charleston",
-    "ru": "Норт-Чарлстон",
-    "zh-CN": "北查尔斯顿"
-  },
-  "country": {
-    "de": "Vereinigte Staaten",
-    "en": "United States",
-    "es": "Estados Unidos",
-    "fr": "États Unis",
-    "ja": "アメリカ",
-    "pt-BR": "EUA",
-    "ru": "США",
-    "zh-CN": "美国"
-  },
-  "subdivision": {
-    "en": "South Carolina",
-    "es": "Carolina del Sur",
-    "fr": "Caroline du Sud",
-    "ja": "サウスカロライナ州",
-    "pt-BR": "Carolina do Sul",
-    "ru": "Южная Каролина",
-    "zh-CN": "南卡罗来纳州"
-  },
-  "active_channel_count": 46,
-  "capacity": "111724126",
-  "opened_channel_count": 165,
-  "closed_channel_count": 1
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120`],
-          response: `{
-  "public_key": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-  "alias": "guggero",
-  "first_seen": 1608832520,
-  "updated_at": 1662440260,
-  "color": "#cccccc",
-  "sockets": "88.99.101.67:9735",
-  "as_number": 24940,
-  "city_id": null,
-  "country_id": 2921044,
-  "subdivision_id": null,
-  "longitude": 9.491,
-  "latitude": 51.2993,
-  "iso_code": "DE",
-  "as_organization": "Hetzner Online GmbH",
-  "city": null,
-  "country": {
-    "de": "Deutschland",
-    "en": "Germany",
-    "es": "Alemania",
-    "fr": "Allemagne",
-    "ja": "ドイツ連邦共和国",
-    "pt-BR": "Alemanha",
-    "ru": "Германия",
-    "zh-CN": "德国"
-  },
-  "subdivision": null,
-  "active_channel_count": 12,
-  "capacity": "66577093",
-  "opened_channel_count": 16,
-  "closed_channel_count": 0
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-historical-node-stats',
-    title: 'GET Historical Node Stats',
-    description: {
-      default: '<p>Returns historical stats for a node with the given <code>:pubKey</code>.</p>'
-    },
-    urlString: '/v1/lightning/nodes/:pubKey/statistics',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/nodes/%{1}/statistics`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`033ac2f9f7ff643c235cc247c521663924aff73b26b38118a6c6821460afcde1b3`],
-          response: `[
-  {
-    "added": 1661817600,
-    "capacity": 31505027,
-    "channels": 55
-  },
-  {
-    "added": 1661731200,
-    "capacity": 31505027,
-    "channels": 55
-  },
-  {
-    "added": 1655078400,
-    "capacity": 26487523,
-    "channels": 43
-  },
-  {
-    "added": 1654992000,
-    "capacity": 32692287,
-    "channels": 57
-  },
-  {
-    "added": 1654905600,
-    "capacity": 32692287,
-    "channels": 57
-  },
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`0225ff2ae6a3d9722b625072503c2f64f6eddb78d739379d2ee55a16b3b0ed0a17`],
-          response: `[
-  {
-    "added": 1662422400,
-    "capacity": 7038263480,
-    "channels": 95
-  },
-  {
-    "added": 1662336000,
-    "capacity": 7038263480,
-    "channels": 95
-  },
-  {
-    "added": 1662249600,
-    "capacity": 7038263480,
-    "channels": 95
-  },
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120`],
-          response: `[
-  {
-    "added": 1662422400,
-    "capacity": 66577093,
-    "channels": 12
-  },
-  {
-    "added": 1662336000,
-    "capacity": 63477093,
-    "channels": 9
-  },
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-channel',
-    title: 'GET Channel',
-    description: {
-      default: '<p>Returns info about a Lightning channel with the given <code>:channelId</code>.</p>'
-    },
-    urlString: '/v1/lightning/channels/:channelId',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/channels/%{1}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`768457472831193088`],
-          response: `{
-  "id": "768457472831193088",
-  "short_id": "698908x1305x0",
-  "capacity": 16777215,
-  "transaction_id": "9f248ff82f6ff4c112c218438cfde8260623663bc85a360d09a13b9a9b083564",
-  "transaction_vout": 0,
-  "closing_transaction_id": null,
-  "closing_reason": null,
-  "updated_at": "2022-08-25T23:05:40.000Z",
-  "created": "2021-09-04T00:10:42.000Z",
-  "status": 1,
-  "node_left": {
-    "alias": "CoinGate",
-    "public_key": "0242a4ae0c5bef18048fbecf995094b74bfb0f7391418d71ed394784373f41e4f3",
-    "channels": 1,
-    "capacity": 20000,
-    "base_fee_mtokens": 1000,
-    "cltv_delta": 0,
-    "fee_rate": 1,
-    "is_disabled": 0,
-    "max_htlc_mtokens": 16609443000,
-    "min_htlc_mtokens": 1000,
-    "updated_at": "2022-08-25T23:05:40.000Z",
-    "longitude": 8.6843,
-    "latitude": 50.1188
-  },
-  "node_right": {
-    "alias": "Blixt Wallet 🟡",
-    "public_key": "0230a5bca558e6741460c13dd34e636da28e52afd91cf93db87ed1b0392a7466eb",
-    "channels": 3,
-    "capacity": 34754430,
-    "base_fee_mtokens": 1000,
-    "cltv_delta": 0,
-    "fee_rate": 180,
-    "is_disabled": 0,
-    "max_htlc_mtokens": 16609443000,
-    "min_htlc_mtokens": 1000,
-    "updated_at": "2022-08-25T18:44:00.000Z",
-    "longitude": 9.491,
-    "latitude": 51.2993
-  }
-}`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`2478509215728271360`],
-          response: `{
-  "id": "2478509215728271360",
-  "short_id": "2254191x4x0",
-  "capacity": 16777215,
-  "transaction_id": "6b711b07b019d73ad432f401c01ac6ea253fbe2778388e5a686b5777678556c7",
-  "transaction_vout": 0,
-  "closing_transaction_id": null,
-  "closing_reason": null,
-  "updated_at": "2022-08-31T08:30:42.000Z",
-  "created": "2022-06-05T16:26:31.000Z",
-  "status": 1,
-  "node_left": {
-    "alias": "scarce-city-testnet",
-    "public_key": "0304fa1da67d441b382e3b2142a1980840276d89b6477812da8d26487b5ffa938c",
-    "channels": 15,
-    "capacity": 104876207,
-    "base_fee_mtokens": 1000,
-    "cltv_delta": 0,
-    "fee_rate": 1,
-    "is_disabled": 0,
-    "max_htlc_mtokens": 16777215000,
-    "min_htlc_mtokens": 1000,
-    "updated_at": "2022-08-31T08:30:42.000Z",
-    "longitude": -123.1236,
-    "latitude": 49.2526
-  },
-  "node_right": {
-    "alias": "STRANGEIRON",
-    "public_key": "0225ff2ae6a3d9722b625072503c2f64f6eddb78d739379d2ee55a16b3b0ed0a17",
-    "channels": 95,
-    "capacity": 7038263480,
-    "base_fee_mtokens": 0,
-    "cltv_delta": 0,
-    "fee_rate": 10,
-    "is_disabled": 0,
-    "max_htlc_mtokens": 16609443000,
-    "min_htlc_mtokens": 1,
-    "updated_at": "2022-08-27T20:22:06.000Z",
-    "longitude": 144.9669,
-    "latitude": -37.8159
-  }
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`58998694435160064`],
-          response: `{
-  "id": "58998694435160064",
-  "short_id": "53659x5x0",
-  "capacity": 16777215,
-  "transaction_id": "cbb18e4b23c2a27736fa5be559fee7efcc855f2dfb1f16b125f686c307513ef3",
-  "transaction_vout": 0,
-  "closing_transaction_id": null,
-  "closing_reason": null,
-  "updated_at": "2022-09-04T10:15:51.000Z",
-  "created": "2021-09-02T07:08:40.000Z",
-  "status": 1,
-  "node_left": {
-    "alias": "STRANGESUCKER-v0.12.0-11-gea4143",
-    "public_key": "03b9e6c1dec203f47efc95d003314d22cbb12a1324de4b091fe7d68f321a56322f",
-    "channels": 4,
-    "capacity": 55778192,
-    "base_fee_mtokens": 0,
-    "cltv_delta": 0,
-    "fee_rate": 0,
-    "is_disabled": 0,
-    "max_htlc_mtokens": 16609443000,
-    "min_htlc_mtokens": 1,
-    "updated_at": "2022-09-04T10:15:51.000Z",
-    "longitude": 19.1477,
-    "latitude": 48.7386
-  },
-  "node_right": {
-    "alias": "guggero",
-    "public_key": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-    "channels": 12,
-    "capacity": 66577093,
-    "base_fee_mtokens": 1000,
-    "cltv_delta": 0,
-    "fee_rate": 1,
-    "is_disabled": 0,
-    "max_htlc_mtokens": 16777215000,
-    "min_htlc_mtokens": 1000,
-    "updated_at": "2022-09-01T22:57:40.000Z",
-    "longitude": 9.491,
-    "latitude": 51.2993
-  }
-}`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-channels-from-txid',
-    title: 'GET Channels from TXID',
-    description: {
-      default: '<p>Returns channels that correspond to the given <code>:txid</code> (multiple transaction IDs can be specified).</p>'
-    },
-    urlString: '/v1/lightning/channels/txids?txId[]=:txid',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/channels/txids?txId[]=%{1}&txId[]=%{2}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`c3173549f502ede6440d5c48ea74af5607d88484c7a912bbef73d430049f8af4`,`d78f0b41a263af3df91fa4171cc2f60c40196aaf8f4bde5d1c8ff4474cfe753b`],
-          response: `[
-  {
-    "inputs": {},
-    "outputs": {
-      "1": {
-        "id": "819296691409584129",
-        "short_id": "745146x287x1",
-        "capacity": 300000000,
-        "transaction_id": "c3173549f502ede6440d5c48ea74af5607d88484c7a912bbef73d430049f8af4",
-        "transaction_vout": 1,
-        "closing_transaction_id": null,
-        "closing_reason": null,
-        "updated_at": "2022-08-25T18:44:07.000Z",
-        "created": "2022-07-16T00:11:33.000Z",
-        "status": 1,
-        "node_left": {
-          "alias": "River Financial 1",
-          "public_key": "03037dc08e9ac63b82581f79b662a4d0ceca8a8ca162b1af3551595b8f2d97b70a",
-          "base_fee_mtokens": 0,
-          "cltv_delta": 0,
-          "fee_rate": 500,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 297000000000,
-          "min_htlc_mtokens": 1000,
-          "updated_at": "2022-08-23T17:53:43.000Z"
-        },
-        "node_right": {
-          "alias": "0204a91bb5802ad0a799",
-          "public_key": "0204a91bb5802ad0a799acfd86ef566da03d80cc9e13acb01e680634bf64188a0d",
-          "base_fee_mtokens": 0,
-          "cltv_delta": 0,
-          "fee_rate": 152,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 297000000000,
-          "min_htlc_mtokens": 1000,
-          "updated_at": "2022-08-25T18:44:07.000Z"
-        }
-      }
-    }
-  },
-  {
-    "inputs": {},
-    "outputs": {
-      "1": {
-        "id": "814662250034036737",
-        "short_id": "740931x2355x1",
-        "capacity": 300000000,
-        "transaction_id": "d78f0b41a263af3df91fa4171cc2f60c40196aaf8f4bde5d1c8ff4474cfe753b",
-        "transaction_vout": 1,
-        "closing_transaction_id": null,
-        "closing_reason": null,
-        "updated_at": "2022-08-28T18:54:40.000Z",
-        "created": "2022-06-15T16:18:33.000Z",
-        "status": 1,
-        "node_left": {
-          "alias": "bfx-lnd0",
-          "public_key": "033d8656219478701227199cbd6f670335c8d408a92ae88b962c49d4dc0e83e025",
-          "base_fee_mtokens": 1000,
-          "cltv_delta": 0,
-          "fee_rate": 1,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 297000000000,
-          "min_htlc_mtokens": 1000,
-          "updated_at": "2022-08-25T18:44:03.000Z"
-        },
-        "node_right": {
-          "alias": "River Financial 1",
-          "public_key": "03037dc08e9ac63b82581f79b662a4d0ceca8a8ca162b1af3551595b8f2d97b70a",
-          "base_fee_mtokens": 0,
-          "cltv_delta": 0,
-          "fee_rate": 750,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 297000000000,
-          "min_htlc_mtokens": 1000,
-          "updated_at": "2022-08-28T18:54:40.000Z"
-        }
-      }
-    }
-  }
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`6b711b07b019d73ad432f401c01ac6ea253fbe2778388e5a686b5777678556c7`],
-          response: `[
-  {
-    "inputs": {},
-    "outputs": {
-      "0": {
-        "id": "2478509215728271360",
-        "short_id": "2254191x4x0",
-        "capacity": 16777215,
-        "transaction_id": "6b711b07b019d73ad432f401c01ac6ea253fbe2778388e5a686b5777678556c7",
-        "transaction_vout": 0,
-        "closing_transaction_id": null,
-        "closing_reason": null,
-        "updated_at": "2022-08-31T08:30:42.000Z",
-        "created": "2022-06-05T16:26:31.000Z",
-        "status": 1,
-        "node_left": {
-          "alias": "scarce-city-testnet",
-          "public_key": "0304fa1da67d441b382e3b2142a1980840276d89b6477812da8d26487b5ffa938c",
-          "base_fee_mtokens": 1000,
-          "cltv_delta": 0,
-          "fee_rate": 1,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 16777215000,
-          "min_htlc_mtokens": 1000,
-          "updated_at": "2022-08-31T08:30:42.000Z"
-        },
-        "node_right": {
-          "alias": "STRANGEIRON",
-          "public_key": "0225ff2ae6a3d9722b625072503c2f64f6eddb78d739379d2ee55a16b3b0ed0a17",
-          "base_fee_mtokens": 0,
-          "cltv_delta": 0,
-          "fee_rate": 10,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 16609443000,
-          "min_htlc_mtokens": 1,
-          "updated_at": "2022-08-27T20:22:06.000Z"
-        }
-      }
-    }
-  }
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`cbb18e4b23c2a27736fa5be559fee7efcc855f2dfb1f16b125f686c307513ef3`],
-          response: `[
-  {
-    "inputs": {},
-    "outputs": {
-      "0": {
-        "id": "58998694435160064",
-        "short_id": "53659x5x0",
-        "capacity": 16777215,
-        "transaction_id": "cbb18e4b23c2a27736fa5be559fee7efcc855f2dfb1f16b125f686c307513ef3",
-        "transaction_vout": 0,
-        "closing_transaction_id": null,
-        "closing_reason": null,
-        "updated_at": "2022-09-04T10:15:51.000Z",
-        "created": "2021-09-02T07:08:40.000Z",
-        "status": 1,
-        "node_left": {
-          "alias": "STRANGESUCKER-v0.12.0-11-gea4143",
-          "public_key": "03b9e6c1dec203f47efc95d003314d22cbb12a1324de4b091fe7d68f321a56322f",
-          "base_fee_mtokens": 0,
-          "cltv_delta": 0,
-          "fee_rate": 0,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 16609443000,
-          "min_htlc_mtokens": 1,
-          "updated_at": "2022-09-04T10:15:51.000Z"
-        },
-        "node_right": {
-          "alias": "guggero",
-          "public_key": "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-          "base_fee_mtokens": 1000,
-          "cltv_delta": 0,
-          "fee_rate": 1,
-          "is_disabled": 0,
-          "max_htlc_mtokens": 16777215000,
-          "min_htlc_mtokens": 1000,
-          "updated_at": "2022-09-01T22:57:40.000Z"
-        }
-      }
-    }
-  }
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-channels-from-pubkey',
-    title: 'GET Channels from Node Pubkey',
-    description: {
-      default: '<p>Returns a list of a node\'s channels given its <code>:pubKey</code>. Ten channels are returned at a time. Use <code>:index</code> for paging. <code>:channelStatus</code> can be <code>open</code>, <code>active</code>, or <code>closed</code>.</p>'
-    },
-    urlString: '/v1/lightning/channels?public_key=:pubKey&status=:channelStatus',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/channels?public_key=%{1}&status=%{2}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`026165850492521f4ac8abd9bd8088123446d126f648ca35e60f88177dc149ceb2`,`open`],
-          response: `[
-  {
-    "status": 1,
-    "closing_reason": null,
-    "capacity": 59200000,
-    "short_id": "751361x1324x1",
-    "id": "826130156244172801",
-    "fee_rate": 1,
-    "node": {
-      "alias": "ipayblue.com",
-      "public_key": "032fe854a231aeb2357523ee6ca263ae04ce53eee8a13767ecbb911b69fefd8ace",
-      "channels": 65,
-      "capacity": "856675361"
-    }
-  },
-  {
-    "status": 1,
-    "closing_reason": null,
-    "capacity": 51000000,
-    "short_id": "750792x1586x1",
-    "id": "825504534145138689",
-    "fee_rate": 1,
-    "node": {
-      "alias": "Escher",
-      "public_key": "02b515c74f334dee09821bee299fcbd9668182730c5719b25a8f262b28893198b0",
-      "channels": 50,
-      "capacity": "2202925844"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`0200202c1f23899d03bf3f37c87d348e6847bbd91e407df91a713c7dcf3442738b`, `open`],
-          response: `[
-  {
-    "status": 1,
-    "closing_reason": null,
-    "closing_date": null,
-    "capacity": 8000000,
-    "short_id": "2223130x18x0",
-    "id": "2444357285058838528",
-    "fee_rate": 10,
-    "node": {
-      "alias": "Gilgamesh Lightning Testnet",
-      "public_key": "034997a34858a25dc453a722efc1545d8c7749cbd4587a8d2ef149d257babd8357",
-      "channels": 121,
-      "capacity": "512199932"
-    }
-  },
-  {
-    "status": 0,
-    "closing_reason": null,
-    "closing_date": null,
-    "capacity": 1000000,
-    "short_id": "2223130x19x0",
-    "id": "2444357285058904064",
-    "fee_rate": 0,
-    "node": {
-      "alias": "routing.testnet.lnmarkets.com",
-      "public_key": "03bae2db4b57738c1ec1ffa1c5e5a4423968cc592b3b39cddf7d495e72919d6431",
-      "channels": 22,
-      "capacity": "246940161"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120`, `open`],
-          response: `[
-  {
-    "status": 1,
-    "closing_reason": null,
-    "closing_date": null,
-    "capacity": 16777215,
-    "short_id": "53659x5x0",
-    "id": "58998694435160064",
-    "fee_rate": 1,
-    "node": {
-      "alias": "STRANGESUCKER-v0.12.0-11-gea4143",
-      "public_key": "03b9e6c1dec203f47efc95d003314d22cbb12a1324de4b091fe7d68f321a56322f",
-      "channels": 4,
-      "capacity": "55778192"
-    }
-  },
-  {
-    "status": 1,
-    "closing_reason": null,
-    "closing_date": null,
-    "capacity": 15000000,
-    "short_id": "17498x2x1",
-    "id": "19239254462955521",
-    "fee_rate": 1,
-    "node": {
-      "alias": "03870a4c4c54a9b2e705",
-      "public_key": "03870a4c4c54a9b2e705023d706843ffbac5b0e95e2b80d4b02dc7a9efb5380322",
-      "channels": 2,
-      "capacity": "30000000"
-    }
-  },
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-channel-geodata',
-    title: 'GET Channel Geodata',
-    description: {
-      default: '<p>Returns a list of channels with corresponding node geodata.</p>'
-    },
-    urlString: '/v1/lightning/channels-geo',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/channels-geo`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  [
-    "03120ac28af913889cbc3cb86d7aff12bc0abe939f1fa9fb1980bdff8483197092",
-    "LIGHTNING2",
-    -77.2278,
-    38.9567,
-    "03baa70886d9200af0ffbd3f9e18d96008331c858456b16e3a9b41e735c6208fef",
-    "LIGHTNING",
-    -77.2278,
-    38.9567
-  ],
-  [
-    "033d8656219478701227199cbd6f670335c8d408a92ae88b962c49d4dc0e83e025",
-    "bfx-lnd0",
-    8.5671,
-    47.3682,
-    "028d98b9969fbed53784a36617eb489a59ab6dc9b9d77fcdca9ff55307cd98e3c4",
-    "OpenNode.com",
-    -83.0061,
-    39.9625
-  ],
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  [
-    "038863cf8ab91046230f561cd5b386cbff8309fa02e3f0c3ed161a3aeb64a643b9",
-    "aranguren.org",
-    144.9669,
-    -37.8159,
-    "028c3640c57ffe47eb41db8225968833c5032f297aeba98672d6f7037090d59e3f",
-    "lndus0.next.zaphq.io",
-    -79.9746,
-    32.8608
-  ],
-  [
-    "02be8f360e57600486b93dd33ea0872a4e14a259924ba4084f27d693a77d151158",
-    "lndus1.dev.zaphq.io",
-    -79.9746,
-    32.8608,
-    "0273ec4a4c80e767aca1477592649ad6e709ad31e7435668043a9dceccb3020f35",
-    "lndwr1.dev.zaphq.io",
-    -79.9746,
-    32.8608
-  ],
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `[
-  [
-    "02dadf6c28f3284d591cd2a4189d1530c1ff82c07059ebea150a33ab76e7364b4a",
-    "珠美ノード⚡@wakiyamap",
-    139.6895,
-    35.6897,
-    "0271cf3881e6eadad960f47125434342e57e65b98a78afa99f9b4191c02dd7ab3b",
-    "eclair@wakiyamap",
-    135.4911,
-    34.7135
-  ],
-  [
-    "03b9e6c1dec203f47efc95d003314d22cbb12a1324de4b091fe7d68f321a56322f",
-    "STRANGESUCKER-v0.12.0-11-gea4143",
-    19.1477,
-    48.7386,
-    "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-    "guggero",
-    9.491,
-    51.2993
-  ],
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'endpoint',
-    category: 'lightning',
-    httpRequestMethod: 'GET',
-    fragment: 'get-channel-geodata-node',
-    title: 'GET Channel Geodata for Node',
-    description: {
-      default: '<p>Returns a list of channels with corresponding geodata for a node with the given <code>:pubKey</code>.</p>'
-    },
-    urlString: '/v1/lightning/channels-geo/:pubKey',
-    showConditions: lightningNetworks,
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/lightning/channels-geo/%{1}`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`03d607f3e69fd032524a867b288216bfab263b6eaee4e07783799a6fe69bb84fac`],
-          response: `[
-  [
-    "03d607f3e69fd032524a867b288216bfab263b6eaee4e07783799a6fe69bb84fac",
-    "Bitrefill",
-    -77.4903,
-    39.0469,
-    "024a2e265cd66066b78a788ae615acdc84b5b0dec9efac36d7ac87513015eaf6ed",
-    "Bitrefill",
-    -6.2591,
-    53.3379
-  ],
-  [
-    "03d607f3e69fd032524a867b288216bfab263b6eaee4e07783799a6fe69bb84fac",
-    "Bitrefill",
-    -77.4903,
-    39.0469,
-    "030c3f19d742ca294a55c00376b3b355c3c90d61c6b6b39554dbc7ac19b141c14f",
-    "Bitrefill Routing",
-    -6.2591,
-    53.3379
-  ],
-  ...
-]`
-        },
-        codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`0273ec4a4c80e767aca1477592649ad6e709ad31e7435668043a9dceccb3020f35`],
-          response: `[
-  [
-    "039b1717db1193eb332d3c0bfdcce90a6aab60efa478b60963d3b406a8fc45134a",
-    "testnet.demo.btcpayserver.org",
-    -79.3503,
-    43.7806,
-    "0273ec4a4c80e767aca1477592649ad6e709ad31e7435668043a9dceccb3020f35",
-    "lndwr1.dev.zaphq.io",
-    -79.9746,
-    32.8608
-  ],
-  [
-    "0273ec4a4c80e767aca1477592649ad6e709ad31e7435668043a9dceccb3020f35",
-    "lndwr1.dev.zaphq.io",
-    -79.9746,
-    32.8608,
-    "02c6fbedc6ca81d4db5883f1d01481c8187d5f85075729a658288a6d507f770ada",
-    "HAPPYTOLL",
-    -97.822,
-    37.751
-  ],
-  ...
-]`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120`],
-          response: `[
-  [
-    "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-    "guggero",
-    9.491,
-    51.2993,
-    "0271cf3881e6eadad960f47125434342e57e65b98a78afa99f9b4191c02dd7ab3b",
-    "eclair@wakiyamap",
-    135.4911,
-    34.7135
-  ],
-  [
-    "02dadf6c28f3284d591cd2a4189d1530c1ff82c07059ebea150a33ab76e7364b4a",
-    "珠美ノード⚡@wakiyamap",
-    139.6895,
-    35.6897,
-    "02ad48db0d1a7f7c3d186ddc57f8e62c49a1234fb829af9ccd3be1a4596bc39120",
-    "guggero",
-    9.491,
-    51.2993
-  ],
-  ...
-]`
-        },
-        codeSampleLiquid: emptyCodeSample,
-        codeSampleLiquidTestnet: emptyCodeSample,
-      }
-    }
-  },
-  {
-    type: 'category',
-    category: 'accelerator-public',
-    fragment: 'accelerator-public',
-    title: 'Accelerator (Public)',
-    showConditions: [''],
-    options: { officialOnly: true },
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-public',
-    httpRequestMethod: 'POST',
-    fragment: 'accelerator-estimate',
-    title: 'POST Calculate Estimated Costs',
-    description: {
-      default: '<p>Returns estimated costs to accelerate a transaction. Optionally set the <code>X-Mempool-Auth</code> header to get customized estimation.</p>'
-    },
-    urlString: '/v1/services/accelerator/estimate',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `%{1}" "[[hostname]][[baseNetworkUrl]]/api/v1/services/accelerator/estimate`, //custom interpolation technique handled in replaceCurlPlaceholder()
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['txInput=ee13ebb99632377c15c94980357f674d285ac413452050031ea6dcd3e9b2dc29'],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `{
-  "txSummary": {
-    "txid": "ee13ebb99632377c15c94980357f674d285ac413452050031ea6dcd3e9b2dc29",
-    "effectiveVsize": 154,
-    "effectiveFee": 154,
-    "ancestorCount": 1
-  },
-  "cost": 1386,
-  "targetFeeRate": 10,
-  "nextBlockFee": 1540,
-  "userBalance": 0,
-  "mempoolBaseFee": 50000,
-  "vsizeFee": 0,
-  "pools": [
-    111,
-    102,
-    112,
-    142,
-    115
-  ],
-  "options": [
-    {
-      "fee": 1500
-    },
-    {
-      "fee": 3000
-    },
-    {
-      "fee": 12500
-    }
-  ],
-  "hasAccess": false,
-  "availablePaymentMethods": {
-    "bitcoin": {
-      "enabled": true,
-      "min": 1000,
-      "max": 10000000
-    },
-    "cashapp": {
-      "enabled": true,
-      "min": 10,
-      "max": 200
-    }
-  },
-  "unavailable": false
-}`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-public',
-    httpRequestMethod: 'POST',
-    fragment: 'accelerator-get-invoice',
-    title: 'POST Generate Acceleration Invoice',
-    description: {
-      default: '<p>Request a LN invoice to accelerate a transaction.</p>'
-    },
-    urlString: '/v1/services/payments/bitcoin',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `%{1}" "[[hostname]][[baseNetworkUrl]]/api/v1/services/payments/bitcoin`, //custom interpolation technique handled in replaceCurlPlaceholder()
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['product=ee13ebb99632377c15c94980357f674d285ac413452050031ea6dcd3e9b2dc29&amount=12500'],
-          headers: '',
-          response: `[
-  {
-    "btcpayInvoiceId": "4Ww53d7VgSa596jmCFufe7",
-    "btcDue": "0.000625",
-    "addresses": {
-      "BTC": "bc1qcvqx2kr5mktd7gvym0atrrx0sn27mwv5kkghl3m78kegndm5t8ksvcqpja",
-      "BTC_LNURLPAY": null,
-      "BTC_LightningLike": "lnbc625u1pngl0wzpp56j7cqghsw2y5q7vdu9shmpxgpzsx4pqra4wcm9vdnvqegutplk2qdxj2pskjepqw3hjqnt9d4cx7mmvypqkxcm9d3jhyct5daezq2z0wfjx2u3qf9zr5grpvd3k2mr9wfshg6t0dckk2ef3xdjkyc3e8ymrxv3nxumkxvf4vvungwfcxqen2dmxxcmngepj8q6kzce5xyengdfjxq6nqvpnx9jkzdnyvdjrxefevgexgcej8yknzdejxqmrjd3jx5mrgdpj9ycqzpuxqrpr5sp58593dzj2uauaj3afa7x47qeam8k9yyqrh9qasj2ssdzstew6qv3q9qxpqysgqj8qshfkxmj0gfkly5xfydysvsx55uhnc6fgpw66uf6hl8leu07454axe2kq0q788yysg8guel2r36d6f75546nkhmdcmec4mmlft8dsq62rnsj"
-    }
-  }
-]`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-public',
-    httpRequestMethod: 'GET',
-    fragment: 'accelerator-pending',
-    title: 'GET Pending Accelerations',
-    description: {
-      default: '<p>Returns all transactions currently being accelerated.</p>'
-    },
-    urlString: '/v1/services/accelerator/accelerations',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/services/accelerator/accelerations`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          headers: '',
-          response: `[
-  {
-    "txid": "8a183c8ae929a2afb857e7f2acd440aaefdf2797f8f7eab1c5f95ff8602abc81",
-    "added": 1707558316,
-    "feeDelta": 3500,
-    "effectiveVsize": 111,
-    "effectiveFee": 1671,
-    "pools": [
-      111
-    ]
-  },
-  {
-    "txid": "6097f295e21bdd8d725bd8d9ad4dd72b05bd795dc648bfef52150a9b2b7f7a45",
-    "added": 1707560464,
-    "feeDelta": 60000,
-    "effectiveVsize": 812,
-    "effectiveFee": 7790,
-    "pools": [
-      111
-    ]
-  }
-]`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-public',
-    httpRequestMethod: 'GET',
-    fragment: 'accelerator-public-history',
-    title: 'GET Acceleration History',
-    description: {
-      default: `<p>Returns all past accelerated transactions.
-      Filters can be applied:<ul>
-      <li><code>status</code>: <code>all</code>, <code>requested</code>, <code>accelerating</code>, <code>mined</code>, <code>completed</code>, <code>failed</code></li>
-      <li><code>timeframe</code>: <code>24h</code>, <code>3d</code>, <code>1w</code>, <code>1m</code>, <code>3m</code>, <code>6m</code>, <code>1y</code>, <code>2y</code>, <code>3y</code>, <code>4y</code>, <code>all</code></li>
-      <li><code>minedByPoolUniqueId</code>: any id from <a target="_blank" href="https://github.com/mempool/mining-pools/blob/master/pools-v2.json">pools-v2.json</a>
-      <li><code>blockHash</code>: a block hash</a>
-      <li><code>blockHeight</code>: a block height</a>
-      <li><code>page</code>: the requested page number if using pagination <i>(min: 1)</i></a>
-      <li><code>pageLength</code>: the page lenght if using pagination <i>(min: 1, max: 50)</i></a>
-      <li><code>from</code>: unix timestamp (<i>overrides <code>timeframe</code></i>)</a>
-      <li><code>to</code>: unix timestamp (<i>overrides <code>timeframe</code></i>)</a>
-      </ul></p>`
-    },
-    urlString: '/v1/services/accelerator/accelerations/history',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/services/accelerator/accelerations/history?blockHash=00000000000000000000482f0746d62141694b9210a813b97eb8445780a32003`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          headers: '',
-          response: `[
-  {
-    "txid": "f829900985aad885c13fb90555d27514b05a338202c7ef5d694f4813ad474487",
-    "status": "completed_provisional",
-    "added": 1728111527,
-    "lastUpdated": 1728112113,
-    "effectiveFee": 1385,
-    "effectiveVsize": 276,
-    "feeDelta": 3000,
-    "blockHash": "00000000000000000000cde89e34036ece454ca2d07ddd7f71ab46307ca87423",
-    "blockHeight": 864248,
-    "bidBoost": 65,
-    "boostVersion": "v2",
-    "pools": [
-      111,
-      115,
-    ],
-    "minedByPoolUniqueId": 115
-  }
-]`,
-        },
-      }
-    }
-  },
-  {
-    type: 'category',
-    category: 'accelerator-private',
-    fragment: 'accelerator-private',
-    title: 'Accelerator (Authenticated)',
-    showConditions: [''],
-    options: { officialOnly: true },
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'GET',
-    fragment: 'accelerator-top-up-history',
-    title: 'GET Top Up History',
-    description: {
-      default: '<p>Returns a list of top ups the user has made as prepayment for the accelerator service.</p>'
-    },
-    urlString: '/v1/services/accelerator/top-up-history',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/services/accelerator/top-up-history`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `[
-  {
-    "type": "Bitcoin",
-    "invoiceId": "CCunucVyNw7jUiUz64mmHz",
-    "amount": 10311031,
-    "status": "pending",
-    "date": 1706372653000,
-    "link": "/payment/bitcoin/CCunucVyNw7jUiUz64mmHz"
-  },
-  {
-    "type": "Bitcoin",
-    "invoiceId": "SG1U27R9PdWi3gH3jB9tm9",
-    "amount": 21000000,
-    "status": "paid",
-    "date": 1706372582000,
-    "link": null
-  },
-  ...
-]`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'GET',
-    fragment: 'accelerator-balance',
-    title: 'GET Available Balance',
-    description: {
-      default: '<p>Returns the user\'s currently available balance, currently locked funds, and total fees paid so far.</p>'
-    },
-    urlString: '/v1/services/accelerator/balance',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/services/accelerator/balance`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `{
-  "balance": 99900000,
-  "hold": 101829,
-  "feesPaid": 133721
-}`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'POST',
-    fragment: 'accelerator-accelerate',
-    title: 'POST Accelerate A Transaction (Pro)',
-    description: {
-      default: '<p>Sends a request to accelerate a transaction.</p>'
-    },
-    urlString: '/v1/services/accelerator/accelerate',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `%{1}" "[[hostname]][[baseNetworkUrl]]/api/v1/services/accelerator/accelerate`, //custom interpolation technique handled in replaceCurlPlaceholder()
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['txInput=ee13ebb99632377c15c94980357f674d285ac413452050031ea6dcd3e9b2dc29&userBid=21000000'],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `HTTP/1.1 200 OK`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'GET',
-    fragment: 'accelerator-history',
-    title: 'GET Acceleration History',
-    description: {
-      default: '<p>Returns the user\'s past acceleration requests.</p><p>Pass one of the following for <code>:status</code> (required): <code>all</code>, <code>requested</code>, <code>accelerating</code>, <code>mined</code>, <code>completed</code>, <code>failed</code>.<br>Pass <code>true</code> in <code>:details</code> to get a detailed <code>history</code> of the acceleration request.</p>'
-    },
-    urlString: '/v1/services/accelerator/history?status=:status&details=:details',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/services/accelerator/history?status=all&details=true`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `[
-  {
-    "id": 89,
-    "user_id": 1,
-    "txid": "ae2639469ec000ed1d14e2550cbb01794e1cd288a00cdc7cce18398ba3cc2ffe",
-    "status": "failed"
-    "fee_paid": 0,
-    "added": 1706378712,
-    "last_updated": 1706378712,
-    "confirmations": 4,
-    "base_fee": 0,
-    "vsize_fee": 0,
-    "max_bid": 7000,
-    "effective_vsize": 135,
-    "effective_fee": 3128,
-    "history": [
-      {
-        "event": "user-requested-acceleration",
-        "timestamp": 1706378712
-      },
-      {
-        "event": "accepted_test-api-key",
-        "timestamp": 1706378712
-      },
-      {
-        "event": "failed-at-block-827672",
-        "timestamp": 1706380261
-      }
-    ]
-  },
-  {
-    "id": 88,
-    "user_id": 1,
-    "txid": "c5840e89173331760e959a190b24e2a289121277ed7f8a095fe289b37cee9fde",
-    "status": "completed"
-    "fee_paid": 140019,
-    "added": 1706378704,
-    "last_updated": 1706380231,
-    "confirmations": 6,
-    "base_fee": 40000,
-    "vsize_fee": 100000,
-    "max_bid": 14000,
-    "effective_vsize": 135,
-    "effective_fee": 3152,
-    "history": [
-      {
-        "event": "user-requested-acceleration",
-        "timestamp": 1706378704
-      },
-      {
-        "event": "accepted_test-api-key",
-        "timestamp": 1706378704
-      },
-      {
-        "event": "complete-at-block-827670",
-        "timestamp": 1706380231
-      }
-    ]
-  },
-  {
-    "id": 87,
-    "user_id": 1,
-    "txid": "178b5b9b310f0d667d7ea563a2cdcc17bc8cd15261b58b1653860a724ca83458",
-    "status": "completed"
-    "fee_paid": 90062,
-    "added": 1706378684,
-    "last_updated": 1706380231,
-    "confirmations": 6,
-    "base_fee": 40000,
-    "vsize_fee": 50000,
-    "max_bid": 14000,
-    "effective_vsize": 135,
-    "effective_fee": 3260,
-    "history": [
-      {
-        "event": "user-requested-acceleration",
-        "timestamp": 1706378684
-      },
-      {
-        "event": "accepted_test-api-key",
-        "timestamp": 1706378684
-      },
-      {
-        "event": "complete-at-block-827670",
-        "timestamp": 1706380231
-      }
-    ]
-  }
-]`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'POST',
-    fragment: 'accelerator-cancel',
-    title: 'POST Cancel Acceleration (Pro)',
-    description: {
-      default: '<p>Sends a request to cancel an acceleration in the <code>accelerating</code> status.<br>You can retrieve eligible acceleration <code>id</code> using the history endpoint GET <code>/api/v1/services/accelerator/history?status=accelerating</code>.'
-    },
-    urlString: '/v1/services/accelerator/cancel',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `%{1}" "[[hostname]][[baseNetworkUrl]]/api/v1/services/accelerator/cancel`, //custom interpolation technique handled in replaceCurlPlaceholder()
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['id=42'],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `HTTP/1.1 200 OK`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'POST',
-    fragment: 'accelerator-auto-accelerate',
-    title: 'POST Auto-Accelerate A Transaction (Pro)',
-    description: {
-      default: '<p>Sends a request to automatically accelerate a transaction based on specified trigger conditions.</p><p>The <code>type</code> parameter must be one of: <code>time_delay</code>, <code>block_height</code>, <code>timestamp</code>, or <code>next_block</code>.<br>The <code>value</code> parameter is required for types other than <code>next_block</code> and depends on the type: hours (floating point, min = 0.5) for <code>time_delay</code>, block height (min = next block height) for <code>block_height</code>, or Unix timestamp (min = now + 60 seconds) for <code>timestamp</code>.</p>'
-    },
-    urlString: '/v1/services/accelerator/auto-accelerate',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `%{1}" "[[hostname]][[baseNetworkUrl]]/api/v1/services/accelerator/auto-accelerate`, //custom interpolation technique handled in replaceCurlPlaceholder()
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['txInput=ee13ebb99632377c15c94980357f674d285ac413452050031ea6dcd3e9b2dc29&type=time_delay&value=0.5'],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `HTTP/1.1 200 OK`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'GET',
-    fragment: 'accelerator-auto-accelerate-history',
-    title: 'GET Auto-Acceleration History',
-    description: {
-      default: '<p>Returns the user\'s auto-acceleration requests history.</p><p>Possible status values: <code>tracking</code>, <code>accelerated</code>, <code>confirmed</code>, <code>canceled</code>.</p>'
-    },
-    urlString: '/v1/services/accelerator/auto-accelerate/history',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `/api/v1/services/accelerator/auto-accelerate/history`,
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `[
-  {
-    "id": 15,
-    "txid": "ee13ebb99632377c15c94980357f674d285ac413452050031ea6dcd3e9b2dc29",
-    "status": "accelerated",
-    "added": 1706378712,
-    "trigger_type": "time_delay",
-    "trigger_value": 0.5
-  },
-  {
-    "id": 14,
-    "txid": "c5840e89173331760e959a190b24e2a289121277ed7f8a095fe289b37cee9fde",
-    "status": "confirmed",
-    "added": 1706378704,
-    "trigger_type": "block_height",
-    "trigger_value": 827670
-  },
-  {
-    "id": 13,
-    "txid": "178b5b9b310f0d667d7ea563a2cdcc17bc8cd15261b58b1653860a724ca83458",
-    "status": "tracking",
-    "added": 1706378684,
-    "trigger_type": "next_block",
-    "trigger_value": null
-  }
-]`,
-        },
-      }
-    }
-  },
-  {
-    options: { officialOnly: true },
-    type: 'endpoint',
-    category: 'accelerator-private',
-    httpRequestMethod: 'POST',
-    fragment: 'accelerator-auto-accelerate-cancel',
-    title: 'POST Cancel Auto-Acceleration (Pro)',
-    description: {
-      default: '<p>Sends a request to cancel an auto-acceleration in the <code>tracking</code> status.<br>You can retrieve eligible auto-acceleration <code>txid</code> using the history endpoint GET <code>/api/v1/services/accelerator/auto-accelerate/history</code>.</p>'
-    },
-    urlString: '/v1/services/accelerator/auto-accelerate/cancel',
-    showConditions: [''],
-    showJsExamples: showJsExamplesDefaultFalse,
-    codeExample: {
-      default: {
-        codeTemplate: {
-          curl: `%{1}" "[[hostname]][[baseNetworkUrl]]/api/v1/services/accelerator/auto-accelerate/cancel`, //custom interpolation technique handled in replaceCurlPlaceholder()
-          commonJS: ``,
-          esModule: ``
-        },
-        codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['txid=178b5b9b310f0d667d7ea563a2cdcc17bc8cd15261b58b1653860a724ca83458'],
-          headers: 'X-Mempool-Auth: stacksats',
-          response: `HTTP/1.1 200 OK`,
-        },
-      }
-    }
-  },
 ];
 
 export const faqData = [
@@ -12630,7 +9672,7 @@ export const faqData = [
     category: 'basics',
     showConditions: bitcoinNetworks,
     fragment: 'what-is-svb',
-    title: 'What is sat/vB?',
+    title: 'What is bits/vB?',
   },
   {
     type: 'category',
@@ -12721,7 +9763,7 @@ export const faqData = [
     category: 'advanced',
     showConditions: bitcoinNetworks,
     fragment: 'how-big-is-mempool-used-by-mempool-space',
-    title: 'How big is the mempool used by mempool.space?',
+    title: 'How big is the mempool used by this explorer?',
     options: { officialOnly: true },
   },
   {
@@ -12756,24 +9798,8 @@ export const faqData = [
     type: 'endpoint',
     category: 'advanced',
     showConditions: bitcoinNetworks,
-    options: { auditOnly: true },
-    fragment: 'how-do-block-audits-work',
-    title: 'How do block audits work?',
-  },
-  {
-    type: 'endpoint',
-    category: 'advanced',
-    showConditions: bitcoinNetworks,
-    options: { auditOnly: true },
-    fragment: 'what-is-block-health',
-    title: 'What is block health?',
-  },
-  {
-    type: 'endpoint',
-    category: 'advanced',
-    showConditions: bitcoinNetworks,
-    fragment: 'how-do-mempool-goggles-work',
-    title: 'How do Mempool Goggles™ work?',
+    fragment: 'how-do-transaction-filters-work',
+    title: 'How do transaction filters work?',
   },
   {
     type: 'endpoint',
@@ -12814,29 +9840,22 @@ export const faqData = [
     type: 'endpoint',
     category: 'self-hosting',
     showConditions: bitcoinNetworks,
-    fragment: 'host-my-own-instance-raspberry-pi',
-    title: 'How can I host my own instance on a Raspberry Pi?',
-  },
-  {
-    type: 'endpoint',
-    category: 'self-hosting',
-    showConditions: bitcoinNetworks,
     fragment: 'host-my-own-instance-server',
-    title: 'How can I host a Mempool instance on my own server?',
+    title: 'How can I host an instance on my own server?',
   },
   {
     type: 'endpoint',
     category: 'self-hosting',
     showConditions: bitcoinNetworks,
     fragment: 'install-mempool-with-docker',
-    title: 'Can I install Mempool using Docker?',
+    title: 'Can I install this explorer using Docker?',
   },
   {
     type: 'endpoint',
     category: 'self-hosting',
     showConditions: bitcoinNetworks,
     fragment: 'address-lookup-issues',
-    title: 'Why do I get an error for certain address lookups on my Mempool instance?',
+    title: 'Why do I get an error for certain address lookups on my own instance?',
   }
 ];
 
@@ -12964,7 +9983,7 @@ export const electrumApiDocsData = [
     fragment: 'blockchain-estimatefee',
     title: 'blockchain.estimatefee',
     description: {
-      default: 'Returns the estimated transaction fee for confirmation within a given number of blocks. Returns fee in BTC/kB, or -1 if estimation is not available.'
+      default: 'Returns the estimated transaction fee for confirmation within a given number of blocks. Returns fee in QBT/kB, or -1 if estimation is not available.'
     },
     showConditions: bitcoinNetworks.concat(liquidNetworks),
     requestExample: '{"jsonrpc":"2.0","id":1,"method":"blockchain.estimatefee","params":[6]}',
@@ -12980,7 +9999,7 @@ export const electrumApiDocsData = [
     fragment: 'blockchain-relayfee',
     title: 'blockchain.relayfee',
     description: {
-      default: 'Returns the minimum relay fee for low-priority transactions in BTC/kB.'
+      default: 'Returns the minimum relay fee for low-priority transactions in QBT/kB.'
     },
     showConditions: bitcoinNetworks.concat(liquidNetworks),
     requestExample: '{"jsonrpc":"2.0","id":1,"method":"blockchain.relayfee","params":[]}',
@@ -13288,7 +10307,7 @@ export const electrumApiDocsData = [
     fragment: 'mempool-get-fee-histogram',
     title: 'mempool.get_fee_histogram',
     description: {
-      default: 'Returns a histogram of transaction fees in the mempool. Each entry is a pair of [fee_rate, cumulative_vsize] where fee_rate is in satoshis per virtual byte.'
+      default: 'Returns a histogram of transaction fees in the mempool. Each entry is a pair of [fee_rate, cumulative_vsize] where fee_rate is in bits per virtual byte.'
     },
     showConditions: bitcoinNetworks.concat(liquidNetworks),
     requestExample: '{"jsonrpc":"2.0","id":1,"method":"mempool.get_fee_histogram","params":[]}',

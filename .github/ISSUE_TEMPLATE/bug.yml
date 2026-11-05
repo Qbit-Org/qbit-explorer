@@ -1,0 +1,67 @@
+name: Bug report
+description: Report something broken or wrong in the explorer or its API.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for bugs in qbit-explorer: its pages and its REST and WebSocket API, on mempool.qbit.org, mempool-testnet.qbit.org, or your own instance.
+
+        - **Security problems:** do not open an issue. Email contact@qbit.org as the [security policy](https://github.com/Qbit-Org/qbit-explorer/security/policy) describes.
+        - **Node or indexer bugs:** report them to [Qbit-Org/qbit](https://github.com/Qbit-Org/qbit/issues) or [Qbit-Org/qbit-electrs](https://github.com/Qbit-Org/qbit-electrs/issues).
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network
+      options:
+        - mainnet
+        - testnet4
+        - regtest
+    validations:
+      required: true
+  - type: input
+    id: url
+    attributes:
+      label: Page URL
+      description: The page where you saw the bug. For an API bug, the request URL.
+      placeholder: https://mempool.qbit.org/tx/<txid>
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: Browser, version, and operating system. Write "n/a" for an API-only bug.
+      placeholder: Firefox 140 on Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead. Attach screenshots if they help.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Browser console errors, API responses, or, for your own instance, the commit you run.
+    validations:
+      required: false

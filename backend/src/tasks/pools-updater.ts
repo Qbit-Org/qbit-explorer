@@ -5,8 +5,22 @@ import DB from '../database';
 import backendInfo from '../api/backend-info';
 import logger from '../logger';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import * as crypto from 'crypto';
+import * as http from 'http';
 import * as https from 'https';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Common } from '../api/common';
+
+export const QBIT_POOLS_SHA_PREFIX = 'qbit-';
+const LEGACY_BITCOIN_POOLS_SOURCE = 'mempool/mining-pools';
+
+// Derive the definition hash from the vendored pool set content so that any
+// change to pools-qbit.json invalidates the DB marker and triggers a re-import
+// (and block re-indexing) on the next update run.
+export function computeQbitPoolsSha(poolsJson: any): string {
+  return QBIT_POOLS_SHA_PREFIX + crypto.createHash('sha256').update(JSON.stringify(poolsJson)).digest('hex');
+}
 
 /**
  * Maintain the most recent version of pools-v2.json
@@ -33,9 +47,7 @@ class PoolsUpdater {
 
   /** @asyncSafe */
   public async updatePoolsJson(): Promise<void> {
-    if (['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) === false ||
-      config.MEMPOOL.ENABLED === false
-    ) {
+    if (config.MEMPOOL.ENABLED === false) {
       return;
     }
 
@@ -49,6 +61,33 @@ class PoolsUpdater {
     try {
       if (config.DATABASE.ENABLED === true) {
         this.currentSha = await this.getShaFromDb();
+      }
+
+      if (this.isPoolSourceDisabled()) {
+        let qbitPoolsJson;
+        try {
+          qbitPoolsJson = this.loadQbitPoolsJson();
+        } catch (e) {
+          // The vendored pool file is required: clear the sha loaded from the
+          // db so the startup guard in index.ts aborts loudly instead of
+          // running with an unloadable pool definition state. Runtime update
+          // ticks re-read the db marker on the next run, so this stays a
+          // startup-only abort.
+          this.currentSha = null;
+          throw e;
+        }
+        const qbitPoolsSha = computeQbitPoolsSha(qbitPoolsJson);
+        if (this.currentSha === qbitPoolsSha) {
+          poolsParser.setMiningPools(qbitPoolsJson);
+          return;
+        }
+
+        if (this.isLegacyBitcoinPoolSource()) {
+          logger.warn(`Legacy Bitcoin mining-pools URL configured; importing vendored qbit pool set instead`, this.tag);
+        }
+        logger.info(`Mining pools source is disabled; importing vendored qbit pool set (${qbitPoolsSha})`, this.tag);
+        await this.importPoolsJson(qbitPoolsJson, qbitPoolsSha);
+        return;
       }
 
       const githubSha = await this.fetchPoolsSha(); // Fetch pools-v2.json sha from github
@@ -81,42 +120,89 @@ class PoolsUpdater {
       if (poolsJson === undefined) {
         return;
       }
-      poolsParser.setMiningPools(poolsJson);
-
-      if (config.DATABASE.ENABLED === false) { // Don't run db operations
-        logger.info(`Mining pools-v2.json (${githubSha}) import completed (no database)`, this.tag);
-        return;
-      }
-
-      try {
-        await DB.query('START TRANSACTION;');
-        await this.updateDBSha(githubSha);
-        await poolsParser.migratePoolsJson();
-        await DB.query('COMMIT;');
-      } catch (e) {
-        logger.err(`Could not migrate mining pools, rolling back. Exception: ${JSON.stringify(e)}`, this.tag);
-        await DB.query('ROLLBACK;');
-      }
-      logger.info(`Mining pools-v2.json (${githubSha}) import completed`, this.tag);
+      await this.importPoolsJson(poolsJson, githubSha);
 
     } catch (e) {
       // fast-forward lastRun to 10 minutes before the next scheduled update
       this.lastRun = now - Math.max(config.MEMPOOL.POOLS_UPDATE_DELAY - 600, 600);
-      logger.err(`PoolsUpdater failed. Will try again in 10 minutes. Exception: ${JSON.stringify(e)}`, this.tag);
+      // JSON.stringify(e) renders Error objects as '{}', hiding the message
+      logger.err(`PoolsUpdater failed. Will try again in 10 minutes. Exception: ${e instanceof Error ? e.message : JSON.stringify(e)}`, this.tag);
     }
+  }
+
+  private isPoolSourceDisabled(): boolean {
+    return (!this.poolsUrl?.trim() && !this.treeUrl?.trim()) || this.isLegacyBitcoinPoolSource();
+  }
+
+  private isLegacyBitcoinPoolSource(): boolean {
+    return [this.poolsUrl, this.treeUrl].some((configuredUrl) => configuredUrl?.includes(LEGACY_BITCOIN_POOLS_SOURCE));
+  }
+
+  private loadQbitPoolsJson(): any {
+    const candidates = [
+      path.resolve(process.cwd(), 'pools-qbit.json'),
+      path.resolve(__dirname, '../pools-qbit.json'),
+      path.resolve(__dirname, '../../pools-qbit.json'),
+    ];
+
+    for (const filePath of candidates) {
+      if (fs.existsSync(filePath)) {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      }
+    }
+
+    // A silent empty fallback would import an empty pool set under a
+    // valid-looking content sha and wipe all existing pool attributions.
+    throw new Error(`Cannot find pools-qbit.json (checked: ${candidates.join(', ')})`);
+  }
+
+  /** @asyncSafe */
+  private async importPoolsJson(poolsJson: any, githubSha: string): Promise<void> {
+    poolsParser.setMiningPools(poolsJson);
+
+    if (config.DATABASE.ENABLED === false) { // Don't run db operations
+      this.currentSha = githubSha;
+      logger.info(`Mining pools-v2.json (${githubSha}) import completed (no database)`, this.tag);
+      return;
+    }
+
+    const previousSha = this.currentSha;
+    try {
+      await DB.query('START TRANSACTION;');
+      this.currentSha = githubSha;
+      // Write the definition marker only after the migration succeeded: the
+      // pooled DB.query calls are not pinned to the transaction's connection,
+      // so a marker written first could persist even when a later write fails,
+      // permanently skipping re-imports. With the marker last, a failed import
+      // keeps the old marker and the (idempotent) migration retries later.
+      await poolsParser.migratePoolsJson(githubSha);
+      await this.updateDBSha(githubSha);
+      await DB.query('COMMIT;');
+    } catch (e) {
+      this.currentSha = githubSha.startsWith(QBIT_POOLS_SHA_PREFIX) ? null : previousSha;
+      logger.err(`Could not migrate mining pools, rolling back. Exception: ${JSON.stringify(e)}`, this.tag);
+      try {
+        await DB.query('ROLLBACK;');
+      } catch (rollbackError) {
+        logger.err(`Could not roll back mining pools migration. Exception: ${JSON.stringify(rollbackError)}`, this.tag);
+      }
+      throw e;
+    }
+    logger.info(`Mining pools-v2.json (${githubSha}) import completed`, this.tag);
   }
 
   /**
    * Fetch our latest pools-v2.json sha from the db
    */
+  /** @asyncSafe */
   private async updateDBSha(githubSha: string): Promise<void> {
-    this.currentSha = githubSha;
     if (config.DATABASE.ENABLED === true) {
       try {
         await DB.query('DELETE FROM state where name="pools_json_sha"');
-        await DB.query(`INSERT INTO state VALUES('pools_json_sha', NULL, '${githubSha}')`);
+        await DB.query('INSERT INTO state VALUES(?, NULL, ?)', ['pools_json_sha', githubSha]);
       } catch (e) {
         logger.err('Cannot save github pools-v2.json sha into the db. Reason: ' + (e instanceof Error ? e.message : e), this.tag);
+        throw e;
       }
     }
   }
@@ -163,7 +249,9 @@ class PoolsUpdater {
         'User-Agent': string
       };
       timeout: number;
+      httpAgent?: http.Agent;
       httpsAgent?: https.Agent;
+      proxy?: false;
     };
     const setDelay = (secs: number = 1): Promise<void> => new Promise(resolve => setTimeout(() => resolve(), secs * 1000));
     const axiosOptions: axiosOptions = {
@@ -194,6 +282,10 @@ class PoolsUpdater {
           }
 
           axiosOptions.httpsAgent = new SocksProxyAgent(socksOptions);
+          // route http:// URLs and https->http redirects through SOCKS as well
+          axiosOptions.httpAgent = axiosOptions.httpsAgent;
+          // stop axios from swapping the SOCKS agent for a proxy from the environment (HTTPS_PROXY, ALL_PROXY)
+          axiosOptions.proxy = false;
         }
 
         const data: AxiosResponse = await axios.get(path, axiosOptions);

@@ -16,6 +16,9 @@ BACKEND_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
 
 cd "$BACKEND_DIR"
 
+# This script runs on the port in mempool-config.test.json, so publish that one
+unset MEMPOOL_TEST_DB_HOST_PORT
+
 # Detect docker compose command (v1 or v2)
 if docker compose version &> /dev/null; then
   DOCKER_COMPOSE="docker compose"

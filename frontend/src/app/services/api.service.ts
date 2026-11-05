@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
-import { CpfpInfo, OptimizedMempoolStats, AddressInformation, LiquidPegs, ITranslators, PoolStat, BlockExtended, TransactionStripped, RewardStats, AuditScore, BlockSizesAndWeights,
-  RbfTree, BlockAudit, CurrentPegs, AuditStatus, FederationAddress, FederationUtxo, RecentPeg, PegsVolume, AccelerationInfo, TestMempoolAcceptResult, WalletAddress, Treasury, SubmitPackageResult, ChainTip, StaleTip } from '@interfaces/node-api.interface';
+import { CpfpInfo, OptimizedMempoolStats, AddressInformation, ITranslators, PoolStat, BlockExtended, TransactionStripped, RewardStats, AuditScore, BlockSizesAndWeights,
+  RbfTree, BlockAudit, BlockSpacingResponse, HistoricalHashrateResponse, TestMempoolAcceptResult, SubmitPackageResult, ChainTip, StaleTip } from '@interfaces/node-api.interface';
 import { BehaviorSubject, Observable, catchError, filter, map, of, shareReplay, take, tap } from 'rxjs';
 import { StateService } from '@app/services/state.service';
 import { Transaction } from '@interfaces/electrs.interface';
@@ -129,7 +129,7 @@ export class ApiService {
   }
 
   getAboutPageProfiles$(): Observable<any[]> {
-    return this.httpClient.get<any[]>(this.apiBaseUrl + '/api/v1/services/sponsors');
+    return of([]);
   }
 
   getOgs$(): Observable<any> {
@@ -174,75 +174,6 @@ export class ApiService {
 
   getStaleTips$(): Observable<StaleTip[]> {
     return this.httpClient.get<StaleTip[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/stale-tips');
-  }
-
-  liquidPegs$(): Observable<CurrentPegs> {
-    return this.httpClient.get<CurrentPegs>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/pegs');
-  }
-
-  pegsVolume$(): Observable<PegsVolume[]> {
-    return this.httpClient.get<PegsVolume[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/pegs/volume');
-  }
-
-  listLiquidPegsMonth$(): Observable<LiquidPegs[]> {
-    return this.httpClient.get<LiquidPegs[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/pegs/month');
-  }
-
-  liquidReserves$(): Observable<CurrentPegs> {
-    return this.httpClient.get<CurrentPegs>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves');
-  }
-
-  listLiquidReservesMonth$(): Observable<LiquidPegs[]> {
-    return this.httpClient.get<LiquidPegs[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/month');
-  }
-
-  federationAuditSynced$(): Observable<AuditStatus> {
-    return this.httpClient.get<AuditStatus>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/status');
-  }
-
-  federationAddresses$(): Observable<FederationAddress[]> {
-    return this.httpClient.get<FederationAddress[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/addresses');
-  }
-
-  federationUtxos$(): Observable<FederationUtxo[]> {
-    return this.httpClient.get<FederationUtxo[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/utxos');
-  }
-
-  expiredUtxos$(): Observable<FederationUtxo[]> {
-    return this.httpClient.get<FederationUtxo[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/utxos/expired');
-  }
-
-  emergencySpentUtxos$(): Observable<FederationUtxo[]> {
-    return this.httpClient.get<FederationUtxo[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/utxos/emergency-spent');
-  }
-
-  recentPegsList$(count: number = 0): Observable<RecentPeg[]> {
-    return this.httpClient.get<RecentPeg[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/pegs/list/' + count);
-  }
-
-  pegsCount$(): Observable<any> {
-    return this.httpClient.get<number>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/pegs/count');
-  }
-
-  federationAddressesNumber$(): Observable<any> {
-    return this.httpClient.get<any>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/addresses/total');
-  }
-
-  federationUtxosNumber$(): Observable<any> {
-    return this.httpClient.get<any>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/utxos/total');
-  }
-
-  emergencySpentUtxosStats$(): Observable<any> {
-    return this.httpClient.get<any>(this.apiBaseUrl + this.apiBasePath + '/api/v1/liquid/reserves/utxos/emergency-spent/stats');
-  }
-
-  listFeaturedAssets$(network: string = 'liquid'): Observable<any[]> {
-    if (network === 'liquid') {return this.httpClient.get<any[]>(this.apiBaseUrl + '/api/v1/assets/featured');}
-    return of([]);
-  }
-
-  getAssetGroup$(id: string): Observable<any> {
-    return this.httpClient.get<any[]>(this.apiBaseUrl + '/api/v1/assets/group/' + id);
   }
 
   postTransaction$(hexPayload: string): Observable<any> {
@@ -335,15 +266,14 @@ export class ApiService {
     return this.httpClient.get<TransactionStripped>(this.apiBaseUrl + this.apiBasePath + '/api/v1/block/' + hash + '/tx/' + txid + '/summary');
   }
 
-  getDifficultyAdjustments$(interval: string | undefined): Observable<any> {
-    return this.httpClient.get<any[]>(
-        this.apiBaseUrl + this.apiBasePath + `/api/v1/mining/difficulty-adjustments` +
-        (interval !== undefined ? `/${interval}` : ''), { observe: 'response' }
+  getBlockSpacing$(interval: string): Observable<BlockSpacingResponse> {
+    return this.httpClient.get<BlockSpacingResponse>(
+        this.apiBaseUrl + this.apiBasePath + `/api/v1/mining/block-spacing/${interval}`
       );
   }
 
-  getHistoricalHashrate$(interval: string | undefined): Observable<any> {
-    return this.httpClient.get<any[]>(
+  getHistoricalHashrate$(interval: string | undefined): Observable<HttpResponse<HistoricalHashrateResponse>> {
+    return this.httpClient.get<HistoricalHashrateResponse>(
         this.apiBaseUrl + this.apiBasePath + `/api/v1/mining/hashrate` +
         (interval !== undefined ? `/${interval}` : ''), { observe: 'response' }
       );
@@ -428,52 +358,7 @@ export class ApiService {
   }
 
   getEnterpriseInfo$(name: string): Observable<any> {
-    return this.httpClient.get<any>(this.apiBaseUrl + `/api/v1/services/enterprise/info/` + name);
-  }
-
-  getChannelByTxIds$(txIds: string[]): Observable<any[]> {
-    let params = new HttpParams();
-    txIds.forEach((txId: string) => {
-      params = params.append('txId[]', txId);
-    });
-    return this.httpClient.get<any[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/channels/txids/', { params });
-  }
-
-  lightningSearch$(searchText: string): Observable<{ nodes: any[], channels: any[] }> {
-    const params = new HttpParams().set('searchText', searchText);
-    // Don't request the backend if searchText is less than 3 characters
-    if (searchText.length < 3) {
-      return of({ nodes: [], channels: [] });
-    }
-    return this.httpClient.get<{ nodes: any[], channels: any[] }>(this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/search', { params });
-  }
-
-  getNodesPerIsp(): Observable<any> {
-    return this.httpClient.get<any[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/nodes/isp-ranking');
-  }
-
-  getNodeForCountry$(country: string): Observable<any> {
-    return this.httpClient.get<any[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/nodes/country/' + country);
-  }
-
-  getNodeForISP$(isp: string): Observable<any> {
-    return this.httpClient.get<any[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/nodes/isp/' + isp);
-  }
-
-  getNodesPerCountry$(): Observable<any> {
-    return this.httpClient.get<any[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/nodes/countries');
-  }
-
-  getWorldNodes$(): Observable<any> {
-    return this.httpClient.get<any[]>(this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/nodes/world');
-  }
-
-  getChannelsGeo$(publicKey?: string, style?: 'graph' | 'nodepage' | 'widget' | 'channelpage'): Observable<any> {
-    return this.httpClient.get<any[]>(
-      this.apiBaseUrl + this.apiBasePath + '/api/v1/lightning/channels-geo' +
-        (publicKey !== undefined ? `/${publicKey}`   : '') +
-        (style     !== undefined ? `?style=${style}` : '')
-    );
+    return of(null);
   }
 
   getHistoricalPrice$(timestamp: number | undefined, currency?: string): Observable<Conversion> {
@@ -529,54 +414,6 @@ export class ApiService {
       `${this.apiBaseUrl}${this.apiBasePath}/api/v1/historical-price` +
         (queryParams.length > 0 ? `?${queryParams.join('&')}` : '')
     );
-  }
-
-  getTreasuries$(): Observable<Treasury[]> {
-    return this.httpClient.get<Treasury[]>(
-      this.apiBaseUrl + this.apiBasePath + `/api/v1/treasuries`
-    );
-  }
-
-  getWallet$(walletName: string): Observable<Record<string, WalletAddress>> {
-    return this.httpClient.get<Record<string, WalletAddress>>(
-      this.apiBaseUrl + this.apiBasePath + `/api/v1/wallet/${walletName}`
-    );
-  }
-
-  getAccelerationsByPool$(slug: string): Observable<AccelerationInfo[]> {
-    return this.httpClient.get<AccelerationInfo[]>(
-      this.apiBaseUrl + this.apiBasePath + `/api/v1/accelerations/pool/${slug}`
-    );
-  }
-
-  getAccelerationsByHeight$(height: number): Observable<AccelerationInfo[]> {
-    return this.httpClient.get<AccelerationInfo[]>(
-      this.apiBaseUrl + this.apiBasePath + `/api/v1/accelerations/block/${height}`
-    );
-  }
-
-  getRecentAccelerations$(interval: string | undefined): Observable<AccelerationInfo[]> {
-    return this.httpClient.get<AccelerationInfo[]>(
-      this.apiBaseUrl + this.apiBasePath + '/api/v1/accelerations/interval' + (interval !== undefined ? `/${interval}` : '')
-    );
-  }
-
-  getAccelerationTotals$(pool?: string, interval?: string): Observable<{ cost: number, count: number }> {
-    const queryParams = new URLSearchParams();
-    if (pool) {
-      queryParams.append('pool', pool);
-    }
-    if (interval) {
-      queryParams.append('interval', interval);
-    }
-    const queryString = queryParams.toString();
-    return this.httpClient.get<{ cost: number, count: number }>(
-      this.apiBaseUrl + this.apiBasePath + '/api/v1/accelerations/total' + (queryString?.length ? '?' + queryString : '')
-    );
-  }
-
-  logAccelerationRequest$(txid: string): Observable<any> {
-    return this.httpClient.post(this.apiBaseUrl + this.apiBasePath + '/api/v1/acceleration/request/' + txid, '');
   }
 
   getPrevouts$(outpoints: {txid: string; vout: number}[]): Observable<any> {

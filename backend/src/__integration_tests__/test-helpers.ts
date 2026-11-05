@@ -138,10 +138,12 @@ export async function insertTestBlock(blockData: {
   tx_count?: number;
   difficulty?: number;
   poolId?: number | null;
+  version?: number;
+  bits?: number;
 }) {
   const timestamp = blockData.blockTimestamp || new Date();
   const size = blockData.size || 1000000;
-  const weight = blockData.weight || 4000000;
+  const weight = blockData.weight || 2000000;
   const txCount = blockData.tx_count || 2000;
 
   await DB.query(
@@ -164,8 +166,8 @@ export async function insertTestBlock(blockData: {
       txCount,
       blockData.difficulty || 1.0,
       blockData.poolId !== undefined ? blockData.poolId : null,
-      0x20000000,
-      0x1d00ffff,
+      blockData.version ?? 0x20000000,
+      blockData.bits ?? 0x1d00ffff,
       0,
       '0000000000000000000000000000000000000000000000000000000000000000',
       '0000000000000000000000000000000000000000000000000000000000000000',
@@ -187,4 +189,3 @@ export async function insertTestBlock(blockData: {
     ]
   );
 }
-

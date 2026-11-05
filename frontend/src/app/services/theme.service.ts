@@ -18,11 +18,12 @@ export class ThemeService {
     private storageService: StorageService,
     private stateService: StateService,
   ) {
-    let theme = this.stateService.env.customize?.theme || this.storageService.getValue('theme-preference') || 'default';
+    // the qbit theme is this fork's default look for fresh visitors
+    let theme = this.stateService.env.customize?.theme || this.storageService.getValue('theme-preference') || 'qbit';
     // theme preference must be a valid known public theme
-    if (!this.stateService.env.customize?.theme && !['default', 'contrast', 'softsimon'].includes(theme)) {
-      theme = 'default';
-      this.storageService.setValue('theme-preference', 'default');
+    if (!this.stateService.env.customize?.theme && !['default', 'contrast', 'softsimon', 'qbit'].includes(theme)) {
+      theme = 'qbit';
+      this.storageService.setValue('theme-preference', 'qbit');
     }
     this.themeState$ = new BehaviorSubject({ theme, loading: false });
     this.apply(theme);
@@ -67,7 +68,7 @@ export class ThemeService {
         this.mempoolFeeColors = theme === 'contrast' || theme === 'bukele' ? contrastMempoolFeeColors : defaultMempoolFeeColors;
         this.themeState$.next({ theme, loading: false });
       };
-      this.style.onerror = () => this.apply('default');
+      this.style.onerror = () => this.fallbackToDefault();
       this.style.href = this.getThemeFile(theme);
 
       if (!this.stateService.env.customize?.theme) {
@@ -75,8 +76,21 @@ export class ThemeService {
       }
     } catch (err) {
       console.log('failed to apply theme stylesheet: ', err);
-      this.apply('default');
+      this.fallbackToDefault();
     }
+  }
+
+  // session-only recovery when a theme stylesheet fails to load: render the
+  // built-in default without overwriting the stored preference, so the
+  // preferred theme (e.g. the qbit fork default) is retried on the next visit
+  private fallbackToDefault(): void {
+    if (this.style) {
+      this.style.remove();
+      this.style = null;
+    }
+    this.theme = 'default';
+    this.mempoolFeeColors = defaultMempoolFeeColors;
+    this.themeState$.next({ theme: 'default', loading: false });
   }
 
   private getThemeFile(theme: string): string {

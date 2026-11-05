@@ -29,7 +29,8 @@ describe('Mempool Backend Config', () => {
         CACHE_ENABLED: true,
         CLEAR_PROTECTION_MINUTES: 20,
         RECOMMENDED_FEE_PERCENTILE: 50,
-        BLOCK_WEIGHT_UNITS: 4000000,
+        BLOCK_WEIGHT_UNITS: 2000000,
+        BLOCK_TARGET_SPACING_SECONDS: 60,
         INITIAL_BLOCKS_AMOUNT: 8,
         MEMPOOL_BLOCKS_AMOUNT: 8,
         INDEXING_BLOCKS_AMOUNT: 11000,
@@ -39,11 +40,11 @@ describe('Mempool Backend Config', () => {
         EXTERNAL_RETRY_INTERVAL: 0,
         USER_AGENT: 'mempool',
         STDOUT_LOG_MIN_PRIORITY: 'debug',
-        POOLS_JSON_TREE_URL: 'https://api.github.com/repos/mempool/mining-pools/git/trees/master',
-        POOLS_JSON_URL: 'https://raw.githubusercontent.com/mempool/mining-pools/master/pools-v2.json',
+        POOLS_JSON_TREE_URL: '',
+        POOLS_JSON_URL: '',
         POOLS_UPDATE_DELAY: 604800,
         AUDIT: false,
-        RUST_GBT: true,
+        RUST_GBT: false,
         LIMIT_GBT: false,
         CPFP_INDEXING: false,
         MAX_BLOCKS_BULK_QUERY: 0,
@@ -69,7 +70,7 @@ describe('Mempool Backend Config', () => {
 
       expect(config.CORE_RPC).toStrictEqual({
         HOST: '127.0.0.1',
-        PORT: 8332,
+        PORT: 8352,
         USERNAME: 'mempool',
         PASSWORD: 'mempool',
         TIMEOUT: 60000,
@@ -80,7 +81,7 @@ describe('Mempool Backend Config', () => {
 
       expect(config.SECOND_CORE_RPC).toStrictEqual({
         HOST: '127.0.0.1',
-        PORT: 8332,
+        PORT: 8352,
         USERNAME: 'mempool',
         PASSWORD: 'mempool',
         TIMEOUT: 60000,
@@ -121,10 +122,8 @@ describe('Mempool Backend Config', () => {
       });
 
       expect(config.EXTERNAL_DATA_SERVER).toStrictEqual({
-        MEMPOOL_API: 'https://mempool.space/api/v1',
-        MEMPOOL_ONION: 'http://mempoolhqx4isw62xs7abwphsq7ldayuidyx2v2oethdhhj6mlo2r6ad.onion/api/v1',
-        LIQUID_API: 'https://liquid.network/api/v1',
-        LIQUID_ONION: 'http://liquidmom47f6s3m53ebfxn47p76a6tlnxib3wp6deux7wuzotdr6cyd.onion/api/v1'
+        MEMPOOL_API: '',
+        MEMPOOL_ONION: ''
       });
 
       expect(config.MAXMIND).toStrictEqual({
@@ -137,7 +136,7 @@ describe('Mempool Backend Config', () => {
       expect(config.REPLICATION).toStrictEqual({
         ENABLED: false,
         AUDIT: false,
-        AUDIT_START_HEIGHT: 774000,
+        AUDIT_START_HEIGHT: 0,
         STATISTICS: false,
         STATISTICS_START_TIME: 1481932800,
         SERVERS: []
@@ -170,6 +169,7 @@ describe('Mempool Backend Config', () => {
   test('should override the default values with the passed values', () => {
     jest.isolateModules(() => {
       const fixture = JSON.parse(fs.readFileSync(`${__dirname}/../__fixtures__/mempool-config.template.json`, 'utf8'));
+      fixture.MEMPOOL.NETWORK = 'mainnet';
       jest.mock('../../mempool-config.json', () => (fixture), { virtual: true });
 
       const config = jest.requireActual('../config').default;
@@ -198,6 +198,62 @@ describe('Mempool Backend Config', () => {
 
       expect(config.REDIS).toStrictEqual(fixture.REDIS);
     });
+  });
+
+  test('should reject networks outside the qbit chain set', () => {
+    jest.isolateModules(() => {
+      jest.mock('../../mempool-config.json', () => ({
+        MEMPOOL: { NETWORK: 'liquid' }
+      }), { virtual: true });
+
+      expect(() => jest.requireActual('../config')).toThrow(
+        'Unsupported MEMPOOL.NETWORK "liquid". Supported qbit networks: mainnet, testnet, testnet4, signet, regtest'
+      );
+    });
+  });
+
+  test('should keep production templates on qbit networks, local services and full indexing', () => {
+    const productionDir = `${__dirname}/../../../production`;
+    // qbit-electrs REST defaults: 3000 mainnet, 3004 testnet4, 3002 regtest
+    const productionConfigs: [string, number, string][] = [
+      ['mainnet', 8352, 'http://127.0.0.1:3000'],
+      ['testnet4', 48352, 'http://127.0.0.1:3004'],
+      ['regtest', 18452, 'http://127.0.0.1:3002'],
+    ];
+
+    expect(fs.readdirSync(productionDir).filter(file => file.startsWith('mempool-config.')).sort()).toStrictEqual(
+      productionConfigs.map(([network]) => `mempool-config.${network}.json`).sort()
+    );
+
+    for (const [network, port, esploraUrl] of productionConfigs) {
+      jest.isolateModules(() => {
+        const productionConfig = JSON.parse(fs.readFileSync(`${productionDir}/mempool-config.${network}.json`, 'utf8'));
+        jest.mock('../../mempool-config.json', () => (productionConfig), { virtual: true });
+
+        // check the values the backend runs with once the template is merged over the defaults
+        const config = jest.requireActual('../config').default;
+
+        expect(config.MEMPOOL.NETWORK).toBe(network);
+        expect(config.MEMPOOL.BACKEND).toBe('esplora');
+        expect(config.CORE_RPC.PORT).toBe(port);
+        expect(config.ESPLORA.REST_API_URL).toBe(esploraUrl);
+        // the port nginx-mempool.conf proxies the API and WebSocket to
+        expect(config.MEMPOOL.HTTP_PORT).toBe(8999);
+        // every network indexes the same way
+        expect(config.MEMPOOL.INDEXING_BLOCKS_AMOUNT).toBe(-1);
+        expect(config.MEMPOOL.BLOCKS_SUMMARIES_INDEXING).toBe(true);
+        expect(config.MEMPOOL.GOGGLES_INDEXING).toBe(true);
+        expect(config.MEMPOOL.CPFP_INDEXING).toBe(true);
+        // rust/gbt still applies Bitcoin's witness scale factor of 4
+        expect(config.MEMPOOL.RUST_GBT).toBe(false);
+        // upstream's operator templates set these for mempool.space: an official
+        // instance, Esplora sockets and fallback hosts, and FreeBSD's MariaDB socket
+        expect(config.MEMPOOL.OFFICIAL).toBe(false);
+        expect(config.ESPLORA.UNIX_SOCKET_PATH).toBeNull();
+        expect(config.ESPLORA.FALLBACK).toStrictEqual([]);
+        expect(config.DATABASE.SOCKET).toBe('');
+      });
+    }
   });
 
   test('should ensure the docker start.sh script has default values', () => {
@@ -254,6 +310,11 @@ describe('Mempool Backend Config', () => {
       }
 
       parseJson(fixture);
+
+      expect(startSh).toContain('__MEMPOOL_BLOCK_WEIGHT_UNITS__=${MEMPOOL_BLOCK_WEIGHT_UNITS:=2000000}');
+      expect(startSh).toContain('__MEMPOOL_BLOCK_TARGET_SPACING_SECONDS__=${MEMPOOL_BLOCK_TARGET_SPACING_SECONDS:=60}');
+      expect(startSh).toContain('__MEMPOOL_MAX_PUSH_TX_SIZE_WEIGHT__=${MEMPOOL_MAX_PUSH_TX_SIZE_WEIGHT:=400000}');
+      expect(startSh).toContain('__MEMPOOL_RUST_GBT__=${MEMPOOL_RUST_GBT:=false}');
     });
   });
 

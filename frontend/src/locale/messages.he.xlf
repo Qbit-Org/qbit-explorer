@@ -2935,14 +2935,6 @@
         </context-group>
         <note priority="1" from="description">mining.avg-block-fee-1m</note>
       </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-fee-rates" datatype="html">
-        <source>See Bitcoin feerates visualized over time, including minimum and maximum feerates per block along with feerates at various percentiles.</source>
-        <target>ראה שערים של ביטקוין המוצגים לאורך זמן, כולל שערים מינימליים ומקסימליים לכל בלוק יחד עם שערים באחוזונים שונים.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-fee-rates-graph/block-fee-rates-graph.component.ts</context>
-          <context context-type="linenumber">74</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="4793828002882320882" datatype="html">
         <source>At block: <x id="PH" equiv-text="data[0].data[2]"/></source>
         <target>בבלוק: <x id="PH" equiv-text="data[0].data[2]"/></target>
@@ -2975,14 +2967,6 @@
           <context context-type="linenumber">18</context>
         </context-group>
         <note priority="1" from="description">mining.block-fees</note>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-fees" datatype="html">
-        <source>See the average mining fees earned per Bitcoin block visualized in BTC and USD over time.</source>
-        <target>ראה את עמלות הכרייה הממוצעות שנצברו לכל בלוק ביטקוין, המוצגות בביטקוין ובדולר ארה&quot;ב לאורך זמן.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-fees-graph/block-fees-graph.component.ts</context>
-          <context context-type="linenumber">71</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="23555386d8af1ff73f297e89dd4af3f4689fb9dd" datatype="html">
         <source>Indexing blocks</source>
@@ -3040,14 +3024,6 @@
           <context context-type="linenumber">20</context>
         </context-group>
         <note priority="1" from="description">mining.block-fees-subsidy-subsidy</note>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-fees-subsidy" datatype="html">
-        <source>See the mining fees earned per Bitcoin block compared to the Bitcoin block subsidy, visualized in BTC and USD over time.</source>
-        <target>ראה את עמלות הכרייה שהתקבלו לכל בלוק ביטקוין בהשוואה לסבסוד בלוק הביטקוין, המוצגות בביטקוין ובדולר ארה&quot;ב לאורך זמן.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-fees-subsidy-graph/block-fees-subsidy-graph.component.ts</context>
-          <context context-type="linenumber">80</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="8538305450922736186" datatype="html">
         <source>At block <x id="PH" equiv-text="'&lt;b style=&quot;color: white; margin-left: 2px&quot;&gt;' + data[0].axisValue"/></source>
@@ -3479,14 +3455,6 @@
         </context-group>
         <note priority="1" from="description">mining.block-rewards</note>
       </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-rewards" datatype="html">
-        <source>See Bitcoin block rewards in BTC and USD visualized over time. Block rewards are the total funds miners earn from the block subsidy and fees.</source>
-        <target>ראה תגמולי בלוק של ביטקוין בביטקוין ובדולר אמריקאי, המוצגים לאורך זמן. תגמולי בלוק הם סך כל הכספים שכורי הבלוק מרוויחים מסבסוד הבלוק ועמלות.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-rewards-graph/block-rewards-graph.component.ts</context>
-          <context context-type="linenumber">69</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="56fa1cd221491b6478998679cba2dc8d55ba330d" datatype="html">
         <source>Block Sizes and Weights</source>
         <target>גדלי ומשקל הבלוק</target>
@@ -3503,14 +3471,6 @@
           <context context-type="linenumber">24</context>
         </context-group>
         <note priority="1" from="description">mining.block-sizes-weights</note>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.block-sizes" datatype="html">
-        <source>See Bitcoin block sizes (MB) and block weights (weight units) visualized over time.</source>
-        <target>ראה גדלי בלוקים (MB) ומשקלים (יחידות משקל) של ביטקוין המוצגים לאורך זמן.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">66</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
         <source>Size</source>
@@ -3658,22 +3618,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block/block.component.ts</context>
           <context context-type="linenumber">288</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.block" datatype="html">
-        <source>See size, weight, fee range, included transactions, audit (expected v actual), and more for Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> block <x id="BLOCK_HEIGHT" equiv-text="block.height"/> (<x id="BLOCK_ID" equiv-text="block.id"/>).</source>
-        <target>ראה גודל, משקל, טווח עמלות, עסקאות כלולות, ביקורת (צפוי לעומת בפועל) ועוד עבור בלוק <x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> ביטקוין <x id="BLOCK_HEIGHT" equiv-text="block.height"/> (<x id="BLOCK_ID" equiv-text="block.id"/>).</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block-view/block-view.component.ts</context>
-          <context context-type="linenumber">115</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block/block-preview.component.ts</context>
-          <context context-type="linenumber">109</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/block/block.component.ts</context>
-          <context context-type="linenumber">290</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2303359202781425764" datatype="html">
@@ -4491,14 +4435,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/blocks-list/blocks-list.component.ts</context>
           <context context-type="linenumber">74</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.blocks" datatype="html">
-        <source>See the most recent Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> blocks along with basic stats such as block height, block reward, block size, and more.</source>
-        <target>ראה את בלוקי <x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> הביטקוין האחרונים יחד עם נתונים סטטיסטיים בסיסיים כגון גובה הבלוק, תגמול הבלוק, גודל הבלוק ועוד.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/blocks-list/blocks-list.component.ts</context>
-          <context context-type="linenumber">76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="cf8caac4de0166eae6cd0fdfd010ee92b995cd96" datatype="html">
@@ -5501,14 +5437,6 @@
         </context-group>
         <note priority="1" from="description">mining.hashrate</note>
       </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.hashrate" datatype="html">
-        <source>See hashrate and difficulty for the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.network)"/> network visualized over time.</source>
-        <target>ראה את קצב הגיבוב והקושי של רשת הביטקוין <x id="PH" equiv-text="seoDescriptionNetwork(this.network)"/> כפי שהם מוצגים לאורך זמן.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">79</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="8105839921891777281" datatype="html">
         <source>Hashrate (MA)</source>
         <target>כמות האשים (ממוצע נע)</target>
@@ -5527,14 +5455,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrates-chart-pools/hashrate-chart-pools.component.ts</context>
           <context context-type="linenumber">75</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.descriptions.bitcoin.graphs.hashrate-pools" datatype="html">
-        <source>See Bitcoin mining pool dominance visualized over time: see how top mining pools' share of total hashrate has fluctuated over time.</source>
-        <target>ראה את הדומיננטיות של מאגר הכרייה של ביטקוין מוצגת לאורך זמן: ראה כיצד נתח מאגרי הכרייה המובילים בקצב הגיבוב הכולל השתנה לאורך זמן.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/hashrates-chart-pools/hashrate-chart-pools.component.ts</context>
-          <context context-type="linenumber">76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5ee5eb7db86675abd5f0b0db835bf362ee9b23ff" datatype="html">
@@ -6097,14 +6017,6 @@
           <context context-type="linenumber">74</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="meta.description.mining.dashboard" datatype="html">
-        <source>Get real-time Bitcoin mining stats like hashrate, difficulty adjustment, block rewards, pool dominance, and more.</source>
-        <target>קבלו סטטיסטיקות כריית ביטקוין בזמן אמת כמו קצב עיבוד שבבי, התאמת קושי, תגמולי בלוקים, דומיננטיות בפול ועוד.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/mining-dashboard/mining-dashboard.component.ts</context>
-          <context context-type="linenumber">31</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="667d1fa0b03107009b84c29319f1393e93992788" datatype="html">
         <source><x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span&gt;"/>Mint<x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_SPAN_1" ctype="x-span_1" equiv-text="&lt;span class=&quot;amount&quot;&gt;"/> <x id="INTERPOLATION" equiv-text="{{ minted &gt;= 100000 ? (minted | amountShortener:undefined:undefined:true) : minted }}"/> <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;ng-container *ngTemplateOutlet=&quot;runeName; context: { $implicit: runestone.mint.toString() }&quot;&gt;"/><x id="CLOSE_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;/ng-container&gt;"/></source>
         <target><x id="START_TAG_SPAN" ctype="x-span" equiv-text="&lt;span&gt;"/> כרייה <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_SPAN_1" ctype="x-span_1" equiv-text="&lt;span class=&quot;amount&quot;&gt;"/><x id="INTERPOLATION" equiv-text="{{ minted &gt;= 100000 ? (minted | amountShortener:undefined:undefined:true) : minted }}"/><x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="&lt;/span&gt;"/><x id="START_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;ng-container *ngTemplateOutlet=&quot;runeName; context: { $implicit: runestone.mint.toString() }&quot;&gt;"/><x id="CLOSE_TAG_NG_CONTAINER" ctype="x-ng_container" equiv-text="&lt;/ng-container&gt;"/></target>
@@ -6342,14 +6254,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/search-form/search-results/search-results.component.html</context>
           <context context-type="linenumber">47</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.bitcoin.graphs.pool-ranking" datatype="html">
-        <source>See the top Bitcoin mining pools ranked by number of blocks mined, over your desired timeframe.</source>
-        <target>ראה את מאגרי כריית הביטקוין המובילים המדורגים לפי מספר הבלוקים שנכרו, במסגרת הזמן הרצויה.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/pool-ranking/pool-ranking.component.ts</context>
-          <context context-type="linenumber">61</context>
         </context-group>
       </trans-unit>
       <trans-unit id="312539377512157124" datatype="html">
@@ -6697,22 +6601,6 @@
         </context-group>
         <note priority="1" from="description">price-chart.percent-change</note>
       </trans-unit>
-      <trans-unit id="price-chart.title" datatype="html">
-        <source>Bitcoin Price</source>
-        <target>מחיר הביטקוין</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/price-chart/price-chart.component.ts</context>
-          <context context-type="linenumber">77</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="price-chart.description" datatype="html">
-        <source>See the Bitcoin price in USD visualized over time.</source>
-        <target>צפו במחיר הביטקוין בדולרים משוקף על פני זמן.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/price-chart/price-chart.component.ts</context>
-          <context context-type="linenumber">78</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="f13cbfe8cfc955918e9f64466d2cafddb4760d9a" datatype="html">
         <source>Broadcast Transaction</source>
         <target>שדר טרנזקציה</target>
@@ -6856,14 +6744,6 @@
           <context context-type="linenumber">34</context>
         </context-group>
         <note priority="1" from="description">rbf.no-replacements-yet</note>
-      </trans-unit>
-      <trans-unit id="meta.description.rbf-list" datatype="html">
-        <source>See the most recent RBF replacements on the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> network, updated in real-time.</source>
-        <target>ראה את החלפות העמלה האחרונות ברשת <x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> הביטקוין, מעודכנות בזמן אמת.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/rbf-list/rbf-list.component.ts</context>
-          <context context-type="linenumber">63</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="5403a767248e304199592271bba3366d2ca3f903" datatype="html">
         <source>Show less</source>
@@ -7295,14 +7175,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/stale-list/stale-list.component.ts</context>
           <context context-type="linenumber">62</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="meta.description.stale-chain-tips" datatype="html">
-        <source>See the most recent stale chain tips on the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> network.</source>
-        <target>ראו את הטיפים האחרונים לגבי שרשרת מעופשת ברשת <x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> הביטקוין.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/stale-list/stale-list.component.ts</context>
-          <context context-type="linenumber">63</context>
         </context-group>
       </trans-unit>
       <trans-unit id="75c20c8a9cd9723d45bee0230dd582d7c2e4ecbc" datatype="html">
@@ -8035,14 +7907,6 @@
         </context-group>
         <note priority="1" from="description">Transaction Sigops</note>
         <note priority="1" from="meaning">transaction.sigops</note>
-      </trans-unit>
-      <trans-unit id="meta.description.preview-tx" datatype="html">
-        <source>Preview a transaction to the Bitcoin<x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> network using the transaction's raw hex data.</source>
-        <target>הצג תצוגה מקדימה של עסקה ברשת <x id="PH" equiv-text="seoDescriptionNetwork(this.stateService.network)"/> הביטקוין באמצעות הנתונים ההקסאדיאמליים הגולמיים של העסקה.</target>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/components/transaction/transaction-raw.component.ts</context>
-          <context context-type="linenumber">91</context>
-        </context-group>
       </trans-unit>
       <trans-unit id="df5fd5288dc0b13ce611a0c857e97baee9595e67" datatype="html">
         <source> This transaction ID appears twice in the blockchain as the coinbase of blocks <x id="START_LINK" ctype="x-a" equiv-text="&lt;a [routerLink]=&quot;['/block/' | relativeUrl, duplicateTxBlocks[0]]&quot;&gt;"/><x id="INTERPOLATION" equiv-text="locks[0] }}"/><x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/> and <x id="START_LINK_1" equiv-text="&lt;a [routerLink]=&quot;['/block/' | relativeUrl, duplicateTxBlocks[1]]&quot;&gt;"/><x id="INTERPOLATION_1" equiv-text="cks[1] }}"/><x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>, due to a bug later mitigated by <x id="START_LINK_2" equiv-text="&lt;a href=&quot;https://github.com/bitcoin/bips/blob/master/bip-0030.mediawiki&quot; target=&quot;_blank&quot; rel=&quot;noopener&quot;&gt;"/>BIP-30<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>. </source>

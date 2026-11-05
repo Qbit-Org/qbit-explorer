@@ -21,7 +21,7 @@ const initData = makeStateKey('/api/v1/init-data');
 })
 export class WebsocketService {
   private webSocketProtocol = (document.location.protocol === 'https:') ? 'wss:' : 'ws:';
-  private webSocketUrl = this.webSocketProtocol + '//' + document.location.hostname + ':' + document.location.port + '{network}/api/v1/ws';
+  private webSocketUrl = this.webSocketProtocol + '//' + document.location.host + '{network}/api/v1/ws';
 
   private websocketSubject: WebSocketSubject<WebsocketResponse>;
   private goneOffline = false;
@@ -33,9 +33,6 @@ export class WebsocketService {
   private isTrackingRbfSummary = false;
   private isTrackingAddress: string | false = false;
   private isTrackingAddresses: string[] | false = false;
-  private isTrackingAccelerations: boolean = false;
-  private isTrackingWallet: boolean = false;
-  private trackingWalletName: string;
   private isTrackingStratum: string | number | false = false;
   private trackingMempoolBlock: number;
   private trackingMempoolBlockNetwork: string;
@@ -138,12 +135,6 @@ export class WebsocketService {
           if (this.isTrackingAddresses) {
             this.startTrackAddresses(this.isTrackingAddresses);
           }
-          if (this.isTrackingAccelerations) {
-            this.startTrackAccelerations();
-          }
-          if (this.isTrackingWallet) {
-            this.startTrackingWallet(this.trackingWalletName);
-          }
           if (this.isTrackingStratum !== false) {
             this.startTrackStratum(this.isTrackingStratum);
           }
@@ -206,18 +197,6 @@ export class WebsocketService {
     this.isTrackingAddresses = false;
   }
 
-  startTrackingWallet(walletName: string) {
-    this.websocketSubject.next({ 'track-wallet': walletName });
-    this.isTrackingWallet = true;
-    this.trackingWalletName = walletName;
-  }
-
-  stopTrackingWallet() {
-    this.websocketSubject.next({ 'track-wallet': 'stop' });
-    this.isTrackingWallet = false;
-    this.trackingWalletName = '';
-  }
-
   startTrackAsset(asset: string) {
     this.websocketSubject.next({ 'track-asset': asset });
   }
@@ -273,24 +252,6 @@ export class WebsocketService {
   stopTrackRbfSummary() {
     this.websocketSubject.next({ 'track-rbf-summary': false });
     this.isTrackingRbfSummary = false;
-  }
-
-  startTrackAccelerations() {
-    this.websocketSubject.next({ 'track-accelerations': true });
-    this.isTrackingAccelerations = true;
-  }
-
-  stopTrackAccelerations() {
-    if (this.isTrackingAccelerations) {
-      this.websocketSubject.next({ 'track-accelerations': false });
-      this.isTrackingAccelerations = false;
-    }
-  }
-
-  ensureTrackAccelerations() {
-    if (!this.isTrackingAccelerations) {
-      this.startTrackAccelerations();
-    }
   }
 
   startTrackStratum(pool: number | string) {
@@ -486,22 +447,6 @@ export class WebsocketService {
             this.stateService.mempoolBlockUpdate$.next(uncompressDeltaChange(this.trackingMempoolBlock, response['projected-block-transactions'].delta));
           }
         }
-      }
-    }
-
-    if (response['wallet-transactions']) {
-      this.stateService.walletTransactions$.next(response['wallet-transactions']);
-    }
-
-    if (response['accelerations']) {
-      if (response['accelerations'].accelerations) {
-        this.stateService.accelerations$.next({
-          added: response['accelerations'].accelerations,
-          removed: [],
-          reset: true,
-        });
-      } else {
-        this.stateService.accelerations$.next(response['accelerations']);
       }
     }
 

@@ -1,1 +1,4 @@
-backend/src/api/database-migration.ts	@wiz @softsimon
+# Code owners for qbit-explorer. GitHub requests a review from them on every
+# pull request. GitHub uses the last matching rule, so keep the default owners
+# first and add any narrower path rules below it.
+* @Anatolie @kiwidream @djh58 @RobertClarke

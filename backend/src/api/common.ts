@@ -9,6 +9,7 @@ import { isPoint } from '../utils/secp256k1';
 import logger from '../logger';
 import { getVarIntLength, opcodes, parseMultisigScript } from '../utils/bitcoin-script';
 import { IEsploraApi } from './bitcoin/esplora-api.interface';
+import { feeRatePerVsize, vsizeToWeight, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '../utils/weight-units';
 
 // Bitcoin Core default policy settings
 const MAX_STANDARD_TX_WEIGHT = 400_000;
@@ -21,20 +22,13 @@ const MAX_STANDARD_P2WSH_STACK_ITEM_SIZE = 80;
 const MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE = 80;
 const MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600;
 const MAX_STANDARD_SCRIPTSIG_SIZE = 1650;
-const DUST_RELAY_TX_FEE = 3;
-const MAX_OP_RETURN_RELAY = 83;
+const DUST_RELAY_TX_FEE_SATS_PER_KVB = 750; // qbit policy: 0.75 sat/vB
+const MAX_OP_RETURN_RELAY = 200_000; // qbit policy: -datacarriersize default, shared by all OP_RETURN outputs
+const MAX_DUST_OUTPUTS_PER_TX = 1; // qbit policy: ephemeral dust allows one dust output
 const DEFAULT_PERMIT_BAREMULTISIG = true;
-const MAX_TX_LEGACY_SIGOPS = 2_500 * 4; // witness-adjusted sigops
+const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
 
 export class Common {
-  static nativeAssetId = config.MEMPOOL.NETWORK === 'liquidtestnet' ?
-    '144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49'
-  : '6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d';
-
-  static isLiquid(): boolean {
-    return config?.MEMPOOL?.NETWORK === 'liquid' || config?.MEMPOOL?.NETWORK === 'liquidtestnet';
-  }
-
   static median(numbers: number[]) {
     let medianNr = 0;
     const numsLen = numbers.length;
@@ -251,8 +245,8 @@ export class Common {
       // bad-txns-nonstandard-inputs
       if (vin.prevout?.scriptpubkey_type === 'p2sh') {
         // TODO: evaluate script (https://github.com/bitcoin/bitcoin/blob/1ac627c485a43e50a9a49baddce186ee3ad4daad/src/policy/policy.cpp#L177)
-        // countScriptSigops returns the witness-scaled sigops, so divide by 4 before comparison with MAX_P2SH_SIGOPS
-        const sigops = (transactionUtils.countScriptSigops(vin.inner_redeemscript_asm) / 4);
+        // countScriptSigops returns the witness-scaled sigops, so normalize before comparing with MAX_P2SH_SIGOPS
+        const sigops = (transactionUtils.countScriptSigops(vin.inner_redeemscript_asm) / WITNESS_SCALE_FACTOR);
         if (sigops > MAX_P2SH_SIGOPS) {
           return true;
         }
@@ -292,6 +286,7 @@ export class Common {
     // output validation
     let opreturnCount = 0;
     let opreturnBytes = 0;
+    let dustCount = 0;
     for (const vout of tx.vout) {
       // scriptpubkey
       if (['nonstandard', 'provably_unspendable', 'empty'].includes(vout.scriptpubkey_type)) {
@@ -320,21 +315,16 @@ export class Common {
       // dust
       // (we could probably hardcode this for the different output types...)
       if (vout.scriptpubkey_type !== 'op_return') {
-        let dustSize = (vout.scriptpubkey.length / 2);
-        // add varint length overhead
-        dustSize += getVarIntLength(dustSize);
-        // add value size
-        dustSize += 8;
-        if (Common.isWitnessProgram(vout.scriptpubkey)) {
-          dustSize += 67;
-        } else {
-          dustSize += 148;
-        }
-        if (vout.value < (dustSize * DUST_RELAY_TX_FEE)) {
+        if (vout.value < Common.getDustThreshold(vout.scriptpubkey)) {
           // under minimum output size
-          return !Common.isStandardEphemeralDust(tx, height);
+          dustCount++;
         }
       }
+    }
+
+    // dust is only standard as a single ephemeral dust output
+    if (dustCount > MAX_DUST_OUTPUTS_PER_TX || (dustCount > 0 && !Common.isStandardEphemeralDust(tx, height))) {
+      return true;
     }
 
     // op_return
@@ -347,6 +337,21 @@ export class Common {
     // TODO: non-mandatory-script-verify-flag
 
     return false;
+  }
+
+  static getDustThreshold(scriptpubkey: string): number {
+    let dustSize = (scriptpubkey.length / 2);
+    // add varint length overhead
+    dustSize += getVarIntLength(dustSize);
+    // add value size
+    dustSize += 8;
+    if (Common.isWitnessProgram(scriptpubkey)) {
+      dustSize += 67;
+    } else {
+      dustSize += 148;
+    }
+    const fee = Math.floor(dustSize * DUST_RELAY_TX_FEE_SATS_PER_KVB / 1000);
+    return fee === 0 && DUST_RELAY_TX_FEE_SATS_PER_KVB > 0 ? 1 : fee;
   }
 
   // A witness program is any valid scriptpubkey that consists of a 1-byte push opcode
@@ -371,20 +376,27 @@ export class Common {
   }
 
   // Individual versioned standardness rules
+  // qbit nodes have enforced all of these rules since genesis (qbit v1.0.0 src/policy/), so every
+  // qbit network activates them at height 0 rather than at Bitcoin Core's activation heights.
+
+  static getActivationHeight(activationHeights: Record<string, number>): number | undefined {
+    return activationHeights[config.MEMPOOL.NETWORK || 'mainnet'];
+  }
 
   static V3_STANDARDNESS_ACTIVATION_HEIGHT = {
-    'testnet4': 42_000,
-    'testnet': 2_900_000,
-    'signet': 211_000,
+    'testnet4': 0,
+    'testnet': 0,
+    'signet': 0,
     'regtest': 0,
-    '': 863_500,
+    'mainnet': 0,
   };
   static isNonStandardVersion(tx: TransactionExtended, height?: number): boolean {
     let TX_MAX_STANDARD_VERSION = 3;
+    const activationHeight = this.getActivationHeight(this.V3_STANDARDNESS_ACTIVATION_HEIGHT);
     if (
       height != null
-      && this.V3_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
-      && height <= this.V3_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
+      && activationHeight
+      && height <= activationHeight
     ) {
       // V3 transactions were non-standard to spend before v28.x (scheduled for 2024/09/30 https://github.com/bitcoin/bitcoin/issues/29891)
       TX_MAX_STANDARD_VERSION = 2;
@@ -397,17 +409,18 @@ export class Common {
   }
 
   static ANCHOR_STANDARDNESS_ACTIVATION_HEIGHT = {
-    'testnet4': 42_000,
-    'testnet': 2_900_000,
-    'signet': 211_000,
+    'testnet4': 0,
+    'testnet': 0,
+    'signet': 0,
     'regtest': 0,
-    '': 863_500,
+    'mainnet': 0,
   };
   static isNonStandardAnchor(vin: IEsploraApi.Vin, height?: number): boolean {
+    const activationHeight = this.getActivationHeight(this.ANCHOR_STANDARDNESS_ACTIVATION_HEIGHT);
     if (
       height != null
-      && this.ANCHOR_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
-      && height <= this.ANCHOR_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
+      && activationHeight
+      && height <= activationHeight
       && vin.prevout?.scriptpubkey === '51024e73'
     ) {
       // anchor outputs were non-standard to spend before v28.x (scheduled for 2024/09/30 https://github.com/bitcoin/bitcoin/issues/29891)
@@ -418,18 +431,19 @@ export class Common {
 
   // Ephemeral dust is a new concept that allows a single dust output in a transaction, provided the transaction is zero fee
   static EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT = {
-    'testnet4': 90_500,
-    'testnet': 4_550_000,
-    'signet': 260_000,
+    'testnet4': 0,
+    'testnet': 0,
+    'signet': 0,
     'regtest': 0,
-    '': 905_000,
+    'mainnet': 0,
   };
   static isStandardEphemeralDust(tx: TransactionExtended, height?: number): boolean {
+    const activationHeight = this.getActivationHeight(this.EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT);
     if (
       tx.fee === 0
       && (height == null || (
-        this.EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
-        && height >= this.EPHEMERAL_DUST_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
+        activationHeight != null
+        && height >= activationHeight
       ))
     ) {
       return true;
@@ -439,18 +453,23 @@ export class Common {
 
   // OP_RETURN size & count limits were lifted in v28.3/v29.2/v30.0
   static OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT = {
-    'testnet4': 108_000,
-    'testnet': 4_750_000,
-    'signet': 276_500,
+    'testnet4': 0,
+    'testnet': 0,
+    'signet': 0,
     'regtest': 0,
-    '': 921_000,
+    'mainnet': 0,
   };
   static MAX_DATACARRIER_BYTES = 83;
   static isStandardOpReturn(bytes: number, outputs: number,height?: number): boolean {
+    if (bytes > MAX_OP_RETURN_RELAY) {
+      // qbit still caps the combined size of all OP_RETURN outputs
+      return false;
+    }
+    const activationHeight = this.getActivationHeight(this.OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT);
     if (
       (height == null || (
-        this.OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
-        && height >= this.OP_RETURN_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
+        activationHeight != null
+        && height >= activationHeight
       )) // limits lifted
       || // OR
       (bytes <= this.MAX_DATACARRIER_BYTES && outputs <= 1) // below old limits
@@ -462,17 +481,18 @@ export class Common {
 
   // New legacy sigops limit started to be enforced in v30.0
   static LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT = {
-    'testnet4': 108_000,
-    'testnet': 4_750_000,
-    'signet': 276_500,
+    'testnet4': 0,
+    'testnet': 0,
+    'signet': 0,
     'regtest': 0,
-    '': 921_000,
+    'mainnet': 0,
   };
   static isNonStandardLegacySigops(tx: TransactionExtended, height?: number): boolean {
+    const activationHeight = this.getActivationHeight(this.LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT);
     if (
       height == null || (
-        this.LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
-        && height >= this.LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT[config.MEMPOOL.NETWORK]
+        activationHeight != null
+        && height >= activationHeight
       )
     ) {
       if (!transactionUtils.checkSigopsBIP54(tx, MAX_TX_LEGACY_SIGOPS)) {
@@ -500,7 +520,7 @@ export class Common {
       // marker & segwit flag
       weight -= 2;
     }
-    return Math.ceil(weight / 4);
+    return weightToVsize(weight);
   }
 
   static setSegwitSighashFlags(flags: bigint, witness: string[]): bigint {
@@ -654,6 +674,9 @@ export class Common {
           case 'p2sh': flags |= TransactionFlags.p2sh; break;
           case 'v0_p2wpkh': flags |= TransactionFlags.p2wpkh; break;
           case 'v0_p2wsh': flags |= TransactionFlags.p2wsh; break;
+          case 'witness_v2_p2mr':
+          case 'v2_p2mr': flags |= TransactionFlags.p2mr; break;
+          case 'anchor': flags |= TransactionFlags.anchor; break;
           case 'v1_p2tr': {
             flags |= TransactionFlags.p2tr;
             if (vin.witness?.length) {
@@ -721,6 +744,9 @@ export class Common {
         case 'v0_p2wpkh': flags |= TransactionFlags.p2wpkh; break;
         case 'v0_p2wsh': flags |= TransactionFlags.p2wsh; break;
         case 'v1_p2tr': flags |= TransactionFlags.p2tr; break;
+        case 'witness_v2_p2mr':
+        case 'v2_p2mr': flags |= TransactionFlags.p2mr; break;
+        case 'anchor': flags |= TransactionFlags.anchor; break;
         case 'op_return': flags |= TransactionFlags.op_return; break;
       }
       if (vout.scriptpubkey_address) {
@@ -790,7 +816,7 @@ export class Common {
     return {
       txid: tx.txid,
       fee: tx.fee || 0,
-      vsize: tx.weight / 4,
+      vsize: weightToFractionalVsize(tx.weight),
       value: tx.vout.reduce((acc, vout) => acc + (vout.value ? vout.value : 0), 0),
       acc: tx.acceleration || undefined,
       rate: tx.effectiveFeePerVsize,
@@ -831,9 +857,9 @@ export class Common {
     // look for transactions that were expected in the template, but missing from the mined block
     for (const tx of projectedBlock.transactions) {
       if (inBlock[tx.txid]) {
-        matchedWeight += tx.vsize * 4;
+        matchedWeight += vsizeToWeight(tx.vsize);
       }
-      projectedWeight += tx.vsize * 4;
+      projectedWeight += vsizeToWeight(tx.vsize);
     }
 
     projectedWeight += transactions[0].weight;
@@ -844,6 +870,7 @@ export class Common {
 
   static getSqlInterval(interval: string | null): string | null {
     switch (interval) {
+      case '1h': return '1 HOUR';
       case '24h': return '1 DAY';
       case '3d': return '3 DAY';
       case '1w': return '1 WEEK';
@@ -860,7 +887,6 @@ export class Common {
 
   static indexingEnabled(): boolean {
     return (
-      ['mainnet', 'testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) &&
       config.DATABASE.ENABLED === true &&
       config.MEMPOOL.INDEXING_BLOCKS_AMOUNT !== 0
     );
@@ -1040,7 +1066,7 @@ export class Common {
     // assume the first transaction is a coinbase if the fee is falsy (0 or undefined)
     const nonCoinbaseTransactions = transactions[0].fee ? transactions : transactions.slice(1);
 
-    const sortedTxs = nonCoinbaseTransactions.map(tx => { return { txid: tx.txid, weight: tx.weight, rate: tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4)) }; }).sort((a, b) => a.rate - b.rate);
+    const sortedTxs = nonCoinbaseTransactions.map(tx => { return { txid: tx.txid, weight: tx.weight, rate: tx.effectiveFeePerVsize || feeRatePerVsize(tx.fee, tx.weight) }; }).sort((a, b) => a.rate - b.rate);
     const totalWeight = nonCoinbaseTransactions.reduce((acc, tx) => acc + tx.weight, 0);
 
     // include any unused space
@@ -1057,12 +1083,12 @@ export class Common {
       const right = weightCount + sortedTxs[i].weight;
       if (right > leftBound) {
         const weight = Math.min(right, rightBound) - Math.max(left, leftBound);
-        medianFee += (sortedTxs[i].rate * (weight / 4) );
+        medianFee += (sortedTxs[i].rate * weightToFractionalVsize(weight) );
         medianWeight += weight;
       }
       weightCount += sortedTxs[i].weight;
     }
-    const medianFeeRate = medianWeight ? (medianFee / (medianWeight / 4)) : 0;
+    const medianFeeRate = medianWeight ? (medianFee / weightToFractionalVsize(medianWeight)) : 0;
 
     // minimum effective fee heuristic:
     // lowest of
@@ -1070,7 +1096,7 @@ export class Common {
     // b) the minimum effective fee rate in the last 2% of transactions (in block order)
     const minFee = Math.min(
       Common.getNthPercentile(1, sortedTxs).rate,
-      nonCoinbaseTransactions.slice(Math.ceil(nonCoinbaseTransactions.length * 49 / 50)).reduce((min, tx) => { return Math.min(min, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, Infinity)
+      nonCoinbaseTransactions.slice(Math.ceil(nonCoinbaseTransactions.length * 49 / 50)).reduce((min, tx) => { return Math.min(min, tx.effectiveFeePerVsize || feeRatePerVsize(tx.fee, tx.weight)); }, Infinity)
     );
 
     // maximum effective fee heuristic:
@@ -1079,7 +1105,7 @@ export class Common {
     // b) the maximum effective fee rate in the first 2% of transactions (in block order)
     const maxFee = Math.max(
       Common.getNthPercentile(99, sortedTxs).rate,
-      nonCoinbaseTransactions.slice(0, nonCoinbaseTransactions.length / 50).reduce((max, tx) => { return Math.max(max, tx.effectiveFeePerVsize || ((tx.fee || 0) / (tx.weight / 4))); }, 0)
+      nonCoinbaseTransactions.slice(0, nonCoinbaseTransactions.length / 50).reduce((max, tx) => { return Math.max(max, tx.effectiveFeePerVsize || feeRatePerVsize(tx.fee, tx.weight)); }, 0)
     );
 
     return {

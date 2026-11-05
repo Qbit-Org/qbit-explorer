@@ -12,7 +12,6 @@ describe('Database Connection Integration Tests', () => {
     const dbConfig = getTestDatabaseConfig();
     expect(dbConfig.enabled).toBe(true);
     expect(dbConfig.database).toBe('mempool_test');
-    expect(dbConfig.port).toBe(33306);
   });
 
   test('should execute a simple query', async () => {

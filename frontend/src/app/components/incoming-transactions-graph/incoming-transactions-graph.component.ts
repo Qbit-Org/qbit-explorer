@@ -6,6 +6,7 @@ import { download, formatterXAxis, formatterXAxisLabel } from '@app/shared/graph
 import { formatNumber } from '@angular/common';
 import { StateService } from '@app/services/state.service';
 import { Subscription } from 'rxjs';
+import { vsizeToWeight } from '@app/shared/weight-units';
 
 const OUTLIERS_MEDIAN_MULTIPLIER = 4;
 
@@ -262,7 +263,7 @@ export class IncomingTransactionsGraphComponent implements OnInit, OnChanges, On
         axisLabel: {
           fontSize: 11,
           formatter: (value): string => {
-            return this.weightMode ? (value * 4).toString() : value.toString();
+            return this.weightMode ? vsizeToWeight(value).toString() : value.toString();
           }
         },
         splitLine: {

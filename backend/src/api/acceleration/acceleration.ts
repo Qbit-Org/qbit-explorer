@@ -1,12 +1,14 @@
 import logger from '../../logger';
 import { MempoolTransactionExtended } from '../../mempool.interfaces';
 import { GraphTx, getSameBlockRelatives, initializeRelatives, makeBlockTemplate, mempoolComparator, removeAncestors, setAncestorScores } from '../mini-miner';
+import config from '../../config';
+import { QBIT_MAX_STANDARD_TX_WEIGHT, weightToFractionalVsize, weightToVsize } from '../../utils/weight-units';
 
-const BLOCK_WEIGHT_UNITS = 4_000_000;
+const BLOCK_WEIGHT_UNITS = config.MEMPOOL.BLOCK_WEIGHT_UNITS;
 const MAX_RELATIVE_GRAPH_SIZE = 200;
 const BID_BOOST_WINDOW = 40_000;
 const BID_BOOST_MIN_OFFSET = 10_000;
-const BID_BOOST_MAX_OFFSET = 400_000;
+const BID_BOOST_MAX_OFFSET = QBIT_MAX_STANDARD_TX_WEIGHT;
 
 export type Acceleration = {
   txid: string;
@@ -126,7 +128,7 @@ class AccelerationCosts {
       const overlapLeft = Math.max(leftBound, left);
       const overlapRight = Math.min(rightBound, right);
       const overlapUnits = overlapRight - overlapLeft;
-      totalFeeInWindow += (tx.effectiveFeePerVsize * (overlapUnits / 4));
+      totalFeeInWindow += (tx.effectiveFeePerVsize * weightToFractionalVsize(overlapUnits));
       totalWeightInWindow += overlapUnits;
     }
 
@@ -136,7 +138,7 @@ class AccelerationCosts {
       return Infinity;
     }
     // Divide the total fee by the size of the BID_BOOST_WINDOW in vbytes
-    const averageRate = totalFeeInWindow / (BID_BOOST_WINDOW / 4);
+    const averageRate = totalFeeInWindow / weightToFractionalVsize(BID_BOOST_WINDOW);
     return averageRate;
   }
 
@@ -171,7 +173,7 @@ class AccelerationCosts {
 
     // Check for high-sigop transactions (not supported)
     relatives.forEach(entry => {
-      if (entry.vsize > Math.ceil(entry.weight / 4)) {
+      if (entry.vsize > weightToVsize(entry.weight)) {
         throw new Error(`high_sigop_tx`);
       }
     });

@@ -39,8 +39,23 @@
       margin-bottom: 0;
     }
   }
+
+  // per-lane difficulty layout: every item carries its own lane, so none of
+  // them may be responsively hidden like the legacy first column
+  &.lanes {
+    .item:nth-child(1) {
+      display: table-cell;
+    }
+    .lane-change {
+      font-size: 13px;
+      white-space: nowrap;
+    }
+  }
 }
 
+.spacing-chart {
+  margin-top: 12px;
+}
 
 .difficulty-skeleton {
   display: flex;
@@ -100,26 +115,12 @@
   font-size: 1rem;
 }
 
-.progress {
-  display: inline-flex;
-  width: 100%;
-  background-color: var(--secondary);
-  height: 1.1rem;
-  max-width: 180px;
-}
-
 .skeleton-loader {
   max-width: 100%;
 }
 
 .more-padding {
   padding: 18px;
-}
-
-.small-bar {
-  height: 8px;
-  top: -4px;
-  max-width: 120px;
 }
 
 .loading-container {
@@ -159,97 +160,7 @@
   position: relative;
 }
 
-.previous-retarget-sign {
-  margin-right: -2px;
-  font-size: 10px;
-}
-
 .symbol {
   font-size: 13px;
   white-space: nowrap;
-}
-
-.epoch-progress, .halving-progress {
-  width: 100%;
-  height: 22px;
-  margin-bottom: 12px;
-}
-
-.epoch-blocks {
-  display: block;
-  width: 100%;
-  background: var(--secondary);
-
-  .rect {
-    fill: var(--secondary);
-
-    &.behind {
-      fill: var(--red);
-    }
-    &.mined {
-      fill: url(#diff-gradient);
-    }
-    &.ahead {
-      fill: var(--success);
-    }
-
-    &.hover {
-      fill: #535e84;
-      &.behind {
-        fill: #e94d86;
-      }
-      &.mined {
-        fill: url(#diff-hover-gradient);
-      }
-      &.ahead {
-        fill: #29d951;
-      }
-    }
-  }
-}
-
-.blocks-ahead {
-  color: var(--green);
-}
-.blocks-behind {
-  color: var(--red);
-}
-
-.halving-progress {
-  position: relative;
-  .background, .remaining {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    height: 100%;
-  }
-  .background {
-    background: linear-gradient(to right, var(--primary), var(--mainnet-alt));
-    left: 0;
-    right: 0;
-  }
-  .remaining {
-    background: var(--secondary);
-    right: 0;
-  }
-  .label {
-    position: relative;
-    margin: auto;
-  }
-}
-
-.widget-toggler {
-  font-size: 12px;
-  position: absolute;
-  top: -20px;
-  right: 3px;
-  text-align: right;
-}
-
-.toggler-option {
-  text-decoration: none;
-}
-
-.inactive {
-  color: var(--transparent-fg);
 }

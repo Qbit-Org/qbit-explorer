@@ -1,8 +1,10 @@
 import { Transaction, Vin } from '@interfaces/electrs.interface';
 import { Hash } from '@app/shared/sha256';
+import { WITNESS_SCALE_FACTOR } from '@app/shared/weight-units';
 
-const P2SH_P2WPKH_COST = 21 * 4; // the WU cost for the non-witness part of P2SH-P2WPKH
-const P2SH_P2WSH_COST  = 35 * 4; // the WU cost for the non-witness part of P2SH-P2WSH
+const WITNESS_DISCOUNT_WEIGHT_FACTOR = WITNESS_SCALE_FACTOR - 1;
+const P2SH_P2WPKH_COST = 21 * WITNESS_SCALE_FACTOR; // the WU cost for the non-witness part of P2SH-P2WPKH
+const P2SH_P2WSH_COST  = 35 * WITNESS_SCALE_FACTOR; // the WU cost for the non-witness part of P2SH-P2WSH
 
 export function calcSegwitFeeGains(tx: Transaction) {
   // calculated in weight units
@@ -36,21 +38,21 @@ export function calcSegwitFeeGains(tx: Transaction) {
         // maximal gains: the scriptSig is moved entirely to the witness part
         // if taproot is used savings are 42 WU higher because it produces smaller signatures and doesn't require a pubkey in the witness
         // this number is explained above `realizedTaprootGains += 42;`
-        realizedSegwitGains += (witnessSize(vin) + (isP2tr ? 42 : 0)) * 3;
+        realizedSegwitGains += (witnessSize(vin) + (isP2tr ? 42 : 0)) * WITNESS_DISCOUNT_WEIGHT_FACTOR;
         // XXX P2WSH output creation is more expensive, should we take this into consideration?
         break;
 
       // Backward compatible Segwit - P2SH-P2WPKH
       case isP2shP2Wpkh:
-        // the scriptSig is moved to the witness, but we have extra 21 extra non-witness bytes (84 WU)
-        realizedSegwitGains += witnessSize(vin) * 3 - P2SH_P2WPKH_COST;
+        // the scriptSig is moved to the witness, but we have extra 21 extra non-witness bytes
+        realizedSegwitGains += witnessSize(vin) * WITNESS_DISCOUNT_WEIGHT_FACTOR - P2SH_P2WPKH_COST;
         potentialSegwitGains += P2SH_P2WPKH_COST;
         break;
 
       // Backward compatible Segwit - P2SH-P2WSH
       case isP2shP2Wsh:
-        // the scriptSig is moved to the witness, but we have extra 35 extra non-witness bytes (140 WU)
-        realizedSegwitGains += witnessSize(vin) * 3 - P2SH_P2WSH_COST;
+        // the scriptSig is moved to the witness, but we have extra 35 extra non-witness bytes
+        realizedSegwitGains += witnessSize(vin) * WITNESS_DISCOUNT_WEIGHT_FACTOR - P2SH_P2WSH_COST;
         potentialSegwitGains += P2SH_P2WSH_COST;
         break;
 
@@ -59,7 +61,7 @@ export function calcSegwitFeeGains(tx: Transaction) {
       case isP2sh:
       case isP2pk:
       case isBareMultisig: {
-        let fullGains = scriptSigSize(vin) * 3;
+        let fullGains = scriptSigSize(vin) * WITNESS_DISCOUNT_WEIGHT_FACTOR;
         if (isBareMultisig) {
           // a _bare_ multisig has the keys in the output script, but P2SH and P2WSH require them to be in the scriptSig/scriptWitness
           fullGains -= vin.prevout.scriptpubkey.length / 2;
@@ -111,7 +113,7 @@ export function calcSegwitFeeGains(tx: Transaction) {
         // but account for the leaf and branch hashes and internal key in the control block
           32 * Math.log2((spendingPaths - 1) || 1) + 33;
       }
-      potentialTaprootGains += witnessSize(vin) + scriptSigSize(vin) * 4 - replacementSize;
+      potentialTaprootGains += witnessSize(vin) + scriptSigSize(vin) * WITNESS_SCALE_FACTOR - replacementSize;
     }
   }
 

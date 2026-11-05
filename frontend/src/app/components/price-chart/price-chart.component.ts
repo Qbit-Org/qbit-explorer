@@ -13,6 +13,7 @@ import { ActivatedRoute } from '@angular/router';
 import { FiatShortenerPipe } from '@app/shared/pipes/fiat-shortener.pipe';
 import { FiatCurrencyPipe } from '@app/shared/pipes/fiat-currency.pipe';
 import { StateService } from '@app/services/state.service';
+import { expectedBlocksForTimespan as getExpectedBlocksForTimespan } from '@app/shared/block-target.utils';
 
 @Component({
   selector: 'app-price-chart',
@@ -67,6 +68,10 @@ export class PriceChartComponent implements OnInit {
     this.radioGroupForm.controls.dateSpan.setValue('1y');
   }
 
+  expectedBlocksForTimespan(timespan: string): number {
+    return getExpectedBlocksForTimespan(timespan, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
+  }
+
   ngOnInit(): void {
     // Use input timespan if provided, otherwise use defaults
     if (this.timespan) {
@@ -74,8 +79,8 @@ export class PriceChartComponent implements OnInit {
     } else if (this.widget) {
       this.miningWindowPreference = '1y';
     } else {
-      this.seoService.setTitle($localize`:@@price-chart.title:Bitcoin Price`);
-      this.seoService.setDescription($localize`:@@price-chart.description:See the Bitcoin price in USD visualized over time.`);
+      this.seoService.setTitle($localize`:@@price-chart.title:QBT Price`);
+      this.seoService.setDescription($localize`:@@price-chart.description:See the QBT price visualized over time.`);
       this.miningWindowPreference = this.miningService.getDefaultTimespan('1m');
     }
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
@@ -195,7 +200,7 @@ export class PriceChartComponent implements OnInit {
       // legend: data.priceData.length === 0 ? undefined : {
       //   data: [
       //     {
-      //       name: 'BTC Price (' + this.currency + ')',
+      //       name: 'QBT Price (' + this.currency + ')',
       //       inactiveColor: 'rgb(110, 112, 121)',
       //       textStyle: {
       //         color: 'white',
@@ -228,7 +233,7 @@ export class PriceChartComponent implements OnInit {
           // legendHoverLink: false,
           zlevel: 0,
           yAxisIndex: 0,
-          name: 'BTC Price (' + this.currency + ')',
+          name: 'QBT Price (' + this.currency + ')',
           data: data.priceData,
           type: 'line',
           smooth: 0.25,
@@ -286,7 +291,7 @@ export class PriceChartComponent implements OnInit {
     download(this.chartInstance.getDataURL({
       pixelRatio: 2,
       excludeComponents: ['dataZoom'],
-    }), `btc-price-${this.currentTimespan}-${Math.round(now.getTime() / 1000)}.svg`);
+    }), `qbt-price-${this.currentTimespan}-${Math.round(now.getTime() / 1000)}.svg`);
     // @ts-ignore
     this.chartOptions.grid.bottom = prevBottom;
     this.chartOptions.backgroundColor = 'none';

@@ -29,6 +29,18 @@
     margin-top: -9px;
     position: relative;
   }
+
+  // per-lane difficulty layout: both lanes must stay visible, so wrap on
+  // narrow screens instead of responsively hiding the first item
+  &.lanes {
+    height: auto;
+    min-height: 76px;
+    flex-wrap: wrap;
+    row-gap: 12px;
+    .item:nth-child(1) {
+      display: table-cell;
+    }
+  }
 }
 
 

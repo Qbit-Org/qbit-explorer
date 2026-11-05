@@ -3,8 +3,10 @@ import logger from '../logger';
 import { CompactThreadTransaction, AuditTransaction } from '../mempool.interfaces';
 import { PairingHeap } from '../utils/pairing-heap';
 import { parentPort } from 'worker_threads';
+import { QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT, weightToFractionalVsize } from '../utils/weight-units';
 
 let mempool: Map<number, CompactThreadTransaction> = new Map();
+const BLOCK_RESERVED_WEIGHT = QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT;
 
 if (parentPort) {
   parentPort.on('message', (params) => {
@@ -84,7 +86,7 @@ function makeBlockTemplates(mempool: Map<number, CompactThreadTransaction>)
   // Build blocks by greedily choosing the highest feerate package
   // (i.e. the package rooted in the transaction with the best ancestor score)
   const blocks: number[][] = [];
-  let blockWeight = 4000;
+  let blockWeight = BLOCK_RESERVED_WEIGHT;
   const blockSigops = 0;
   let transactions: AuditTransaction[] = [];
   const modified: PairingHeap<AuditTransaction> = new PairingHeap((a, b): boolean => {
@@ -130,7 +132,7 @@ function makeBlockTemplates(mempool: Map<number, CompactThreadTransaction>)
           cpfpClusters.set(nextTx.uid, sortedTxSet.map(tx => tx.uid));
           isCluster = true;
         }
-        const effectiveFeeRate = Math.min(nextTx.dependencyRate || Infinity, nextTx.ancestorFee / (nextTx.ancestorWeight / 4));
+        const effectiveFeeRate = Math.min(nextTx.dependencyRate || Infinity, nextTx.ancestorFee / weightToFractionalVsize(nextTx.ancestorWeight));
         const used: AuditTransaction[] = [];
         while (sortedTxSet.length) {
           const ancestor = sortedTxSet.pop();
@@ -171,7 +173,7 @@ function makeBlockTemplates(mempool: Map<number, CompactThreadTransaction>)
     }
 
     // this block is full
-    const exceededPackageTries = failures > 1000 && blockWeight > (config.MEMPOOL.BLOCK_WEIGHT_UNITS - 4000);
+    const exceededPackageTries = failures > 1000 && blockWeight > (config.MEMPOOL.BLOCK_WEIGHT_UNITS - BLOCK_RESERVED_WEIGHT);
     const queueEmpty = top >= mempoolArray.length && modified.isEmpty();
 
     if ((exceededPackageTries || queueEmpty) && blocks.length < 7) {
@@ -183,7 +185,7 @@ function makeBlockTemplates(mempool: Map<number, CompactThreadTransaction>)
       }
       // reset for the next block
       transactions = [];
-      blockWeight = 4000;
+      blockWeight = BLOCK_RESERVED_WEIGHT;
 
       // 'overflow' packages didn't fit in this block, but are valid candidates for the next
       for (const overflowTx of overflow.reverse()) {
@@ -249,7 +251,7 @@ function setRelatives(
     tx.ancestorWeight += ancestor.weight;
     tx.ancestorSigops += ancestor.sigops;
   });
-  tx.score = tx.ancestorFee / ((tx.ancestorWeight / 4) || 1);
+  tx.score = tx.ancestorFee / (weightToFractionalVsize(tx.ancestorWeight) || 1);
   tx.relativesSet = true;
 }
 
@@ -281,7 +283,7 @@ function updateDescendants(
       descendantTx.ancestorWeight -= rootTx.weight;
       descendantTx.ancestorSigops -= rootTx.sigops;
       tmpScore = descendantTx.score;
-      descendantTx.score = descendantTx.ancestorFee / (descendantTx.ancestorWeight / 4);
+      descendantTx.score = descendantTx.ancestorFee / weightToFractionalVsize(descendantTx.ancestorWeight);
       descendantTx.dependencyRate = descendantTx.dependencyRate ? Math.min(descendantTx.dependencyRate, clusterRate) : clusterRate;
 
       if (!descendantTx.modifiedNode) {

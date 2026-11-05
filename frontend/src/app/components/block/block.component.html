@@ -54,6 +54,16 @@
                   <app-timestamp [customFormat]="'yyyy-MM-dd HH:mm:ss'" [unixTime]="block.timestamp" [precision]="1" minUnit="minute"></app-timestamp>
                 </td>
               </tr>
+              <tr *ngIf="network !== 'liquid' && network !== 'liquidtestnet' && block.extras?.cadence">
+                <td i18n="cadence.lane|Cadence mining lane field">Lane</td>
+                <td>
+                  <app-cadence-lane-badge
+                    data-cy="block-details-cadence-lane"
+                    [cadence]="block.extras.cadence"
+                    [showChainId]="true"
+                  ></app-cadence-lane-badge>
+                </td>
+              </tr>
               <tr>
                 <td i18n="block.size">Size</td>
                 <td [innerHTML]="'&lrm;' + (block.size | bytes: 2)"></td>
@@ -94,6 +104,9 @@
                 <td colspan="2"><span class="skeleton-loader"></span></td>
               </tr>
               <tr>
+                <td colspan="2"><span class="skeleton-loader"></span></td>
+              </tr>
+              <tr *ngIf="network !== 'liquid' && network !== 'liquidtestnet'">
                 <td colspan="2"><span class="skeleton-loader"></span></td>
               </tr>
               <tr *ngIf="showComparison">
@@ -205,6 +218,15 @@
             {{ block.extras.pool.name }}
         </span>
         </td>
+      </tr>
+      <!-- The AuxPoW parent header is a work candidate and may not be part of Bitcoin's accepted chain -->
+      <tr *ngIf="block.extras?.auxpow" data-cy="block-details-auxpow-parent">
+        <td i18n="block.auxpow-parent-work-hash|Unverified hash of the parent-chain header carrying the AuxPoW work">Parent work hash</td>
+        <td>&lrm;<span title="{{ block.extras.auxpow.parentBlockHash }}">{{ block.extras.auxpow.parentBlockHash | shortenString : 13 }}</span> <app-clipboard [text]="block.extras.auxpow.parentBlockHash"></app-clipboard></td>
+      </tr>
+      <tr *ngIf="block.extras?.auxpow && (block.extras.auxpow.parentCoinbaseRaw | hex2ascii)">
+        <td i18n="block.auxpow-parent-coinbase-tag|Coinbase tag of the AuxPoW parent work">Parent coinbase tag</td>
+        <td><span class="badge badge-secondary scriptmessage longer">{{ block.extras.auxpow.parentCoinbaseRaw | hex2ascii }}</span></td>
       </tr>
     </ng-container>
     <ng-template #loadingRest>
@@ -328,7 +350,10 @@
               <tbody>
                 <tr>
                   <td class="td-width" i18n="transaction.version">Version</td>
-                  <td>{{ block.version | decimal2hex }} <span *ngIf="displayTaprootStatus() && hasTaproot(block.version)" class="badge badge-success ml-1" i18n="tx-features.tag.taproot|Taproot">Taproot</span></td>
+                  <td>
+                    {{ block.version | decimal2hex }}
+                    <span *ngIf="displayTaprootStatus() && hasTaproot(block.version)" class="badge badge-success ml-1" i18n="tx-features.tag.taproot|Taproot">Taproot</span>
+                  </td>
                 </tr>
                 <tr *ngIf="network !== 'liquid' && network !== 'liquidtestnet'">
                   <td i18n="block.bits">Bits</td>

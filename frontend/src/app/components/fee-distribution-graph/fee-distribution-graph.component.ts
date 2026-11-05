@@ -5,6 +5,7 @@ import { StateService } from '@app/services/state.service';
 import { VbytesPipe } from '@app/shared/pipes/bytes-pipe/vbytes.pipe';
 import { selectPowerOfTen } from '@app/bitcoin.utils';
 import { Subscription } from 'rxjs';
+import { weightToFractionalVsize } from '@app/shared/weight-units';
 
 @Component({
   selector: 'app-fee-distribution-graph',
@@ -74,7 +75,7 @@ export class FeeDistributionGraphComponent implements OnInit, OnChanges, OnDestr
     const txs = this.transactions.map(tx => { return { vsize: tx.vsize, rate: tx.rate ?? (tx.fee / tx.vsize) }; }).sort((a, b) => { return b.rate - a.rate; });
     this.maxValue = txs.length ? txs.reduce((max, tx) => Math.max(max, tx.rate), 0) : 0;
     this.minValue = txs.length ? txs.reduce((min, tx) => Math.min(min, tx.rate), Infinity) : 0;
-    const maxBlockVSize = this.stateService.env.BLOCK_WEIGHT_UNITS / 4;
+    const maxBlockVSize = weightToFractionalVsize(this.stateService.env.BLOCK_WEIGHT_UNITS);
     const sampleInterval = maxBlockVSize / this.numSamples;
     let cumVSize = 0;
     let sampleIndex = 0;
@@ -142,7 +143,7 @@ export class FeeDistributionGraphComponent implements OnInit, OnChanges, OnDestr
         axisLabel: {
           show: !this.smallScreen,
           formatter: (value: number): string => {
-            const unitValue = this.weightMode ? value / 4 : value;
+            const unitValue = this.weightMode ? weightToFractionalVsize(value) : value;
             const selectedPowerOfTen = selectPowerOfTen(unitValue);
             const scaledValue = unitValue / selectedPowerOfTen.divider;
             const newVal = '';
@@ -172,7 +173,7 @@ export class FeeDistributionGraphComponent implements OnInit, OnChanges, OnDestr
           fontSize: this.smallScreen ? 10 : 12,
           formatter: (label: { data: number[] }): string => {
             const value = label.data[1];
-            const unitValue = this.weightMode ? value / 4 : value;
+            const unitValue = this.weightMode ? weightToFractionalVsize(value) : value;
             const selectedPowerOfTen = selectPowerOfTen(unitValue);
             const scaledValue = unitValue / selectedPowerOfTen.divider;
             const newVal = scaledValue >= 100 ? Math.round(scaledValue) : scaledValue.toPrecision(3);

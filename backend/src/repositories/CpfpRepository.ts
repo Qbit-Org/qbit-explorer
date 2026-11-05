@@ -3,6 +3,7 @@ import DB from '../database';
 import logger from '../logger';
 import { Ancestor, CpfpCluster } from '../mempool.interfaces';
 import transactionRepository from '../repositories/TransactionRepository';
+import { feeRatePerVsize } from '../utils/weight-units';
 
 class CpfpRepository {
   public async $batchSaveClusters(clusters: { root: string, height: number, txs: Ancestor[], effectiveFeePerVsize: number }[]): Promise<boolean> {
@@ -14,7 +15,7 @@ class CpfpRepository {
         if (cluster.txs?.length) {
           const roundedEffectiveFee = Math.round(cluster.effectiveFeePerVsize * 100) / 100;
           const equalFee = cluster.txs.length > 1 && cluster.txs.reduce((acc, tx) => {
-            return (acc && Math.round(((tx.fee || 0) / (tx.weight / 4)) * 100) / 100 === roundedEffectiveFee);
+            return (acc && Math.round(feeRatePerVsize(tx.fee, tx.weight) * 100) / 100 === roundedEffectiveFee);
           }, true);
           if (!equalFee) {
             clusterValues.push([

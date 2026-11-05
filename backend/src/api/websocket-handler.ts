@@ -21,13 +21,9 @@ import BlocksSummariesRepository from '../repositories/BlocksSummariesRepository
 import Audit from './audit';
 import priceUpdater from '../tasks/price-updater';
 import { ApiPrice } from '../repositories/PricesRepository';
-import { Acceleration } from './services/acceleration';
-import accelerationApi from './services/acceleration';
-import mempool from './mempool';
+import { vsizeToWeight } from '../utils/weight-units';
 import statistics from './statistics/statistics';
-import accelerationRepository from '../repositories/AccelerationRepository';
 import bitcoinApi from './bitcoin/bitcoin-api-factory';
-import walletApi from './services/wallets';
 
 interface AddressTransactions {
   mempool: MempoolTransactionExtended[],
@@ -59,8 +55,6 @@ class WebsocketHandler {
   private serializedInitData: string = '{}';
   private lastRbfSummary: ReplacementInfo[] | null = null;
   private mempoolSequence: number = 0;
-
-  private accelerations: Record<string, Acceleration> = {};
 
   constructor() { }
 
@@ -310,22 +304,6 @@ class WebsocketHandler {
             }
           }
 
-          if (parsedMessage && parsedMessage['track-wallet']) {
-            if (parsedMessage['track-wallet'] === 'stop') {
-              client['track-wallet'] = null;
-            } else {
-              client['track-wallet'] = parsedMessage['track-wallet'];
-            }
-          }
-
-          if (parsedMessage && parsedMessage['track-asset']) {
-            if (/^[a-fA-F0-9]{64}$/.test(parsedMessage['track-asset'])) {
-              client['track-asset'] = parsedMessage['track-asset'];
-            } else {
-              client['track-asset'] = null;
-            }
-          }
-
           if (parsedMessage && parsedMessage['track-mempool-block'] !== undefined) {
             if (Number.isInteger(parsedMessage['track-mempool-block']) && parsedMessage['track-mempool-block'] >= 0) {
               const index = parsedMessage['track-mempool-block'];
@@ -358,17 +336,6 @@ class WebsocketHandler {
               }
             } else {
               client['track-rbf-summary'] = false;
-            }
-          }
-
-          if (parsedMessage && parsedMessage['track-accelerations'] != null) {
-            if (parsedMessage['track-accelerations']) {
-              client['track-accelerations'] = true;
-              response['accelerations'] = JSON.stringify({
-                accelerations: Object.values(memPool.getAccelerations()),
-              });
-            } else {
-              client['track-accelerations'] = false;
             }
           }
 
@@ -507,52 +474,20 @@ class WebsocketHandler {
     }
   }
 
-  handleAccelerationsChanged(accelerations: Record<string, Acceleration>): void {
-    if (!this.webSocketServers.length) {
-      throw new Error('No WebSocket.Server has been set');
-    }
-
-    const websocketAccelerationDelta = accelerationApi.getAccelerationDelta(this.accelerations, accelerations);
-    this.accelerations = accelerations;
-
-    if (!websocketAccelerationDelta.length) {
-      return;
-    }
-
-    // pre-compute acceleration delta
-    const accelerationUpdate = {
-      added: websocketAccelerationDelta.map(txid => accelerations[txid]).filter(acc => acc != null),
-      removed: websocketAccelerationDelta.filter(txid => !accelerations[txid]),
-    };
-
-    try {
-      const response = JSON.stringify({
-        accelerations: accelerationUpdate,
-      });
-
-      for (const server of this.webSocketServers) {
-        server.clients.forEach((client) => {
-          if (client.readyState !== WebSocket.OPEN) {
-            return;
-          }
-          client.send(response);
-        });
-      }
-    } catch (e) {
-      logger.debug(`Error sending acceleration update to websocket clients: ${e}`);
-    }
-  }
-
-  handleReorg(): void {
+  handleReorg(tipBlock?: BlockExtended): void {
     if (!this.webSocketServers.length) {
       throw new Error('No WebSocket.Server have been set');
     }
 
-    const da = difficultyAdjustment.getDifficultyAdjustment();
+    // during a reorg the rebuilt cache ends at the new chain's parent block;
+    // the block being processed is only appended afterwards, so it must be
+    // passed explicitly for both the published block list and the difficulty
+    // state to describe the actual tip consistently
+    const da = difficultyAdjustment.getDifficultyAdjustment(tipBlock);
 
     // update init data
     this.updateSocketDataFields({
-      'blocks': blocks.getBlocks(),
+      'blocks': tipBlock ? [...blocks.getBlocks(), tipBlock] : blocks.getBlocks(),
       'da': da?.previousTime ? da : undefined,
     });
 
@@ -608,9 +543,9 @@ class WebsocketHandler {
     }
 
     if (config.MEMPOOL.RUST_GBT) {
-      await mempoolBlocks.$rustUpdateBlockTemplates(transactionIds, newMempool, added, removed, candidates, true);
+      await mempoolBlocks.$rustUpdateBlockTemplates(transactionIds, newMempool, added, removed, candidates, false);
     } else {
-      await mempoolBlocks.$updateBlockTemplates(transactionIds, newMempool, added, removed, candidates, accelerationDelta, true, true);
+      await mempoolBlocks.$updateBlockTemplates(transactionIds, newMempool, added, removed, candidates, accelerationDelta, true, false);
     }
 
     const mBlocks = mempoolBlocks.getMempoolBlocks();
@@ -619,7 +554,6 @@ class WebsocketHandler {
     const vBytesPerSecond = memPool.getVBytesPerSecond();
     const rbfTransactions = Common.findRbfTransactions(newTransactions, recentlyDeletedTransactions.flat());
     const da = difficultyAdjustment.getDifficultyAdjustment();
-    const accelerations = accelerationApi.getAccelerations();
     memPool.handleRbfTransactions(rbfTransactions);
     const rbfChanges = rbfCache.getRbfChanges();
     let rbfReplacements;
@@ -727,15 +661,6 @@ class WebsocketHandler {
     const addressCache = this.makeAddressCache(newTransactions);
     const removedAddressCache = this.makeAddressCache(deletedTransactions);
 
-    const websocketAccelerationDelta = accelerationApi.getAccelerationDelta(this.accelerations, accelerations);
-    this.accelerations = accelerations;
-
-    // pre-compute acceleration delta
-    const accelerationUpdate = {
-      added: websocketAccelerationDelta.map(txid => accelerations[txid]).filter(acc => acc != null),
-      removed: websocketAccelerationDelta.filter(txid => !accelerations[txid]),
-    };
-
     // TODO - Fix indentation after PR is merged
     for (const server of this.webSocketServers) {
     server.clients.forEach(async (client) => {
@@ -836,34 +761,6 @@ class WebsocketHandler {
 
         if (Object.keys(spkMap).length > 0) {
           response['multi-scriptpubkey-transactions'] = JSON.stringify(spkMap);
-        }
-      }
-
-      if (client['track-asset']) {
-        const foundTransactions: TransactionExtended[] = [];
-
-        newTransactions.forEach((tx) => {
-          if (client['track-asset'] === Common.nativeAssetId) {
-            if (tx.vin.some((vin) => !!vin.is_pegin)) {
-              foundTransactions.push(tx);
-              return;
-            }
-            if (tx.vout.some((vout) => !!vout.pegout)) {
-              foundTransactions.push(tx);
-            }
-          } else {
-            if (tx.vin.some((vin) => !!vin.issuance && vin.issuance.asset_id === client['track-asset'])) {
-              foundTransactions.push(tx);
-              return;
-            }
-            if (tx.vout.some((vout) => !!vout.asset && vout.asset === client['track-asset'])) {
-              foundTransactions.push(tx);
-            }
-          }
-        });
-
-        if (foundTransactions.length) {
-          response['address-transactions'] = JSON.stringify(foundTransactions);
         }
       }
 
@@ -990,10 +887,6 @@ class WebsocketHandler {
         response['mempool-transactions'] = getCachedResponse('mempool-transactions', mempoolDelta);
       }
 
-      if (client['track-accelerations'] && (accelerationUpdate.added.length || accelerationUpdate.removed.length)) {
-        response['accelerations'] = getCachedResponse('accelerations', accelerationUpdate);
-      }
-
       if (Object.keys(response).length) {
         client.send(this.serializeResponse(response));
       }
@@ -1019,11 +912,6 @@ class WebsocketHandler {
     let candidates: GbtCandidates | undefined = (memPool.limitGBT && candidateTxs) ? { txs: candidateTxs, added: [], removed: [] } : undefined;
     let transactionIds: string[] = (memPool.limitGBT) ? Object.keys(candidates?.txs || {}) : Object.keys(_memPool);
 
-    if (config.DATABASE.ENABLED) {
-      const accelerations = Object.values(mempool.getAccelerations());
-      await accelerationRepository.$indexAccelerationsForBlock(block, accelerations, structuredClone(transactions));
-    }
-
     const rbfTransactions = Common.findMinedRbfTransactions(transactions, memPool.getSpendMap());
     memPool.handleRbfTransactions(rbfTransactions);
     memPool.removeFromSpendMap(transactions);
@@ -1031,7 +919,7 @@ class WebsocketHandler {
     if (config.MEMPOOL.AUDIT && memPool.isInSync()) {
       let projectedBlocks;
       const auditMempool = _memPool;
-      const isAccelerated = accelerationApi.isAcceleratedBlock(block, Object.values(mempool.getAccelerations()));
+      const isAccelerated = false;
 
       if (config.MEMPOOL.RUST_GBT) {
         const added = memPool.limitGBT ? (candidates?.added || []) : [];
@@ -1051,7 +939,7 @@ class WebsocketHandler {
         let totalWeight = 0;
         for (const tx of stripped) {
           totalFees += tx.fee;
-          totalWeight += (tx.vsize * 4);
+          totalWeight += vsizeToWeight(tx.vsize);
         }
 
         void BlocksSummariesRepository.$saveTemplate({
@@ -1125,7 +1013,9 @@ class WebsocketHandler {
     const mBlocks = mempoolBlocks.getMempoolBlocks();
     const mBlockDeltas = mempoolBlocks.getMempoolBlockDeltas();
 
-    const da = difficultyAdjustment.getDifficultyAdjustment();
+    // the new block is not in the blocks cache yet (it is appended after the
+    // new-block callbacks complete), so pass it explicitly
+    const da = difficultyAdjustment.getDifficultyAdjustment(block);
     const fees = feeApi.getPreciseRecommendedFee();
     const mempoolInfo = memPool.getMempoolInfo();
 
@@ -1168,9 +1058,6 @@ class WebsocketHandler {
       mined: transactions.map(tx => tx.txid),
       replaced: replacedTransactions,
     };
-
-    // check for wallet transactions
-    const walletTransactions = config.WALLETS.ENABLED ? walletApi.processBlock(block, transactions) : [];
 
     const responseCache = { ...this.socketData };
     function getCachedResponse(key, data): string {
@@ -1311,43 +1198,6 @@ class WebsocketHandler {
         }
       }
 
-      if (client['track-asset']) {
-        const foundTransactions: TransactionExtended[] = [];
-
-        transactions.forEach((tx) => {
-          if (client['track-asset'] === Common.nativeAssetId) {
-            if (tx.vin && tx.vin.some((vin) => !!vin.is_pegin)) {
-              foundTransactions.push(tx);
-              return;
-            }
-            if (tx.vout && tx.vout.some((vout) => !!vout.pegout)) {
-              foundTransactions.push(tx);
-            }
-          } else {
-            if (tx.vin && tx.vin.some((vin) => !!vin.issuance && vin.issuance.asset_id === client['track-asset'])) {
-              foundTransactions.push(tx);
-              return;
-            }
-            if (tx.vout && tx.vout.some((vout) => !!vout.asset && vout.asset === client['track-asset'])) {
-              foundTransactions.push(tx);
-            }
-          }
-        });
-
-        if (foundTransactions.length) {
-          foundTransactions.forEach((tx) => {
-            tx.status = {
-              confirmed: true,
-              block_height: block.height,
-              block_hash: block.id,
-              block_time: block.timestamp,
-            };
-          });
-
-          response['block-transactions'] = JSON.stringify(foundTransactions);
-        }
-      }
-
       if (client['track-mempool-block'] >= 0 && memPool.isInSync()) {
         const index = client['track-mempool-block'];
 
@@ -1374,11 +1224,6 @@ class WebsocketHandler {
 
       if (client['track-mempool']) {
         response['mempool-transactions'] = getCachedResponse('mempool-transactions', mempoolDelta);
-      }
-
-      if (client['track-wallet']) {
-        const trackedWallet = client['track-wallet'];
-        response['wallet-transactions'] = getCachedResponse(`wallet-transactions-${trackedWallet}`, walletTransactions[trackedWallet] ?? {});
       }
 
       if (Object.keys(response).length) {

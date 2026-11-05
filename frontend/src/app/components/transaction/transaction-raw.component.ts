@@ -16,6 +16,7 @@ import { seoDescriptionNetwork } from '@app/shared/common.utils';
 import { ApiService } from '@app/services/api.service';
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
 import { CpfpInfo } from '@interfaces/node-api.interface';
+import { feeRatePerVsize, sigopsToAdjustedVsize, WITNESS_SCALE_FACTOR, weightToFractionalVsize } from '@app/shared/weight-units';
 
 @Component({
   selector: 'app-transaction-raw',
@@ -88,7 +89,7 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.seoService.setTitle($localize`:@@d7f92e6fe26fba6fff568cbdae5db4a5c8c6a55c:Preview Transaction`);
-    this.seoService.setDescription($localize`:@@meta.description.preview-tx:Preview a transaction to the Bitcoin${seoDescriptionNetwork(this.stateService.network)} network using the transaction's raw hex data.`);
+    this.seoService.setDescription($localize`:@@meta.description.preview-tx:Preview a transaction to the qbit${seoDescriptionNetwork(this.stateService.network)} network using the transaction's raw hex data.`);
     this.websocketService.want(['blocks', 'mempool-blocks']);
     this.pushTxForm = this.formBuilder.group({
       txRaw: ['', Validators.required],
@@ -201,11 +202,11 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
     }
 
     this.sizeFromMissingSig = missingWitnessBytes + missingNonWitnessBytes;
-    this.weightFromMissingSig = missingWitnessBytes + 4 * missingNonWitnessBytes;
+    this.weightFromMissingSig = missingWitnessBytes + WITNESS_SCALE_FACTOR * missingNonWitnessBytes;
 
     if (this.weightFromMissingSig) {
       this.tooltipSize = `Includes ${this.bytesPipe.transform(this.sizeFromMissingSig, 2, undefined, undefined, true)} added for missing signatures`;
-      this.tooltipVsize = `Includes ${this.vbytesPipe.transform(this.weightFromMissingSig / 4, 2, undefined, undefined, true)} added for missing signatures`;
+      this.tooltipVsize = `Includes ${this.vbytesPipe.transform(weightToFractionalVsize(this.weightFromMissingSig), 2, undefined, undefined, true)} added for missing signatures`;
       this.tooltipWeight = `Includes ${this.wuBytesPipe.transform(this.weightFromMissingSig, 2, undefined, undefined, true)} added for missing signatures`;
     }
 
@@ -217,9 +218,9 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
         : transaction.vin.reduce((fee, input) => {
           return fee + (input.prevout?.value || 0);
         }, 0) - transaction.vout.reduce((sum, output) => sum + output.value, 0);
-      transaction.feePerVsize = transaction.fee / ((transaction.weight + this.weightFromMissingSig) / 4);
+      transaction.feePerVsize = feeRatePerVsize(transaction.fee, transaction.weight + this.weightFromMissingSig);
       transaction.sigops = countSigops(transaction);
-      this.adjustedVsize = Math.max((transaction.weight + this.weightFromMissingSig) / 4, transaction.sigops * 5);
+      this.adjustedVsize = Math.max(weightToFractionalVsize(transaction.weight + this.weightFromMissingSig), sigopsToAdjustedVsize(transaction.sigops));
       const adjustedFeePerVsize = transaction.fee / this.adjustedVsize;
       if (adjustedFeePerVsize !== transaction.feePerVsize) {
         transaction.effectiveFeePerVsize = adjustedFeePerVsize;

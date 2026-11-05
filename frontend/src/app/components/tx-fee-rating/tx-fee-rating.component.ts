@@ -4,6 +4,7 @@ import { StateService } from '@app/services/state.service';
 import { Subscription } from 'rxjs';
 import { BlockExtended } from '@interfaces/node-api.interface';
 import { CacheService } from '@app/services/cache.service';
+import { feeRatePerVsize } from '@app/shared/weight-units';
 
 @Component({
   selector: 'app-tx-fee-rating',
@@ -56,7 +57,7 @@ export class TxFeeRatingComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   calculateRatings(block: BlockExtended) {
-    const feePervByte = this.tx.effectiveFeePerVsize || this.tx.fee / (this.tx.weight / 4);
+    const feePervByte = this.tx.effectiveFeePerVsize || feeRatePerVsize(this.tx.fee, this.tx.weight);
     this.medianFeeNeeded = block?.extras?.medianFee;
 
     // Block not filled or sub-sat median fee

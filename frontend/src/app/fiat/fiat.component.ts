@@ -38,4 +38,25 @@ export class FiatComponent implements OnInit, OnDestroy {
     this.currencySubscription.unsubscribe();
   }
 
+  getBlockConversion(): number | null {
+    if (!this.blockConversion) {
+      return null;
+    }
+    const directPrice = this.blockConversion.price[this.currency];
+    if (directPrice > -1) {
+      return directPrice;
+    }
+    const usdPrice = this.blockConversion.price['USD'];
+    const exchangeRate = this.blockConversion.exchangeRates['USD' + this.currency];
+    if (usdPrice > -1 && exchangeRate) {
+      return usdPrice * exchangeRate;
+    }
+    return null;
+  }
+
+  getConversion(conversions: any): number | null {
+    const conversion = conversions?.[this.currency];
+    return conversion > -1 ? conversion : null;
+  }
+
 }

@@ -1,38 +1,108 @@
-# The Mempool Open Source Project® [![mempool](https://img.shields.io/endpoint?url=https://dashboard.cypress.io/badge/simple/ry4br7/master&style=flat-square)](https://dashboard.cypress.io/projects/ry4br7/runs)
+# qbit-explorer
 
-https://user-images.githubusercontent.com/93150691/226236121-375ea64f-b4a1-4cc0-8fad-a6fb33226840.mp4
+qbit-explorer is an open-source block explorer and mempool visualizer for
+[qbit](https://qbit.org). It shows blocks, transactions, addresses, the
+mempool, fees and mining in real time, and serves a REST and WebSocket API.
+It runs at <https://mempool.qbit.org>.
 
-<br>
+It is a fork of [mempool/mempool](https://github.com/mempool/mempool) (see
+[Upstream](#upstream)), adapted to qbit: 2,000,000 weight-unit blocks with no
+witness discount (`vsize == weight`), qbit address formats, and P2MR and
+post-quantum signatures.
 
-Mempool is the fully-featured mempool visualizer, explorer, and API service running at [mempool.space](https://mempool.space/). 
+## Networks
 
-It is an open-source project developed and operated for the benefit of the Bitcoin community, with a focus on the emerging transaction fee market that is evolving Bitcoin into a multi-layer ecosystem.
+| Network | Public instance |
+| --- | --- |
+| mainnet | <https://mempool.qbit.org> |
+| testnet4 | <https://mempool-testnet.qbit.org> |
+| regtest | None. Run it locally with [docs/qbit-local-dev.md](docs/qbit-local-dev.md). |
 
-# Installation Methods
+## Architecture
 
-Mempool can be self-hosted on a wide variety of your own hardware, ranging from a simple one-click installation on a Raspberry Pi full-node distro all the way to a robust production instance on a powerful FreeBSD server. 
+- [`frontend/`](frontend/): the Angular web app.
+- [`backend/`](backend/): a Node.js and TypeScript service that serves the
+  REST and WebSocket API. It talks to `qbitd` over RPC and keeps its own data
+  in MariaDB.
+- [`rust/gbt/`](rust/gbt/): the block-template algorithm in Rust, built as a
+  Node.js addon. It still applies Bitcoin's witness scale factor of 4, so the
+  backend leaves it off (`MEMPOOL.RUST_GBT`) and projects the next blocks from
+  the mempool with its TypeScript implementation.
+- `qbitd`, the qbit node from [Qbit-Org/qbit](https://github.com/Qbit-Org/qbit).
+  Required.
+- [Qbit-Org/qbit-electrs](https://github.com/Qbit-Org/qbit-electrs), an
+  optional indexer. Its Esplora REST API (`MEMPOOL.BACKEND=esplora`) adds
+  address pages and the Esplora-compatible API endpoints. Without it
+  (`MEMPOOL.BACKEND=none`), the backend runs on `qbitd` RPC alone.
 
-Most people should use a <a href="#one-click-installation">one-click install method</a>.
+## Getting started
 
-Other install methods are meant for developers and others with experience managing servers. If you want support for your own production instance of Mempool, or if you'd like to have your own instance of Mempool run by the mempool.space team on their own global ISP infrastructure—check out <a href="https://mempool.space/enterprise" target="_blank">Mempool Enterprise®</a>.
+- [docs/qbit-local-dev.md](docs/qbit-local-dev.md): run the whole stack on
+  your machine against a qbit regtest node.
+- [backend/README.md](backend/README.md) and
+  [frontend/README.md](frontend/README.md): set up, configure and build each
+  part.
+- [`docker/`](docker/): run the explorer with Docker.
+- [production/README.md](production/README.md): run a production instance.
 
-<a id="one-click-installation"></a>
-## One-Click Installation
+## Contributing
 
-Mempool can be conveniently installed on the following full-node distros: 
-- [Umbrel](https://github.com/getumbrel/umbrel)
-- [RaspiBlitz](https://github.com/rootzoll/raspiblitz)
-- [RoninDojo](https://code.samourai.io/ronindojo/RoninDojo)
-- [myNode](https://github.com/mynodebtc/mynode)
-- [StartOS](https://github.com/Start9Labs/start-os)
-- [nix-bitcoin](https://github.com/fort-nix/nix-bitcoin/blob/a1eacce6768ca4894f365af8f79be5bbd594e1c3/examples/configuration.nix#L129)
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before you open a pull request.
+[AGENTS.md](AGENTS.md) has the validation gates, the test mapping by area,
+and the qbit consensus reference.
 
-**We highly recommend you deploy your own Mempool instance this way.** No matter which option you pick, you'll be able to get your own fully-sovereign instance of Mempool up quickly without needing to fiddle with any settings.
+## Security
 
-## Advanced Installation Methods
+Do not report security problems in public issues. Follow
+[SECURITY.md](SECURITY.md) instead.
 
-Mempool can be installed in other ways too, but we only recommend doing so if you're a developer, have experience managing servers, or otherwise know what you're doing.
+## Upstream
 
-- See the [`docker/`](./docker/) directory for instructions on deploying Mempool with Docker.
-- See the [`backend/`](./backend/) and [`frontend/`](./frontend/) directories for manual install instructions oriented for developers.
-- See the [`production/`](./production/) directory for guidance on setting up a more serious Mempool instance designed for high performance at scale.
+qbit-explorer is based on [mempool/mempool](https://github.com/mempool/mempool)
+[v3.3.1](https://github.com/mempool/mempool/releases/tag/v3.3.1), commit
+[`9332d9db97bcc7beed079acc8f79aa21c9b12a3b`](https://github.com/mempool/mempool/commit/9332d9db97bcc7beed079acc8f79aa21c9b12a3b).
+This repository does not include upstream's git history.
+
+To bring in an upstream fix, add the upstream remote and cherry-pick the
+commit:
+
+```sh
+git remote add upstream https://github.com/mempool/mempool.git
+git fetch upstream
+git cherry-pick -x <upstream-commit>
+```
+
+This works without shared history, because a cherry-pick applies the
+difference between the upstream commit and its parent. Expect conflicts where
+qbit has changed the same code. Upstream merges pull requests with merge
+commits, so to pick a whole pull request at once, cherry-pick its merge commit
+with `-m 1`. The `-x` flag records the upstream SHA in the commit message.
+
+Upstream pull requests usually add or edit a `contributors/<name>.txt` file that
+signs upstream's contributor license agreement. qbit-explorer has no CLA (see
+[CONTRIBUTING.md](CONTRIBUTING.md#license)), so keep `contributors/` out of the
+tree. If a pick conflicts on one of those files, resolve the conflict with
+`git rm`. Before you push, check that `git ls-files contributors` prints
+nothing, and remove anything it lists in another commit. CI's Repository checks
+job fails a pull request that still has them. Pull requests are squash-merged,
+so files removed in a later commit never reach `main`.
+
+## License
+
+qbit-explorer is licensed under the GNU Affero General Public License,
+version 3. [LICENSE](LICENSE) holds the copyright and trademark notices and
+the license grant, and [COPYING.md](COPYING.md) holds the full license text.
+
+If you run a modified version as a network service, section 13 of the license
+requires you to offer its source code to the users of that service.
+
+## Trademarks
+
+The Mempool Open Source Project®, mempool.space® and the other mempool names
+and logos listed in [LICENSE](LICENSE) are trademarks of Mempool Space K.K.
+qbit-explorer is not affiliated with or endorsed by Mempool Space K.K.
+
+If you run your own instance, you may keep the Qbit name and logo that come with
+this software, but don't present your instance as an official Qbit service. To
+remove qbit.org's header and footer, see
+[Frontend customization](production/README.md#frontend-customization).

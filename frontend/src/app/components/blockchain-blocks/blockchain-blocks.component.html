@@ -16,6 +16,13 @@
         [class.blink-bg]="isSpecial(block.height)">
         <a draggable="false" [routerLink]="[getHref(i, block) | relativeUrl]" [state]="{ data: { block: block } }"
           class="blockLink" [ngClass]="{'disabled': (this.stateService.blockScrolling$ | async)}">&nbsp;</a>
+        <app-cadence-lane-badge
+          *ngIf="!minimal && network !== 'liquid' && network !== 'liquidtestnet'"
+          class="cadence-lane"
+          data-cy="blockchain-block-cadence-lane"
+          [cadence]="block.extras?.cadence"
+          [compact]="true"
+        ></app-cadence-lane-badge>
         <div *ngIf="!minimal" [attr.data-cy]="'bitcoin-block-' + i + '-height'" class="block-height">
           <a [routerLink]="[getHref(i, block) | relativeUrl]" [state]="{ data: { block: block } }" class="block-height-link">{{ block.height
             }}</a>

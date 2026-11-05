@@ -3,7 +3,6 @@
 <div class="container-xl" style="min-height: 335px" [ngClass]="{'widget': widget, 'full-height': !widget, 'legacy': !isMempoolModule}">
   <div *ngIf="!widget" class="float-left" style="display: flex; width: 100%; align-items: center;">
     <h1 i18n="master-page.blocks">Blocks</h1>
-    <app-svg-images name="blocks-2-3" style="width: 275px; max-width: 90%; margin-top: -10px"></app-svg-images>
     <div *ngIf="!widget && isLoading" class="spinner-border" role="status"></div>
   </div>
 
@@ -13,6 +12,7 @@
     <table class="table table-borderless">
       <thead>
         <th class="height text-left" [ngClass]="{'widget': widget, 'legacy': !isMempoolModule}" i18n="latest-blocks.height">Height</th>
+        <th *ngIf="!widget && stateService.network !== 'liquid' && stateService.network !== 'liquidtestnet'" class="lane text-left" i18n="cadence.lane|Cadence mining lane column">Lane</th>
         <th *ngIf="isMempoolModule" class="pool text-left" [ngClass]="{'widget': widget, 'legacy': !isMempoolModule}" i18n="mining.pool-name"
           i18n-ngbTooltip="mining.pool-name" ngbTooltip="Pool" placement="bottom" #miningpool [disableTooltip]="!isEllipsisActive(miningpool)">Pool</th>
         <th class="timestamp" i18n="latest-blocks.timestamp" *ngIf="!widget" [class]="isMempoolModule ? '' : 'legacy'">Timestamp</th>
@@ -31,6 +31,13 @@
         <tr *ngFor="let block of blocks; let i= index; trackBy: trackByBlock">
           <td class="height text-left" [class]="widget ? 'widget' : ''">
             <a [routerLink]="['/block' | relativeUrl, block.id]" [state]="{ data: { block: block } }">{{ block.height }}</a>
+          </td>
+          <td *ngIf="!widget && stateService.network !== 'liquid' && stateService.network !== 'liquidtestnet'" class="lane text-left">
+            <app-cadence-lane-badge
+              data-cy="blocks-list-cadence-lane"
+              [cadence]="block.extras?.cadence"
+              [compact]="true"
+            ></app-cadence-lane-badge>
           </td>
           <td  *ngIf="isMempoolModule" class="pool text-left" [ngClass]="{'widget': widget, 'legacy': !isMempoolModule}">
             <div *ngIf="indexingAvailable" class="tooltip-custom">
@@ -93,6 +100,9 @@
           <tr *ngFor="let item of skeletonLines">
             <td class="height text-left" [ngClass]="{'widget': widget, 'legacy': !isMempoolModule}">
               <span class="skeleton-loader" style="max-width: 75px"></span>
+            </td>
+            <td *ngIf="!widget && stateService.network !== 'liquid' && stateService.network !== 'liquidtestnet'" class="lane text-left">
+              <span class="skeleton-loader" style="max-width: 100px"></span>
             </td>
             <td *ngIf="isMempoolModule" class="pool text-left" [ngClass]="{'widget': widget, 'legacy': !isMempoolModule}">
               <span class="skeleton-loader" style="max-width: 150px"></span>

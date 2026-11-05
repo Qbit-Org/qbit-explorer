@@ -12,6 +12,7 @@ import { originalChartColors as chartColors, poolsColor } from '@app/app.constan
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
 import { download } from '@app/shared/graphs.utils';
 import { isMobile } from '@app/shared/common.utils';
+import { expectedBlocksForTimespan as getExpectedBlocksForTimespan } from '@app/shared/block-target.utils';
 
 @Component({
   selector: 'app-pool-ranking',
@@ -58,7 +59,7 @@ export class PoolRankingComponent implements OnInit {
       this.miningWindowPreference = '1w';
     } else {
       this.seoService.setTitle($localize`:@@fe5317c6c60dd7e0e86f04d22f566f67cf04d404:Mining Pools`);
-      this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.pool-ranking:See the top Bitcoin mining pools ranked by number of blocks mined, over your desired timeframe.`);
+      this.seoService.setDescription($localize`:@@meta.description.bitcoin.graphs.pool-ranking:See the top qbit mining pools ranked by number of blocks mined, over your desired timeframe.`);
       this.miningWindowPreference = this.miningService.getDefaultTimespan('24h');
     }
     this.radioGroupForm = this.formBuilder.group({ dateSpan: this.miningWindowPreference });
@@ -101,7 +102,7 @@ export class PoolRankingComponent implements OnInit {
       )
       .pipe(
         map(data => {
-          data['minersLuck'] = (100 * (data.blockCount / 1008)).toFixed(2); // luck 1w
+          data.minersLuck = this.getMinersLuck(data.blockCount, data.totalBlockCount);
           return data;
         }),
         tap(data => {
@@ -110,6 +111,20 @@ export class PoolRankingComponent implements OnInit {
         }),
         shareReplay(1)
       );
+  }
+
+  expectedBlocksForTimespan(timespan: string): number {
+    return getExpectedBlocksForTimespan(timespan, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
+  }
+
+  hasIndexedTimespan(totalBlockCount: number, timespan: string): boolean {
+    return totalBlockCount >= this.expectedBlocksForTimespan(timespan);
+  }
+
+  private getMinersLuck(blockCount: number, totalBlockCount: number): string {
+    const expectedBlocks = this.expectedBlocksForTimespan('1w');
+    const availableBlocks = totalBlockCount > 0 ? Math.min(totalBlockCount, expectedBlocks) : expectedBlocks;
+    return (100 * (blockCount / Math.max(availableBlocks, 1))).toFixed(2);
   }
 
   generatePoolsChartSerieData(miningStats) {
@@ -323,4 +338,3 @@ export class PoolRankingComponent implements OnInit {
     return (e.offsetWidth < e.scrollWidth);
   }
 }
-

@@ -1,5 +1,4 @@
 import { Price } from '@app/services/price.service';
-import { IChannel } from '@interfaces/node-api.interface';
 import { ParsedTaproot } from '../shared/transaction.utils';
 
 export interface Transaction {
@@ -29,17 +28,11 @@ export interface Transaction {
   _unblinded?: any;
   _deduced?: boolean;
   _outspends?: Outspend[];
-  _channels?: TransactionChannels;
   price?: Price;
   sigops?: number;
   flags?: bigint;
   largeInput?: boolean;
   largeOutput?: boolean;
-}
-
-export interface TransactionChannels {
-  inputs: { [vin: number]: IChannel };
-  outputs: { [vout: number]: IChannel };
 }
 
 interface Ancestor {

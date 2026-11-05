@@ -33,121 +33,71 @@ const ADDRESS_CHARS: {
   };
 } = {
   mainnet: {
-    base58: `[13]` // Starts with a single 1 or 3
+    base58: `[QS]` // qbit P2PKH starts with Q, P2SH starts with S
       + BASE58_CHARS
-      + `{26,33}`, // Repeat the previous char 26-33 times.
-      // Version byte 0x00 (P2PKH) can be as short as 27 characters, up to 34 length
-      // P2SH must be 34 length
+      + `{26,34}`,
     bech32: `(?:`
-        + `bc1` // Starts with bc1
+        + `qb1` // Starts with qb1
         + BECH32_CHARS_LW
         + `{6,100}` // As per bech32, 6 char checksum is minimum
       + `|`
-        + `BC1` // All upper case version
+        + `QB1` // All upper case version
         + BECH32_CHARS_UP
         + `{6,100}`
       + `)`,
   },
   testnet: {
-    base58: `[mn2]` // Starts with a single m, n, or 2 (P2PKH is m or n, 2 is P2SH)
+    base58: `[qs]` // qbit test networks use q for P2PKH and s for P2SH
       + BASE58_CHARS
-      + `{33,34}`, // m|n is 34 length, 2 is 35 length (We match the first letter separately)
+      + `{26,34}`,
     bech32: `(?:`
-        + `tb1` // Starts with tb1
+        + `tq1` // Starts with tq1
         + BECH32_CHARS_LW
         + `{6,100}` // As per bech32, 6 char checksum is minimum
       + `|`
-        + `TB1` // All upper case version
+        + `TQ1` // All upper case version
         + BECH32_CHARS_UP
         + `{6,100}`
       + `)`,
   },
   testnet4: {
-    base58: `[mn2]` // Starts with a single m, n, or 2 (P2PKH is m or n, 2 is P2SH)
+    base58: `[qs]` // qbit test networks use q for P2PKH and s for P2SH
       + BASE58_CHARS
-      + `{33,34}`, // m|n is 34 length, 2 is 35 length (We match the first letter separately)
+      + `{26,34}`,
     bech32: `(?:`
-        + `tb1` // Starts with tb1
+        + `tq1` // Starts with tq1
         + BECH32_CHARS_LW
         + `{6,100}` // As per bech32, 6 char checksum is minimum
       + `|`
-        + `TB1` // All upper case version
+        + `TQ1` // All upper case version
         + BECH32_CHARS_UP
         + `{6,100}`
       + `)`,
   },
   signet: {
-    base58: `[mn2]`
+    base58: `[qs]`
       + BASE58_CHARS
-      + `{33,34}`,
+      + `{26,34}`,
     bech32: `(?:`
-        + `tb1` // Starts with tb1
+        + `tq1` // Starts with tq1
         + BECH32_CHARS_LW
         + `{6,100}`
       + `|`
-        + `TB1` // All upper case version
+        + `TQ1` // All upper case version
         + BECH32_CHARS_UP
         + `{6,100}`
       + `)`,
   },
   regtest: {
-    base58: `[mn2]` // Same as testnet
+    base58: `[qs]` // Same qbit base58 prefixes as public test networks
       + BASE58_CHARS
-      + `{33,34}`,
+      + `{26,34}`,
     bech32: `(?:`
-        + `bcrt1` // Starts with bcrt1
+        + `qbrt1` // Starts with qbrt1
         + BECH32_CHARS_LW
         + `{6,100}`
       + `|`
-        + `BCRT1` // All upper case version
-        + BECH32_CHARS_UP
-        + `{6,100}`
-      + `)`,
-  },
-  liquid: {
-    base58: `[GHPQ]` // PQ is P2PKH, GH is P2SH
-        + BASE58_CHARS
-        + `{33}` // All min-max lengths are 34
-      + `|`
-        + `[V][TJ]` // Confidential P2PKH or P2SH starts with VT or VJ
-        + BASE58_CHARS
-        + `{78}`,
-    bech32: `(?:`
-        + `(?:` // bech32 liquid starts with ex1 (unconfidential) or lq1 (confidential)
-          + `ex1`
-          + `|`
-          + `lq1`
-        + `)`
-        + BECH32_CHARS_LW // blech32 and bech32 are the same alphabet and protocol, different checksums.
-        + `{6,100}`
-      + `|`
-        + `(?:` // Same as above but all upper case
-          + `EX1`
-          + `|`
-          + `LQ1`
-        + `)`
-        + BECH32_CHARS_UP
-        + `{6,100}`
-      + `)`,
-  },
-  liquidtestnet: {
-    base58: `[89]` // ???(TODO: find version) is P2PKH, 8|9 is P2SH
-      + BASE58_CHARS
-      + `{33}`, // P2PKH is ???(TODO: find size), P2SH is 34
-    bech32: `(?:`
-        + `(?:` // bech32 liquid testnet starts with tex or tlq
-          + `tex1` // TODO: Why does mempool use this and not ert|el like in the elements source?
-          + `|`
-          + `tlq1` // TODO: does this exist?
-        + `)`
-        + BECH32_CHARS_LW // blech32 and bech32 are the same alphabet and protocol, different checksums.
-        + `{6,100}`
-      + `|`
-        + `(?:` // Same as above but all upper case
-          + `TEX1`
-          + `|`
-          + `TLQ1`
-        + `)`
+        + `QBRT1` // All upper case version
         + BECH32_CHARS_UP
         + `{6,100}`
       + `)`,
@@ -156,7 +106,7 @@ const ADDRESS_CHARS: {
 type RegexTypeNoAddrNoBlockHash = | `transaction` | `blockheight` | `date` | `timestamp`;
 export type RegexType = `address` | `blockhash` | RegexTypeNoAddrNoBlockHash;
 
-export const NETWORKS = [`mainnet`, `testnet4`, `testnet`, `signet`, `regtest`, `liquid`, `liquidtestnet`] as const;
+export const NETWORKS = [`mainnet`, `testnet4`, `testnet`, `signet`, `regtest`] as const;
 export type Network = typeof NETWORKS[number]; // Turn const array into union type
 
 export const ADDRESS_REGEXES: [RegExp, Network][] = NETWORKS
@@ -178,10 +128,6 @@ function isNetworkAvailable(network: Network, env: Env): boolean {
       return env.SIGNET_ENABLED === true;
     case 'regtest':
       return env.REGTEST_ENABLED === true;
-    case 'liquid':
-      return env.LIQUID_ENABLED === true;
-    case 'liquidtestnet':
-      return env.LIQUID_TESTNET_ENABLED === true;
     case 'mainnet':
       return true; // There is no "MAINNET_ENABLED" flag
     default:
@@ -189,24 +135,16 @@ function isNetworkAvailable(network: Network, env: Env): boolean {
   }
 }
 
-export function needBaseModuleChange(fromBaseModule: 'mempool' | 'liquid', toNetwork: Network): boolean {
+export function needBaseModuleChange(fromBaseModule: 'mempool', toNetwork: Network): boolean {
   if (!toNetwork) {return false;} // No target network means no change needed
   if (fromBaseModule === 'mempool') {
     return toNetwork !== 'mainnet' && toNetwork !== 'testnet' && toNetwork !== 'testnet4' && toNetwork !== 'signet' && toNetwork !== 'regtest';
   }
-  if (fromBaseModule === 'liquid') {
-    return toNetwork !== 'liquid' && toNetwork !== 'liquidtestnet';
-  }
+  return false;
 }
 
 export function getTargetUrl(toNetwork: Network, address: string, env: Env): string {
   let targetUrl = '';
-  if (toNetwork === 'liquid' || toNetwork === 'liquidtestnet') {
-    targetUrl = env.LIQUID_WEBSITE_URL;
-    targetUrl += (toNetwork === 'liquidtestnet' ? '/testnet' : '');
-    targetUrl += '/address/';
-    targetUrl += address;
-  }
   if (toNetwork === 'mainnet' || toNetwork === 'testnet' || toNetwork === 'testnet4' || toNetwork === 'signet' || toNetwork === 'regtest') {
     targetUrl = env.MEMPOOL_WEBSITE_URL;
     targetUrl += (toNetwork === 'mainnet' ? '' : `/${toNetwork}`);
@@ -249,12 +187,6 @@ export function getRegex(type: RegexType, network?: Network): RegExp {
           break;
         case `regtest`:
           leadingZeroes = 1; // Regtest has very low difficulty
-          break;
-        case `liquid`:
-          leadingZeroes = 8; // We are not interested in Liquid block hashes
-          break;
-        case `liquidtestnet`:
-          leadingZeroes = 8; // We are not interested in Liquid block hashes
           break;
         default:
           throw new Error(`Invalid Network ${network} (Unreachable error in TypeScript)`);
@@ -325,16 +257,6 @@ export function getRegex(type: RegexType, network?: Network): RegExp {
           regex += `04${HEX_CHARS}{128}`; // Uncompressed pubkey
           regex += `|`; // OR
           regex += `(?:02|03)${HEX_CHARS}{64}`; // Compressed pubkey
-          break;
-        case `liquid`:
-          regex += ADDRESS_CHARS.liquid.base58;
-          regex += `|`; // OR
-          regex += ADDRESS_CHARS.liquid.bech32;
-          break;
-        case `liquidtestnet`:
-          regex += ADDRESS_CHARS.liquidtestnet.base58;
-          regex += `|`; // OR
-          regex += ADDRESS_CHARS.liquidtestnet.bech32;
           break;
         default:
           throw new Error(`Invalid Network ${network} (Unreachable error in TypeScript)`);

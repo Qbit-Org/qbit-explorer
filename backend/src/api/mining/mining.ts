@@ -1,25 +1,26 @@
 import { BlockPrice, PoolInfo, PoolStats, RewardStats } from '../../mempool.interfaces';
-import BlocksRepository from '../../repositories/BlocksRepository';
+import BlocksRepository, { IncompleteHashrateWindowError } from '../../repositories/BlocksRepository';
 import PoolsRepository from '../../repositories/PoolsRepository';
-import HashratesRepository from '../../repositories/HashratesRepository';
+import HashratesRepository, { HashrateRecord } from '../../repositories/HashratesRepository';
 import bitcoinClient from '../bitcoin/bitcoin-client';
 import logger from '../../logger';
 import { Common } from '../common';
 import loadingIndicators from '../loading-indicators';
 import { escape } from 'mysql2';
-import DifficultyAdjustmentsRepository from '../../repositories/DifficultyAdjustmentsRepository';
 import config from '../../config';
 import BlocksAuditsRepository from '../../repositories/BlocksAuditsRepository';
 import PricesRepository from '../../repositories/PricesRepository';
 import bitcoinApi from '../bitcoin/bitcoin-api-factory';
 import { IEsploraApi } from '../bitcoin/esplora-api.interface';
 import database from '../../database';
+import { expectedBlocksForTimespan } from '../../utils/block-target';
+import { attributePoolHashrates, calcLaneHashratesForWindow, PoolLaneWork, QbitLaneHashrates, sumPoolLaneWork } from '../../utils/qbit-lane-hashrate';
+import { laneOf } from '../../utils/qbit-version';
 
-interface DifficultyBlock {
-  timestamp: number,
-  height: number,
-  bits: number,
-  difficulty: number,
+interface HashrateWindowStats {
+  laneHashrates: QbitLaneHashrates;
+  poolLaneWork: PoolLaneWork[];
+  poolBlockCounts: Map<number, number>;
 }
 
 class Mining {
@@ -28,7 +29,6 @@ class Mining {
   public lastWeeklyHashrateIndexingDate: number | null = null;
 
   public reindexHashrateRequested = false;
-  public reindexDifficultyAdjustmentRequested = false;
 
   private genesisData: {
     timestamp: number,
@@ -146,12 +146,28 @@ class Mining {
     const totalBlock1w: number = await BlocksRepository.$blockCount(null, '1w');
 
     try {
-      poolsStatistics['lastEstimatedHashrate'] = await bitcoinClient.getNetworkHashPs(totalBlock24h);
-      poolsStatistics['lastEstimatedHashrate3d'] = await bitcoinClient.getNetworkHashPs(totalBlock3d);
-      poolsStatistics['lastEstimatedHashrate1w'] = await bitcoinClient.getNetworkHashPs(totalBlock1w);
+      const [stats24h, stats3d, stats1w] = await Promise.all([
+        this.$getHashrateWindowStats(totalBlock24h),
+        this.$getHashrateWindowStats(totalBlock3d),
+        this.$getHashrateWindowStats(totalBlock1w),
+      ]);
+      poolsStatistics['lastEstimatedHashrate'] = stats24h.laneHashrates.aggregate;
+      poolsStatistics['lastEstimatedHashrate3d'] = stats3d.laneHashrates.aggregate;
+      poolsStatistics['lastEstimatedHashrate1w'] = stats1w.laneHashrates.aggregate;
+
+      const estimates24h = attributePoolHashrates(stats24h.poolLaneWork, stats24h.laneHashrates);
+      const estimates3d = attributePoolHashrates(stats3d.poolLaneWork, stats3d.laneHashrates);
+      const estimates1w = attributePoolHashrates(stats1w.poolLaneWork, stats1w.laneHashrates);
+      for (const poolStat of poolsStats) {
+        poolStat.lastEstimatedHashrate = estimates24h.get(poolStat.poolId) ?? 0;
+        poolStat.lastEstimatedHashrate3d = estimates3d.get(poolStat.poolId) ?? 0;
+        poolStat.lastEstimatedHashrate1w = estimates1w.get(poolStat.poolId) ?? 0;
+      }
     } catch (e) {
       poolsStatistics['lastEstimatedHashrate'] = 0;
-      logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate', logger.tags.mining);
+      poolsStatistics['lastEstimatedHashrate3d'] = 0;
+      poolsStatistics['lastEstimatedHashrate1w'] = 0;
+      logger.debug('Indexed blocks are not available, using zeroed values for current hashrate', logger.tags.mining);
     }
 
     return poolsStatistics;
@@ -178,11 +194,12 @@ class Mining {
     const avgHealth = await BlocksRepository.$getAvgBlockHealthPerPoolId(pool.id);
     const totalReward = await BlocksRepository.$getTotalRewardForPoolId(pool.id);
 
-    let currentEstimatedHashrate = 0;
+    let estimatedHashrate = 0;
     try {
-      currentEstimatedHashrate = await bitcoinClient.getNetworkHashPs(totalBlock24h);
+      const stats24h = await this.$getHashrateWindowStats(totalBlock24h);
+      estimatedHashrate = attributePoolHashrates(stats24h.poolLaneWork, stats24h.laneHashrates).get(pool.id) ?? 0;
     } catch (e) {
-      logger.debug('Bitcoin Core is not available, using zeroed value for current hashrate', logger.tags.mining);
+      logger.debug('Indexed blocks are not available, using zeroed value for current hashrate', logger.tags.mining);
     }
 
     return {
@@ -197,7 +214,7 @@ class Mining {
         '24h': blockCount24h / totalBlock24h,
         '1w': blockCount1w / totalBlock1w,
       },
-      estimatedHashrate: currentEstimatedHashrate * (blockCount24h / totalBlock24h),
+      estimatedHashrate,
       reportedHashrate: null,
       avgBlockHealth: avgHealth,
       totalReward: totalReward,
@@ -209,6 +226,55 @@ class Mining {
    */
   public async $getRewardStats(blockCount: number): Promise<RewardStats> {
     return await BlocksRepository.$getBlockStats(blockCount);
+  }
+
+  /**
+   * Calculate aggregate and Cadence-lane network rates over one common active
+   * chain window. The repository includes the extra oldest timing anchor and
+   * the calculator mirrors qbit's getnetworkhashps work/window semantics.
+   */
+  public async $getNetworkHashrates(blockCount: number, endHeight?: number): Promise<QbitLaneHashrates> {
+    return (await this.$getHashrateWindowStats(blockCount, endHeight)).laneHashrates;
+  }
+
+  /**
+   * Calculate the lane network rates, each pool's per-lane solved work, and
+   * each pool's block count from one shared block window, so pool attribution
+   * divides exactly the work that produced the rates, estimates sum back to
+   * the aggregate, and dominance shares describe the same block set.
+   * @asyncSafe
+   */
+  public async $getHashrateWindowStats(blockCount: number, endHeight?: number): Promise<HashrateWindowStats> {
+    const blocks = await BlocksRepository.$getHashrateWindow(blockCount, endHeight);
+    // the oldest row is the window's timing/chainwork anchor: it contributes
+    // no proof to the lane rates, so it earns no attribution weight either
+    const contributingBlocks = blocks.slice(1);
+
+    const poolBlockCounts = new Map<number, number>();
+    for (const block of contributingBlocks) {
+      const poolId = block.poolId ?? 0;
+      poolBlockCounts.set(poolId, (poolBlockCounts.get(poolId) ?? 0) + 1);
+    }
+
+    return {
+      laneHashrates: calcLaneHashratesForWindow(blocks, config.MEMPOOL.NETWORK),
+      poolLaneWork: sumPoolLaneWork(contributingBlocks.map((block) => ({
+        poolId: block.poolId ?? 0,
+        lane: laneOf(block.version, config.MEMPOOL.NETWORK),
+        bits: block.bits,
+      }))),
+      poolBlockCounts,
+    };
+  }
+
+  /**
+   * Return a trailing wall-clock interval expressed through the corresponding
+   * canonical block window. This retains the endpoint's historical "1w"
+   * meaning while producing aggregate and both lane values atomically.
+   */
+  public async $getCurrentHashrates(interval: string = '1w'): Promise<QbitLaneHashrates> {
+    const blockCount = await BlocksRepository.$blockCount(null, interval);
+    return this.$getNetworkHashrates(blockCount);
   }
 
   /**
@@ -240,7 +306,7 @@ class Mining {
       const lastMondayMidnight = this.getDateMidnight(lastMonday);
       let toTimestamp = lastMondayMidnight.getTime();
 
-      const totalWeekIndexed = (await BlocksRepository.$blockCount(null, null)) / 1008;
+      const totalWeekIndexed = (await BlocksRepository.$blockCount(null, null)) / expectedBlocksForTimespan('1w', config.MEMPOOL.BLOCK_TARGET_SPACING_SECONDS);
       let indexedThisRun = 0;
       let totalIndexed = 0;
       let newlyIndexed = 0;
@@ -266,31 +332,48 @@ class Mining {
         if (blockStats.blockCount <= 0) {
           logger.debug(`No block found between ${fromTimestamp / 1000} and ${toTimestamp / 1000}, skipping hashrate indexing for this period`, logger.tags.mining);
         } else {
-          const lastBlockHashrate = await bitcoinClient.getNetworkHashPs(blockStats.blockCount,
-            blockStats.lastBlockHeight);
-
-          let pools = await PoolsRepository.$getPoolsInfoBetween(fromTimestamp / 1000, toTimestamp / 1000);
-          const totalBlocks = pools.reduce((acc, pool) => acc + pool.blockCount, 0);
-          if (totalBlocks > 0) {
-            pools = pools.map((pool: any) => {
-              pool.hashrate = (pool.blockCount / totalBlocks) * lastBlockHashrate;
-              pool.share = (pool.blockCount / totalBlocks);
-              return pool;
-            });
-
-            for (const pool of pools) {
-              hashrates.push({
-                hashrateTimestamp: toTimestamp / 1000,
-                avgHashrate: pool['hashrate'] ,
-                poolId: pool.poolId,
-                share: pool['share'],
-                type: 'weekly',
-              });
+          let windowStats: HashrateWindowStats | null = null;
+          try {
+            windowStats = await this.$getHashrateWindowStats(
+              blockStats.blockCount,
+              blockStats.lastBlockHeight,
+            );
+          } catch (e) {
+            if (e instanceof IncompleteHashrateWindowError) {
+              logger.warn(`Skipping weekly hashrate period ending ${toTimestamp / 1000}: indexed blocks do not contain its complete anchored window`, logger.tags.mining);
+            } else {
+              throw e;
             }
+          }
 
-            newlyIndexed += hashrates.length / Math.max(1, pools.length);
-            await HashratesRepository.$saveHashrates(hashrates);
-            hashrates.length = 0;
+          if (windowStats !== null) {
+            // pool rows, shares, and rates all derive from the same anchored
+            // window: a separate timestamp-window selection can disagree with
+            // it around week boundaries when block timestamps are skewed
+            const estimates = attributePoolHashrates(windowStats.poolLaneWork, windowStats.laneHashrates);
+            const totalBlocks = [...windowStats.poolBlockCounts.values()].reduce((sum, count) => sum + count, 0);
+            if (totalBlocks > 0) {
+              for (const [poolId, poolBlockCount] of windowStats.poolBlockCounts) {
+                // blocks without pool attribution still weigh the totals, but
+                // must never be persisted: pool_id 0 with the default
+                // aggregate lane is the unique key of the daily network rows,
+                // which an upsert would silently overwrite
+                if (poolId === 0) {
+                  continue;
+                }
+                hashrates.push({
+                  hashrateTimestamp: toTimestamp / 1000,
+                  avgHashrate: estimates.get(poolId) ?? 0,
+                  poolId,
+                  share: poolBlockCount / totalBlocks,
+                  type: 'weekly',
+                });
+              }
+
+              newlyIndexed += hashrates.length / Math.max(1, windowStats.poolBlockCounts.size);
+              await HashratesRepository.$saveHashrates(hashrates);
+              hashrates.length = 0;
+            }
           }
         }
 
@@ -350,12 +433,12 @@ class Mining {
     try {
       const genesisData = await this.getGenesisData();
       const genesisTimestamp = genesisData.timestamp * 1000;
-      const indexedTimestamp = (await HashratesRepository.$getRawNetworkDailyHashrate(null)).map(hashrate => hashrate.timestamp);
+      const indexedTimestamp = await HashratesRepository.$getCompleteNetworkDailyHashrateTimestamps();
       const lastMidnight = this.getDateMidnight(new Date());
       let toTimestamp = Math.round(lastMidnight.getTime());
-      const hashrates: any[] = [];
+      const hashrates: HashrateRecord[] = [];
 
-      const totalDayIndexed = (await BlocksRepository.$blockCount(null, null)) / 144;
+      const totalDayIndexed = (await BlocksRepository.$blockCount(null, null)) / expectedBlocksForTimespan('24h', config.MEMPOOL.BLOCK_TARGET_SPACING_SECONDS);
       let indexedThisRun = 0;
       let totalIndexed = 0;
       let newlyIndexed = 0;
@@ -377,19 +460,26 @@ class Mining {
 
         const blockStats: any = await BlocksRepository.$blockCountBetweenTimestamp(
           null, fromTimestamp / 1000, toTimestamp / 1000);
-        const lastBlockHashrate = blockStats.blockCount === 0 ? 0 : await bitcoinClient.getNetworkHashPs(blockStats.blockCount,
-          blockStats.lastBlockHeight);
-
-        hashrates.push({
-          hashrateTimestamp: toTimestamp / 1000,
-          avgHashrate: lastBlockHashrate,
-          poolId: 0,
-          share: 1,
-          type: 'daily',
-        });
+        let laneHashrates: QbitLaneHashrates | null = null;
+        if (blockStats.blockCount === 0) {
+          laneHashrates = { aggregate: 0, permissionless: 0, auxpow: 0 };
+        } else {
+          try {
+            laneHashrates = await this.$getNetworkHashrates(blockStats.blockCount, blockStats.lastBlockHeight);
+          } catch (e) {
+            if (e instanceof IncompleteHashrateWindowError) {
+              logger.warn(`Skipping daily hashrate period ending ${toTimestamp / 1000}: indexed blocks do not contain its complete anchored window`, logger.tags.mining);
+            } else {
+              throw e;
+            }
+          }
+        }
+        if (laneHashrates !== null) {
+          hashrates.push(...this.getNetworkHashrateRecords(toTimestamp / 1000, laneHashrates));
+        }
 
         if (hashrates.length > 10) {
-          newlyIndexed += hashrates.length;
+          newlyIndexed += hashrates.length / 3;
           await HashratesRepository.$saveHashrates(hashrates);
           hashrates.length = 0;
         }
@@ -413,16 +503,19 @@ class Mining {
 
       // Add genesis block manually
       if (config.MEMPOOL.INDEXING_BLOCKS_AMOUNT === -1 && !indexedTimestamp.includes(genesisTimestamp / 1000)) {
-        hashrates.push({
-          hashrateTimestamp: genesisTimestamp / 1000,
-          avgHashrate: await bitcoinClient.getNetworkHashPs(1, 1),
-          poolId: 0,
-          share: 1,
-          type: 'daily',
-        });
+        try {
+          const genesisHashrates = await this.$getNetworkHashrates(1, 1);
+          hashrates.push(...this.getNetworkHashrateRecords(genesisTimestamp / 1000, genesisHashrates));
+        } catch (e) {
+          if (e instanceof IncompleteHashrateWindowError) {
+            logger.warn('Skipping genesis hashrate: indexed blocks do not contain heights 0 and 1', logger.tags.mining);
+          } else {
+            throw e;
+          }
+        }
       }
 
-      newlyIndexed += hashrates.length;
+      newlyIndexed += hashrates.length / 3;
       await HashratesRepository.$saveHashrates(hashrates);
 
       this.lastHashrateIndexingDate = new Date().getUTCDate();
@@ -440,93 +533,43 @@ class Mining {
   }
 
   /**
-   * Index difficulty adjustments
-   * @asyncUnsafe
+   * Get the observed spacing between consecutive blocks over an interval.
+   * Large windows are averaged into fixed-size height buckets to bound the
+   * response size.
+   * @asyncSafe
    */
-  public async $indexDifficultyAdjustments(): Promise<void> {
-    // If a re-index was requested, truncate first
-    if (this.reindexDifficultyAdjustmentRequested === true) {
-      logger.notice(`difficulty_adjustments will now be re-indexed`);
-      await database.query(`TRUNCATE difficulty_adjustments`);
-      this.reindexDifficultyAdjustmentRequested = false;
+  public async $getBlockSpacing(interval: string | null, maxPoints: number = 2000): Promise<{ height: number, timestamp: number, spacingSeconds: number }[]> {
+    const blocks = await BlocksRepository.$getBlockTimes(interval);
+
+    const spacings: { height: number, timestamp: number, spacingSeconds: number }[] = [];
+    for (let i = 1; i < blocks.length; i++) {
+      // only measure consecutive heights: gaps in the index would show up as bogus spacings
+      if (blocks[i].height === blocks[i - 1].height + 1) {
+        spacings.push({
+          height: blocks[i].height,
+          timestamp: blocks[i].timestamp,
+          // block timestamps are not strictly monotonic (miner clock skew); clamp
+          // artifacts to zero instead of charting negative spacings
+          spacingSeconds: Math.max(0, blocks[i].timestamp - blocks[i - 1].timestamp),
+        });
+      }
     }
 
-    const indexedHeightsArray = await DifficultyAdjustmentsRepository.$getAdjustmentsHeights();
-    const indexedHeights = {};
-    for (const height of indexedHeightsArray) {
-      indexedHeights[height] = true;
+    if (spacings.length <= maxPoints) {
+      return spacings;
     }
 
-    // gets {time, height, difficulty, bits} of blocks in ascending order of height
-    const blocks: any = await BlocksRepository.$getBlocksDifficulty();
-    const genesisData = await this.getGenesisData();
-    let currentDifficulty = genesisData.difficulty;
-    let currentBits = genesisData.bits;
-    let totalIndexed = 0;
-
-    if (config.MEMPOOL.INDEXING_BLOCKS_AMOUNT === -1 && indexedHeights[0] !== true) {
-      await DifficultyAdjustmentsRepository.$saveAdjustments({
-        time: genesisData.timestamp,
-        height: 0,
-        difficulty: currentDifficulty,
-        adjustment: 0.0,
+    const bucketSize = Math.ceil(spacings.length / maxPoints);
+    const bucketed: { height: number, timestamp: number, spacingSeconds: number }[] = [];
+    for (let i = 0; i < spacings.length; i += bucketSize) {
+      const bucket = spacings.slice(i, i + bucketSize);
+      bucketed.push({
+        height: bucket[bucket.length - 1].height,
+        timestamp: bucket[bucket.length - 1].timestamp,
+        spacingSeconds: Math.round((bucket.reduce((sum, spacing) => sum + spacing.spacingSeconds, 0) / bucket.length) * 100) / 100,
       });
     }
-
-    if (!blocks?.length) {
-      // no blocks in database yet
-      return;
-    }
-
-    const oldestConsecutiveBlock = this.getOldestConsecutiveBlock(blocks);
-
-    currentBits = oldestConsecutiveBlock.bits;
-    currentDifficulty = oldestConsecutiveBlock.difficulty;
-
-    let totalBlockChecked = 0;
-    let timer = new Date().getTime() / 1000;
-
-    for (const block of blocks) {
-      // skip until the first block after the oldest consecutive block
-      if (block.height <= oldestConsecutiveBlock.height) {
-        continue;
-      }
-
-      // difficulty has changed between two consecutive blocks!
-      if (block.bits !== currentBits) {
-        // skip if already indexed
-        if (indexedHeights[block.height] !== true) {
-          let adjustment = block.difficulty / currentDifficulty;
-          adjustment = Math.round(adjustment * 1000000) / 1000000; // Remove float point noise
-
-          await DifficultyAdjustmentsRepository.$saveAdjustments({
-            time: block.time,
-            height: block.height,
-            difficulty: block.difficulty,
-            adjustment: adjustment,
-          });
-
-          totalIndexed++;
-        }
-        // update the current difficulty
-        currentDifficulty = block.difficulty;
-        currentBits = block.bits;
-      }
-
-      totalBlockChecked++;
-      const elapsedSeconds = Math.max(1, Math.round((new Date().getTime() / 1000) - timer));
-      if (elapsedSeconds > 5) {
-        const progress = Math.round(totalBlockChecked / blocks.length * 100);
-        logger.debug(`Indexing difficulty adjustment at block #${block.height} | Progress: ${progress}%`, logger.tags.mining);
-        timer = new Date().getTime() / 1000;
-      }
-    }
-
-    if (totalIndexed > 0) {
-      logger.info(`Indexed ${totalIndexed} difficulty adjustments`, logger.tags.mining);
-    } else {
-      logger.debug(`Indexed ${totalIndexed} difficulty adjustments`, logger.tags.mining);
-    }
+    return bucketed;
   }
 
   /**
@@ -697,17 +740,38 @@ class Mining {
     }
   }
 
+  private getNetworkHashrateRecords(timestamp: number, hashrates: QbitLaneHashrates): HashrateRecord[] {
+    const permissionlessShare = hashrates.aggregate > 0 ? hashrates.permissionless / hashrates.aggregate : 0;
+    const auxpowShare = hashrates.aggregate > 0 ? hashrates.auxpow / hashrates.aggregate : 0;
 
-  // Finds the oldest block in a consecutive chain back from the tip
-  // assumes `blocks` is sorted in ascending height order
-  private getOldestConsecutiveBlock(blocks: DifficultyBlock[]): DifficultyBlock {
-    for (let i = blocks.length - 1; i > 0; i--) {
-      if ((blocks[i].height - blocks[i - 1].height) > 1) {
-        return blocks[i];
-      }
-    }
-    return blocks[0];
+    return [
+      {
+        hashrateTimestamp: timestamp,
+        avgHashrate: hashrates.aggregate,
+        poolId: 0,
+        share: 1,
+        type: 'daily',
+        lane: 'aggregate',
+      },
+      {
+        hashrateTimestamp: timestamp,
+        avgHashrate: hashrates.permissionless,
+        poolId: 0,
+        share: permissionlessShare,
+        type: 'daily',
+        lane: 'permissionless',
+      },
+      {
+        hashrateTimestamp: timestamp,
+        avgHashrate: hashrates.auxpow,
+        poolId: 0,
+        share: auxpowShare,
+        type: 'daily',
+        lane: 'auxpow',
+      },
+    ];
   }
+
 
   /** @asyncUnsafe */
   private async getGenesisData(): Promise<{timestamp: number, bits: number, difficulty: number}> {
