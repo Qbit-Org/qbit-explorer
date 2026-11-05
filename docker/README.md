@@ -20,20 +20,11 @@ Jump to a section:
 
 ## Images
 
-[`.github/workflows/docker.yml`](../.github/workflows/docker.yml) builds
-`linux/amd64` and `linux/arm64` images and pushes them to Docker Hub as
-`<namespace>/frontend` and `<namespace>/backend`. `<namespace>` is the Docker
-Hub account stored in the repository's `DOCKER_HUB_USER` Actions secret.
-
-| Trigger | Tags pushed |
-| --- | --- |
-| Git tag `vX.Y.Z` | `vX.Y.Z` and `latest` |
-| Git tag `vX.Y.Z-<suffix>` | `vX.Y.Z-<suffix>` |
-| Pull request from a branch of this repository, labelled `docker-push` | `v<package.json version>-<first 8 characters of the head commit>` |
-
-Every pull request also builds both images and starts them with
-`docker-compose.yml`, without pushing, to check that all three containers
-become healthy.
+No images are published, so build them yourself as shown below.
+[`.github/workflows/docker.yml`](../.github/workflows/docker.yml) runs the same
+build on every pull request and on every `v*` tag. It then starts both images
+with `docker-compose.yml` and checks that all three containers become healthy,
+without pushing the images anywhere.
 
 ### Build the images yourself
 
@@ -72,9 +63,9 @@ cp .env.example .env
 ```
 
 Then set `QBIT_EXPLORER_FRONTEND_IMAGE` and `QBIT_EXPLORER_BACKEND_IMAGE` in
-`.env`: `<namespace>/frontend:<tag>` and `<namespace>/backend:<tag>` for
-published images, or `qbit-explorer-frontend:local` and
-`qbit-explorer-backend:local` for the images built above. Until both are set,
+`.env`: `qbit-explorer-frontend:local` and `qbit-explorer-backend:local` for
+the images built above, or the names you gave them if you pushed them to your
+own registry. Until both are set,
 Compose stops with `required variable ... is missing a value`. Compose reads
 `.env` from `docker/` on every command, so `docker compose ps`, `logs` and
 `down` work in any shell without exporting anything. Variables exported in your shell take

@@ -18,9 +18,9 @@ changes can still be cherry-picked intentionally.
 - Do implementation work on short-lived topic branches off `main` and merge
   them back through pull requests. Do not rename branches unless a user
   explicitly asks for it.
-- This repository does not carry upstream's git history. The README's
-  [Upstream](README.md#upstream) section explains how to bring in upstream
-  fixes.
+- The history keeps upstream's commits up to v3.3.1, with the qbit changes in
+  one commit on top. The README's [Upstream](README.md#upstream) section
+  explains how to bring in upstream fixes.
 
 ## Related Repositories
 
@@ -175,10 +175,8 @@ The qbit CI/CD workflows are:
   against MariaDB, on a host port Docker picks (`MEMPOOL_TEST_DB_HOST_PORT=0`).
 - `.github/workflows/docker.yml` — on every pull request, builds both images
   from the pull request merged onto its base branch and checks that the
-  `docker/docker-compose.yml` stack becomes healthy. It pushes to Docker Hub on
-  `v*` tags and on same-repository pull requests labelled `docker-push`, building
-  those images from the tag or the pull request head, and using the
-  `DOCKER_USERNAME`, `DOCKER_PASSWORD` and `DOCKER_HUB_USER` Actions secrets.
+  `docker/docker-compose.yml` stack becomes healthy. It runs the same check on
+  `v*` tags, and never pushes images anywhere.
 - `.github/workflows/qbit-design-check.yml` — drift gate for the vendored
   qbit.org design contract in `frontend/src/resources/qbit-design/`. Those
   vendored files are machine-managed by `frontend/scripts/sync-qbit-design.mjs`
