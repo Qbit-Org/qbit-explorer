@@ -1,0 +1,86 @@
+version: 2
+updates:
+  # npm: patch releases (where security fixes such as Angular's usually ship)
+  # arrive grouped in one pull request per directory. Minor releases still get
+  # a pull request each, and major releases are not proposed. Only production
+  # dependencies get version updates, plus Angular's dev packages.
+  - package-ecosystem: npm
+    versioning-strategy: increase
+    directory: "/backend"
+    groups:
+      backend-patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    allow:
+      - dependency-type: "production"
+
+  - package-ecosystem: npm
+    directory: "/frontend"
+    versioning-strategy: increase
+    # A dependency joins the first group that matches it, so Angular patch
+    # releases stay in the Angular group with its minor releases, and
+    # frontend-patch-updates takes every other patch release.
+    groups:
+      frontend-angular-dependencies:
+        patterns:
+          - "@angular*"
+          - "@ng-*"
+          - "ngx-*"
+      frontend-jest-dependencies:
+        patterns:
+          - "@types/jest"
+          - "jest"
+      frontend-eslint-dependencies:
+        patterns:
+          - "@typescript-eslint*"
+          - "eslint"
+      frontend-patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    allow:
+      - dependency-type: "production"
+      # @angular/compiler-cli has to move with @angular/compiler
+      - dependency-name: "@angular*"
+
+  - package-ecosystem: docker
+    directory: "/docker/backend"
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-patch"]
+
+  - package-ecosystem: docker
+    directory: "/docker/frontend"
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-patch"]

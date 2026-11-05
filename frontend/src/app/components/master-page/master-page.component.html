@@ -1,0 +1,207 @@
+<ng-container *ngIf="{ val: network$ | async } as network">
+<header *ngIf="headerVisible && env.QBIT_SITE_CHROME" class="qbit-header">
+  <ng-container *ngIf="qbitNav$ | async as qbitNav">
+
+    <a class="qbit-banner" [href]="qbitNav.banner.href">
+      <span class="qbit-banner-text">{{ qbitNav.banner.text }}</span>
+    </a>
+
+    <div class="qbit-bar-wrap">
+      <nav class="qbit-bar" aria-label="Qbit header">
+
+        <a class="qbit-logo" [href]="qbitOrigin" aria-label="Qbit home">
+          <img src="/resources/qbit-design/logo-full.svg" width="92" height="40" alt="Qbit">
+        </a>
+
+        <div class="qbit-links" role="navigation" aria-label="Qbit navigation">
+          <ng-container *ngFor="let item of qbitNav.items; let i = index">
+            <ng-container *ngIf="item.kind === 'link'">
+              <a *ngIf="item.link.isExplorerRoot" class="qbit-link active" [routerLink]="['/' | relativeUrl]" (click)="explorerNavClick()">{{ item.link.label }}</a>
+              <a *ngIf="!item.link.isExplorerRoot" class="qbit-link" [href]="item.link.absoluteHref">{{ item.link.label }}</a>
+            </ng-container>
+            <!-- qbit.org's dropdowns: a disclosure button over a list of links.
+                 A mouse hovering opens it and leaving closes it; a click or
+                 tap always toggles; Escape, an outside press or focus moving
+                 to another element closes it. -->
+            <div *ngIf="item.kind === 'group'" class="qbit-group"
+                 (pointerenter)="onNavGroupPointerEnter($event, i)" (pointerleave)="onNavGroupPointerLeave($event, i)"
+                 (focusout)="onNavGroupFocusOut($event, i)">
+              <button type="button" class="qbit-link qbit-group-trigger" [class.active]="item.active"
+                      [attr.aria-expanded]="openNavGroup === i" [attr.aria-controls]="'qbit-nav-' + i"
+                      (click)="toggleNavGroup(i)">
+                {{ item.label }}
+                <svg class="qbit-group-chevron" [class.open]="openNavGroup === i" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="qbit-group-panel" [id]="'qbit-nav-' + i" [hidden]="openNavGroup !== i">
+                <ul>
+                  <li *ngFor="let link of item.links">
+                    <a *ngIf="link.isExplorerRoot" class="qbit-group-link active" [routerLink]="['/' | relativeUrl]" (click)="explorerNavClick()">
+                      <ng-container *ngTemplateOutlet="navIcon; context: { $implicit: link.icon }"></ng-container>{{ link.label }}
+                    </a>
+                    <a *ngIf="!link.isExplorerRoot" class="qbit-group-link" [href]="link.absoluteHref" (click)="closeNavGroup()">
+                      <ng-container *ngTemplateOutlet="navIcon; context: { $implicit: link.icon }"></ng-container>{{ link.label }}
+                    </a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </ng-container>
+        </div>
+
+        <div class="qbit-social" role="navigation" aria-label="Social links">
+          <a [href]="qbitNav.social.github" aria-label="qbit on GitHub">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297C5.37.297 0 5.67 0 12.297c0 5.304 3.438 9.8 8.205 11.385.6.111.82-.26.82-.577 0-.286-.011-1.233-.016-2.235-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.334-1.756-1.334-1.756-1.09-.745.083-.729.083-.729 1.205.085 1.839 1.238 1.839 1.238 1.071 1.834 2.809 1.304 3.495.997.108-.776.419-1.305.762-1.605-2.665-.303-5.467-1.333-5.467-5.932 0-1.31.469-2.381 1.236-3.221-.124-.303-.536-1.523.117-3.176 0 0 1.008-.323 3.301 1.23a11.5 11.5 0 0 1 6.002 0c2.291-1.553 3.297-1.23 3.297-1.23.655 1.653.243 2.873.119 3.176.77.84 1.235 1.911 1.235 3.221 0 4.61-2.807 5.625-5.48 5.922.43.371.814 1.102.814 2.222 0 1.606-.015 2.899-.015 3.294 0 .32.216.694.825.576C20.565 22.092 24 17.598 24 12.297c0-6.627-5.373-12-12-12Z"/></svg>
+          </a>
+          <a [href]="qbitNav.social.x" aria-label="qbit on X">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.657l-5.214-6.817-5.965 6.817H1.68l7.73-8.835L1.254 2.25h6.826l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"/></svg>
+          </a>
+          <a [href]="qbitNav.social.discord" aria-label="qbit on Discord">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.369A19.79 19.79 0 0 0 15.37 2.85a13.4 13.4 0 0 0-.633 1.308 18.4 18.4 0 0 0-5.475 0A12.7 12.7 0 0 0 8.63 2.85a19.72 19.72 0 0 0-4.948 1.519C.55 9.056-.302 13.628.123 18.135a19.95 19.95 0 0 0 6.069 3.016 14.7 14.7 0 0 0 1.3-2.093 12.9 12.9 0 0 1-2.048-.981c.172-.125.34-.255.502-.388a14.19 14.19 0 0 0 12.108 0c.164.133.332.263.502.388a12.9 12.9 0 0 1-2.052.983 14.55 14.55 0 0 0 1.3 2.091 19.9 19.9 0 0 0 6.073-3.017c.5-5.223-.855-9.754-3.56-13.765ZM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.954-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.954 2.419-2.157 2.419Zm7.96 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.954-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.946 2.419-2.157 2.419Z"/></svg>
+          </a>
+        </div>
+
+        <button class="qbit-hamburger" type="button" aria-controls="qbit-mobile-menu" [attr.aria-expanded]="menuOpen" aria-label="Toggle Qbit menu" (click)="toggleMenu()">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </button>
+      </nav>
+
+      <div class="qbit-mobile-panel" id="qbit-mobile-menu" [class.open]="menuOpen">
+        <!-- mounted once (panel visibility is CSS-only): SearchFormComponent
+             subscribes without teardown, so re-creating it per menu open
+             would accumulate orphaned listeners -->
+        <app-search-form class="qbit-mobile-search" location="top" [hamburgerOpen]="menuOpen" (searchTriggered)="closeMenu()"></app-search-form>
+        <div class="qbit-mobile-links" role="navigation" aria-label="Qbit mobile navigation">
+          <ng-container *ngFor="let item of qbitNav.items">
+            <ng-container *ngIf="item.kind === 'link'">
+              <a *ngIf="item.link.isExplorerRoot" class="qbit-mobile-link active" [routerLink]="['/' | relativeUrl]" (click)="explorerNavClick()">{{ item.link.label }}</a>
+              <a *ngIf="!item.link.isExplorerRoot" class="qbit-mobile-link" [href]="item.link.absoluteHref" (click)="closeMenu()">{{ item.link.label }}</a>
+            </ng-container>
+            <div *ngIf="item.kind === 'group'" class="qbit-mobile-group" role="group" [attr.aria-label]="item.label">
+              <span class="qbit-mobile-eyebrow" aria-hidden="true">{{ item.label }}</span>
+              <ng-container *ngFor="let link of item.links">
+                <a *ngIf="link.isExplorerRoot" class="qbit-mobile-link qbit-mobile-group-link active" [routerLink]="['/' | relativeUrl]" (click)="explorerNavClick()">
+                  <ng-container *ngTemplateOutlet="navIcon; context: { $implicit: link.icon }"></ng-container>{{ link.label }}
+                </a>
+                <a *ngIf="!link.isExplorerRoot" class="qbit-mobile-link qbit-mobile-group-link" [href]="link.absoluteHref" (click)="closeMenu()">
+                  <ng-container *ngTemplateOutlet="navIcon; context: { $implicit: link.icon }"></ng-container>{{ link.label }}
+                </a>
+              </ng-container>
+            </div>
+          </ng-container>
+        </div>
+        <div class="qbit-mobile-explorer" role="navigation" aria-label="Explorer sections">
+          <span class="qbit-mobile-eyebrow" i18n="master-page.explorer-sections|Explorer mobile menu group label">Explorer</span>
+          <a class="qbit-mobile-link" [routerLink]="['/' | relativeUrl]" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" (click)="explorerNavClick()" i18n="master-page.dashboard|Dashboard">Dashboard</a>
+          <a *ngIf="env.MINING_DASHBOARD" class="qbit-mobile-link" [routerLink]="['/mining' | relativeUrl]" routerLinkActive="active" (click)="closeMenu()" i18n="mining.mining-dashboard">Mining Dashboard</a>
+          <a *ngIf="!env.MINING_DASHBOARD" class="qbit-mobile-link" [routerLink]="['/blocks' | relativeUrl]" routerLinkActive="active" (click)="closeMenu()" i18n="dashboard.recent-blocks">Recent Blocks</a>
+          <a class="qbit-mobile-link" [routerLink]="['/graphs' | relativeUrl]" routerLinkActive="active" (click)="closeMenu()" i18n="footer.graphs">Graphs</a>
+          <a class="qbit-mobile-link" [routerLink]="['/docs/api' | relativeUrl]" routerLinkActive="active" (click)="closeMenu()" i18n="footer.api-documentation">API Documentation</a>
+          <a class="qbit-mobile-link" [routerLink]="['/about' | relativeUrl]" routerLinkActive="active" (click)="closeMenu()" i18n="footer.about">About</a>
+        </div>
+        <div class="qbit-mobile-networks" *ngIf="isDropdownVisible" role="navigation" aria-label="Network selection">
+          <a *ngIf="env.MAINNET_ENABLED" [class.active]="network.val === ''" [routerLink]="networkPaths['mainnet'] || '/'" (click)="closeMenu()">Mainnet</a>
+          <a *ngIf="!env.MAINNET_ENABLED && env.MAINNET_EXPLORER_URL" [href]="env.MAINNET_EXPLORER_URL" (click)="closeMenu()">Mainnet</a>
+          <a *ngIf="env.SIGNET_ENABLED" [class.active]="network.val === 'signet'" [routerLink]="networkPaths['signet'] || '/signet'" (click)="closeMenu()">Signet</a>
+          <a *ngIf="env.TESTNET_ENABLED" [class.active]="network.val === 'testnet'" [routerLink]="networkPaths['testnet'] || '/testnet'" (click)="closeMenu()">Testnet3</a>
+          <a *ngIf="env.TESTNET4_ENABLED" [class.active]="network.val === 'testnet4'" [routerLink]="networkPaths['testnet4'] || '/testnet4'" (click)="closeMenu()">Testnet4</a>
+          <a *ngIf="!env.TESTNET4_ENABLED && env.TESTNET4_EXPLORER_URL" [href]="env.TESTNET4_EXPLORER_URL" (click)="closeMenu()">Testnet4</a>
+          <a *ngIf="env.REGTEST_ENABLED" [class.active]="network.val === 'regtest'" [routerLink]="networkPaths['regtest'] || '/regtest'" (click)="closeMenu()">Regtest</a>
+        </div>
+        <div class="qbit-social qbit-mobile-social" role="navigation" aria-label="Social links">
+          <a [href]="qbitNav.social.github" aria-label="qbit on GitHub" (click)="closeMenu()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297C5.37.297 0 5.67 0 12.297c0 5.304 3.438 9.8 8.205 11.385.6.111.82-.26.82-.577 0-.286-.011-1.233-.016-2.235-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.334-1.756-1.334-1.756-1.09-.745.083-.729.083-.729 1.205.085 1.839 1.238 1.839 1.238 1.071 1.834 2.809 1.304 3.495.997.108-.776.419-1.305.762-1.605-2.665-.303-5.467-1.333-5.467-5.932 0-1.31.469-2.381 1.236-3.221-.124-.303-.536-1.523.117-3.176 0 0 1.008-.323 3.301 1.23a11.5 11.5 0 0 1 6.002 0c2.291-1.553 3.297-1.23 3.297-1.23.655 1.653.243 2.873.119 3.176.77.84 1.235 1.911 1.235 3.221 0 4.61-2.807 5.625-5.48 5.922.43.371.814 1.102.814 2.222 0 1.606-.015 2.899-.015 3.294 0 .32.216.694.825.576C20.565 22.092 24 17.598 24 12.297c0-6.627-5.373-12-12-12Z"/></svg>
+          </a>
+          <a [href]="qbitNav.social.x" aria-label="qbit on X" (click)="closeMenu()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.657l-5.214-6.817-5.965 6.817H1.68l7.73-8.835L1.254 2.25h6.826l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"/></svg>
+          </a>
+          <a [href]="qbitNav.social.discord" aria-label="qbit on Discord" (click)="closeMenu()">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.369A19.79 19.79 0 0 0 15.37 2.85a13.4 13.4 0 0 0-.633 1.308 18.4 18.4 0 0 0-5.475 0A12.7 12.7 0 0 0 8.63 2.85a19.72 19.72 0 0 0-4.948 1.519C.55 9.056-.302 13.628.123 18.135a19.95 19.95 0 0 0 6.069 3.016 14.7 14.7 0 0 0 1.3-2.093 12.9 12.9 0 0 1-2.048-.981c.172-.125.34-.255.502-.388a14.19 14.19 0 0 0 12.108 0c.164.133.332.263.502.388a12.9 12.9 0 0 1-2.052.983 14.55 14.55 0 0 0 1.3 2.091 19.9 19.9 0 0 0 6.073-3.017c.5-5.223-.855-9.754-3.56-13.765ZM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.954-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.954 2.419-2.157 2.419Zm7.96 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.954-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.946 2.419-2.157 2.419Z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <button class="qbit-menu-backdrop" *ngIf="menuOpen" type="button" aria-label="Close Qbit menu" (click)="closeMenu()"></button>
+  </ng-container>
+</header>
+
+<!-- explorer-owned second tier anchored on the original mempool.space
+     header sections; less-frequented tools (broadcast/test/preview tx,
+     calculator) are footer-only. ALL explorer chrome lives on this tier —
+     sections, connection badge, network selector, search — and only this
+     tier pins on scroll; the qbit header above scrolls away like the live
+     site's. Never merge any of it into the qbit-links row, which must stay
+     identical to the vendored qbit.org nav contract. btn-* ids are the
+     cypress handles from the old header icon nav. The right cluster sits
+     outside the pannable links strip so the network menu and the search's
+     suggestion dropdown are never clipped by that scroll container -->
+<nav *ngIf="headerVisible" class="qbit-subnav" [class.qbit-subnav-only]="!env.QBIT_SITE_CHROME" aria-label="Explorer sections">
+  <div class="qbit-subnav-inner">
+    <div class="qbit-subnav-links">
+      <a id="btn-home" class="qbit-subnav-link" [routerLink]="['/' | relativeUrl]" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" (click)="explorerNavClick()" i18n="master-page.dashboard|Dashboard">Dashboard</a>
+      <a *ngIf="env.MINING_DASHBOARD" id="btn-pools" class="qbit-subnav-link" [routerLink]="['/mining' | relativeUrl]" routerLinkActive="active" i18n="mining.mining-dashboard">Mining Dashboard</a>
+      <a *ngIf="!env.MINING_DASHBOARD" id="btn-blocks" class="qbit-subnav-link" [routerLink]="['/blocks' | relativeUrl]" routerLinkActive="active" i18n="dashboard.recent-blocks">Recent Blocks</a>
+      <a id="btn-graphs" class="qbit-subnav-link" [routerLink]="['/graphs' | relativeUrl]" routerLinkActive="active" i18n="footer.graphs">Graphs</a>
+      <a id="btn-docs" class="qbit-subnav-link" [routerLink]="['/docs/api' | relativeUrl]" routerLinkActive="active" i18n="footer.api-documentation">API Documentation</a>
+      <a id="btn-about" class="qbit-subnav-link" [routerLink]="['/about' | relativeUrl]" routerLinkActive="active" i18n="footer.about">About</a>
+    </div>
+    <ng-container *ngIf="{ val: connectionState$ | async } as connectionState">
+      <span class="connection-badge">
+        <span class="badge badge-warning" *ngIf="connectionState.val === 0" i18n="master-page.offline">Offline</span>
+        <span class="badge badge-warning" *ngIf="connectionState.val === 1" i18n="master-page.reconnecting">Reconnecting...</span>
+      </span>
+    </ng-container>
+    <div ngbDropdown class="qbit-network-dropdown" *ngIf="isDropdownVisible">
+      <button ngbDropdownToggle type="button" class="btn dropdown-toggle-split d-flex justify-content-center align-items-center" aria-haspopup="true" aria-label="Select network">
+        <app-svg-images class="d-flex justify-content-center align-items-center current-network-svg" [name]="network.val === '' ? 'qbit-mainnet' : network.val" width="20" height="20" viewBox="0 0 65 65"></app-svg-images>
+      </button>
+      <div ngbDropdownMenu class="dropdown-menu-right">
+        <a ngbDropdownItem *ngIf="env.MAINNET_ENABLED" class="mainnet" [class.active]="network.val === ''" [routerLink]="networkPaths['mainnet'] || '/'"><app-svg-images name="qbit-mainnet" width="22" height="22" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Mainnet</a>
+        <a ngbDropdownItem *ngIf="!env.MAINNET_ENABLED && env.MAINNET_EXPLORER_URL" class="mainnet" [href]="env.MAINNET_EXPLORER_URL"><app-svg-images name="qbit-mainnet" width="22" height="22" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Mainnet</a>
+        <a ngbDropdownItem *ngIf="env.SIGNET_ENABLED" class="signet" [class.active]="network.val === 'signet'" [routerLink]="networkPaths['signet'] || '/signet'"><app-svg-images name="signet" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Signet</a>
+        <a ngbDropdownItem *ngIf="env.TESTNET_ENABLED" class="testnet" [class.active]="network.val === 'testnet'" [routerLink]="networkPaths['testnet'] || '/testnet'"><app-svg-images name="testnet" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Testnet3</a>
+        <a ngbDropdownItem *ngIf="env.TESTNET4_ENABLED" class="testnet4" [class.active]="network.val === 'testnet4'" [routerLink]="networkPaths['testnet4'] || '/testnet4'"><app-svg-images name="testnet4" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Testnet4</a>
+        <a ngbDropdownItem *ngIf="!env.TESTNET4_ENABLED && env.TESTNET4_EXPLORER_URL" class="testnet4" [href]="env.TESTNET4_EXPLORER_URL"><app-svg-images name="testnet4" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Testnet4</a>
+        <a ngbDropdownItem *ngIf="env.REGTEST_ENABLED" class="regtest" [class.active]="network.val === 'regtest'" [routerLink]="networkPaths['regtest'] || '/regtest'"><app-svg-images name="regtest" width="22" height="22" viewBox="0 0 65 65" style="width: 25px; height: 25px;" class="mainnet mr-1"></app-svg-images> Regtest</a>
+      </div>
+    </div>
+    <app-search-form class="qbit-subnav-search" location="top"></app-search-form>
+  </div>
+</nav>
+
+<!-- the subnav (with its connection badge) is display:none on mobile, so the
+     disconnected state gets its own slim strip there; renders nothing while
+     connected or on desktop -->
+<ng-container *ngIf="headerVisible && env.QBIT_SITE_CHROME">
+  <ng-container *ngIf="{ val: connectionState$ | async } as connectionState">
+    <div class="qbit-mobile-connection" *ngIf="connectionState.val === 0 || connectionState.val === 1">
+      <span class="badge badge-warning" *ngIf="connectionState.val === 0" i18n="master-page.offline">Offline</span>
+      <span class="badge badge-warning" *ngIf="connectionState.val === 1" i18n="master-page.reconnecting">Reconnecting...</span>
+    </div>
+  </ng-container>
+</ng-container>
+
+<div class="d-flex" style="overflow: clip">
+  <div class="empty-sidenav"><!-- empty sidenav needed to push footer down the screen --></div>
+
+  <div class="flex-grow-1 d-flex flex-column">
+    <app-testnet-alert *ngIf="network.val === 'testnet' || network.val === 'testnet4' || network.val === 'signet'"></app-testnet-alert>
+
+    <main style="min-width: 375px; max-width: 100vw">
+      <router-outlet></router-outlet>
+    </main>
+
+    <div class="flex-grow-1"></div>
+    <app-global-footer *ngIf="footerVisible"></app-global-footer>
+  </div>
+</div>
+
+</ng-container>
+
+<ng-template #navIcon let-icon>
+  <svg *ngIf="navIconPaths[icon]" class="qbit-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path *ngFor="let d of navIconPaths[icon]" [attr.d]="d"/>
+  </svg>
+</ng-template>

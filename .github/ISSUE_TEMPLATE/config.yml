@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Qbit-Org/qbit-explorer/security/policy
+    about: Do not open a public issue. Email contact@qbit.org with "qbit-explorer security" in the subject, as SECURITY.md describes.
+  - name: Ask a question
+    url: https://discord.gg/xqC7MAk95Q
+    about: For questions and help, join the qbit Discord.
+  - name: qbit node bugs
+    url: https://github.com/Qbit-Org/qbit/issues
+    about: Report bugs in qbitd to Qbit-Org/qbit.
+  - name: Indexer bugs
+    url: https://github.com/Qbit-Org/qbit-electrs/issues
+    about: Report bugs in the indexer to Qbit-Org/qbit-electrs.

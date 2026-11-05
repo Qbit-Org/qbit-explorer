@@ -1,0 +1,48 @@
+{
+  "MEMPOOL": {
+    "OFFICIAL": false,
+    "NETWORK": "regtest",
+    "BACKEND": "esplora",
+    "HTTP_PORT": 8999,
+    "SPAWN_CLUSTER_PROCS": 0,
+    "API_URL_PREFIX": "/api/v1/",
+    "INDEXING_BLOCKS_AMOUNT": -1,
+    "BLOCKS_SUMMARIES_INDEXING": true,
+    "GOGGLES_INDEXING": true,
+    "AUTOMATIC_POOLS_UPDATE": false,
+    "POOLS_UPDATE_DELAY": 3600,
+    "AUDIT": false,
+    "CPFP_INDEXING": true,
+    "RUST_GBT": false,
+    "POLL_RATE_MS": 500,
+    "DISK_CACHE_BLOCK_INTERVAL": 1,
+    "BLOCK_WEIGHT_UNITS": 2000000,
+    "MAX_PUSH_TX_SIZE_WEIGHT": 400000,
+    "ALLOW_UNREACHABLE": true,
+    "MAX_TRACKED_ADDRESSES": 10
+  },
+  "SYSLOG" : {
+    "MIN_PRIORITY": "debug"
+  },
+  "CORE_RPC": {
+    "PORT": 18452,
+    "USERNAME": "__QBIT_RPC_USER__",
+    "PASSWORD": "__QBIT_RPC_PASS__"
+  },
+  "ESPLORA": {
+    "REST_API_URL": "http://127.0.0.1:3002",
+    "UNIX_SOCKET_PATH": null,
+    "FALLBACK": []
+  },
+  "DATABASE": {
+    "ENABLED": true,
+    "HOST": "127.0.0.1",
+    "USERNAME": "__MEMPOOL_REGTEST_USER__",
+    "PASSWORD": "__MEMPOOL_REGTEST_PASS__",
+    "DATABASE": "mempool_regtest"
+  },
+  "STATISTICS": {
+    "ENABLED": true,
+    "TX_PER_SECOND_SAMPLE_PERIOD": 150
+  }
+}

@@ -1,0 +1,95 @@
+<!-- Explorer-owned sub-footer band. Mirrors the header's two-tier split: this
+     band carries everything explorer-specific, so the qbit.org footer below it
+     stays a pristine replica with zero explorer content. -->
+<section class="qbit-subfooter">
+  <div class="qbit-subfooter-inner">
+
+    <!-- the header subnav keeps only the top-level sections (and the btn-*
+         cypress ids), so this is the canonical home of the transaction tools
+         and policy pages -->
+    <div class="qbit-footer-explorer">
+      <nav class="qbit-footer-group" aria-label="Explore">
+        <span class="qbit-footer-eyebrow" i18n="footer.explore|Footer group heading">Explore</span>
+        <a [routerLink]="['/' | relativeUrl]" (click)="dashboardClick()" i18n="master-page.dashboard|Dashboard">Dashboard</a>
+        <a *ngIf="env.MINING_DASHBOARD" [routerLink]="['/mining' | relativeUrl]" i18n="mining.mining-dashboard">Mining Dashboard</a>
+        <a [routerLink]="['/blocks' | relativeUrl]" i18n="dashboard.recent-blocks">Recent Blocks</a>
+        <a [routerLink]="['/graphs' | relativeUrl]" i18n="footer.graphs">Graphs</a>
+      </nav>
+
+      <nav class="qbit-footer-group" aria-label="Transactions">
+        <span class="qbit-footer-eyebrow" i18n="footer.transactions|Footer group heading">Transactions</span>
+        <a [routerLink]="['/tx/push' | relativeUrl]" i18n="shared.broadcast-transaction|Broadcast Transaction">Broadcast Transaction</a>
+        <a [routerLink]="['/tx/test' | relativeUrl]" i18n="shared.test-transaction|Test Transaction">Test Transaction</a>
+        <a [routerLink]="['/tx/preview' | relativeUrl]" i18n="shared.preview-transaction|Preview Transaction">Preview Transaction</a>
+        <a *ngIf="env.HISTORICAL_PRICE" [routerLink]="['/tools/calculator' | relativeUrl]" i18n="shared.calculator">Calculator</a>
+      </nav>
+
+      <nav class="qbit-footer-group" aria-label="Resources">
+        <span class="qbit-footer-eyebrow" i18n="footer.resources|Footer group heading">Resources</span>
+        <a [routerLink]="['/docs/api' | relativeUrl]" i18n="footer.api-documentation">API Documentation</a>
+        <a [routerLink]="['/about' | relativeUrl]" i18n="footer.about">About</a>
+        <a [routerLink]="['/terms-of-service']" i18n="shared.terms-of-service|Terms of Service">Terms of Service</a>
+        <a [routerLink]="['/privacy-policy']" i18n="shared.privacy-policy|Privacy Policy">Privacy Policy</a>
+        <a [routerLink]="['/trademark-policy']" i18n="shared.trademark-policy|Trademark Policy">Trademark Policy</a>
+        <a href="/3rdpartylicenses.txt" i18n="shared.trademark-policy|Third-party Licenses">Third-party Licenses</a>
+      </nav>
+
+      <div class="qbit-footer-group">
+        <span class="qbit-footer-eyebrow" i18n="footer.preferences|Footer group heading">Preferences</span>
+        <div class="qbit-footer-selectors">
+          <app-language-selector></app-language-selector>
+          <app-fiat-selector *ngIf="env.HISTORICAL_PRICE"></app-fiat-selector>
+          <app-timezone-selector></app-timezone-selector>
+          <app-amount-selector></app-amount-selector>
+          <app-theme-selector *ngIf="!env.customize?.theme"></app-theme-selector>
+        </div>
+      </div>
+    </div>
+
+    <p class="qbit-footer-version">v{{ packetJsonVersion }} [{{ frontendGitCommitHash }}]</p>
+
+  </div>
+</section>
+
+<!-- Pristine replica of qbit.org's site footer. qbit.org
+     content ONLY — explorer links, selectors, and the version line live in
+     the sub-footer band above. -->
+<footer class="footer qbit-footer" *ngIf="env.QBIT_SITE_CHROME && (qbitNav$ | async) as qbitNav">
+  <div class="qbit-footer-inner">
+
+    <a class="qbit-footer-logo" [href]="qbitOrigin" aria-label="Qbit home">
+      <img src="/resources/qbit-design/logo-full.svg" width="92" height="40" alt="" aria-hidden="true">
+    </a>
+
+    <nav class="qbit-footer-links" aria-label="Footer navigation">
+      <div class="qbit-site-footer-group" *ngFor="let group of qbitNav.footerGroups">
+        <h2>{{ group.label }}</h2>
+        <ul>
+          <li *ngFor="let link of group.links">
+            <a *ngIf="link.isExplorerRoot" [routerLink]="['/' | relativeUrl]" (click)="dashboardClick()">{{ link.label }}</a>
+            <a *ngIf="!link.isExplorerRoot" [href]="link.absoluteHref" [attr.target]="link.newTab ? '_blank' : null" [attr.rel]="link.newTab ? 'noreferrer' : null">{{ link.label }}</a>
+          </li>
+        </ul>
+      </div>
+    </nav>
+
+    <div class="qbit-footer-legal">
+      <div class="qbit-footer-notice">
+        <p class="qbit-footer-copyright">&copy; 2026 Qbit Core contributors <span aria-hidden="true">&bull;</span><a href="mailto:contact@qbit.org">contact&#64;qbit.org</a></p>
+        <p class="qbit-footer-license">Qbit is released under the <a href="https://opensource.org/license/mit" target="_blank" rel="noreferrer">MIT License</a>.</p>
+      </div>
+      <div class="qbit-footer-social" role="navigation" aria-label="Social links">
+        <a [href]="qbitNav.social.github" aria-label="qbit on GitHub">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297C5.37.297 0 5.67 0 12.297c0 5.304 3.438 9.8 8.205 11.385.6.111.82-.26.82-.577 0-.286-.011-1.233-.016-2.235-3.338.726-4.042-1.416-4.042-1.416-.546-1.387-1.334-1.756-1.334-1.756-1.09-.745.083-.729.083-.729 1.205.085 1.839 1.238 1.839 1.238 1.071 1.834 2.809 1.304 3.495.997.108-.776.419-1.305.762-1.605-2.665-.303-5.467-1.333-5.467-5.932 0-1.31.469-2.381 1.236-3.221-.124-.303-.536-1.523.117-3.176 0 0 1.008-.323 3.301 1.23a11.5 11.5 0 0 1 6.002 0c2.291-1.553 3.297-1.23 3.297-1.23.655 1.653.243 2.873.119 3.176.77.84 1.235 1.911 1.235 3.221 0 4.61-2.807 5.625-5.48 5.922.43.371.814 1.102.814 2.222 0 1.606-.015 2.899-.015 3.294 0 .32.216.694.825.576C20.565 22.092 24 17.598 24 12.297c0-6.627-5.373-12-12-12Z"/></svg>
+        </a>
+        <a [href]="qbitNav.social.x" aria-label="qbit on X">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.657l-5.214-6.817-5.965 6.817H1.68l7.73-8.835L1.254 2.25h6.826l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"/></svg>
+        </a>
+        <a [href]="qbitNav.social.discord" aria-label="qbit on Discord">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.317 4.369A19.79 19.79 0 0 0 15.37 2.85a13.4 13.4 0 0 0-.633 1.308 18.4 18.4 0 0 0-5.475 0A12.7 12.7 0 0 0 8.63 2.85a19.72 19.72 0 0 0-4.948 1.519C.55 9.056-.302 13.628.123 18.135a19.95 19.95 0 0 0 6.069 3.016 14.7 14.7 0 0 0 1.3-2.093 12.9 12.9 0 0 1-2.048-.981c.172-.125.34-.255.502-.388a14.19 14.19 0 0 0 12.108 0c.164.133.332.263.502.388a12.9 12.9 0 0 1-2.052.983 14.55 14.55 0 0 0 1.3 2.091 19.9 19.9 0 0 0 6.073-3.017c.5-5.223-.855-9.754-3.56-13.765ZM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.954-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.954 2.419-2.157 2.419Zm7.96 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.954-2.418 2.157-2.418 1.211 0 2.176 1.094 2.157 2.418 0 1.334-.946 2.419-2.157 2.419Z"/></svg>
+        </a>
+      </div>
+    </div>
+
+  </div>
+</footer>

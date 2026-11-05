@@ -1,0 +1,6 @@
+<div [formGroup]="amountForm" class="text-small text-center">
+    <select formControlName="mode" class="custom-select custom-select-sm form-control-secondary form-control mx-auto" style="width: 70px;" (change)="changeMode()">
+        <option value="qbt" i18n="shared.btc|BTC">QBT</option>
+        <option value="sats" i18n="shared.sats">bits</option>
+    </select>
+</div>

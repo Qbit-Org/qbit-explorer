@@ -1,0 +1,43 @@
+<div class="container-xl">
+  <div class="text-center">
+    <h2 i18n="shared.calculator">Calculator</h2>
+  </div>
+
+  <div class="row justify-content-center">
+
+    <form [formGroup]="form">
+      <div class="input-group input-group-lg mb-1">
+        <div class="input-group-prepend">
+          <span class="input-group-text">QBT</span>
+        </div>
+        <input type="text" inputmode="decimal" class="form-control" formControlName="bitcoin" (input)="transformInput('bitcoin')" (click)="selectAll($event)">
+        <app-clipboard [button]="true" [text]="form.get('bitcoin').value" [class]="'btn btn-lg btn-secondary ml-1'"></app-clipboard>
+      </div>
+
+      <div class="input-group input-group-lg mb-1">
+        <div class="input-group-prepend">
+          <span class="input-group-text" i18n="shared.sats">bits</span>
+        </div>
+        <input type="text" inputmode="numeric" class="form-control" formControlName="satoshis" (input)="transformInput('satoshis')" (click)="selectAll($event)">
+        <app-clipboard [button]="true" [text]="form.get('satoshis').value" [class]="'btn btn-lg btn-secondary ml-1'"></app-clipboard>
+      </div>
+    </form>
+
+  </div>
+
+  <div class="row justify-content-center mt-3" *ngIf="isMaxSupply">
+    <div class="alert alert-warning" role="alert" i18n="calculator.max-supply-warning|Max supply warning message">
+      Values were capped at the max supply limit
+    </div>
+  </div>
+
+  <br>
+
+  <div class="row justify-content-center">
+    <div class="bitcoin-satoshis-text">
+      <span [innerHTML]="form.get('bitcoin').value | bitcoinsatoshis"></span>
+      <span class="sats">QBT</span>
+    </div>
+  </div>
+
+</div>

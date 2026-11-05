@@ -1,0 +1,6 @@
+<div class="block-spacing-chart" *ngIf="!isError">
+  <div class="chart-widget" *browserOnly
+    [style]="{ height: height + 'px', opacity: isLoading ? 0.5 : 1 }"
+    echarts [initOpts]="chartInitOptions" [options]="chartOptions">
+  </div>
+</div>

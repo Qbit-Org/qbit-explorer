@@ -1,0 +1,52 @@
+<ng-container *ngIf="cadence">
+  <span
+    *ngIf="cadence.isAuxpow; else permissionlessLane"
+    class="cadence-lane-badge badge badge-info"
+    data-cy="cadence-lane-badge"
+    data-lane="auxpow"
+    tabindex="0"
+    [attr.aria-label]="auxpowAriaLabel"
+    ngbTooltip="AuxPoW lane (merge-mined)"
+    i18n-ngbTooltip="cadence.auxpow-tooltip|AuxPoW mining lane tooltip"
+    placement="top"
+    container="body"
+  >
+    <fa-icon [icon]="['fas', 'link']" [fixedWidth]="true" aria-hidden="true"></fa-icon>
+    <span *ngIf="compact; else auxpowLabel" class="lane-code" aria-hidden="true">A</span>
+    <ng-template #auxpowLabel>
+      <span i18n="cadence.auxpow|AuxPoW mining lane label">AuxPoW</span>
+    </ng-template>
+    <span *ngIf="!compact && showChainId" class="chain-id" i18n="cadence.chain-id|AuxPoW chain ID">
+      · Chain ID {{ cadence.chainId }}
+    </span>
+  </span>
+
+  <ng-template #permissionlessLane>
+    <span
+      class="cadence-lane-badge badge badge-primary"
+      data-cy="cadence-lane-badge"
+      data-lane="permissionless"
+      tabindex="0"
+      aria-label="Permissionless lane"
+      i18n-aria-label="cadence.permissionless|Accessible permissionless mining lane label"
+      ngbTooltip="Permissionless lane"
+      i18n-ngbTooltip="cadence.permissionless-tooltip|Permissionless mining lane tooltip"
+      placement="top"
+      container="body"
+    >
+      <fa-icon [icon]="['fas', 'bolt']" [fixedWidth]="true" aria-hidden="true"></fa-icon>
+      <span *ngIf="compact; else permissionlessLabel" class="lane-code" aria-hidden="true">P</span>
+      <ng-template #permissionlessLabel>
+        <span i18n="cadence.permissionless|Permissionless mining lane label">Permissionless</span>
+      </ng-template>
+    </span>
+  </ng-template>
+
+  <span
+    *ngIf="!compact && showChainId && cadence.isAuxpow && cadence.chainIdMatchesExpected === false && cadence.expectedChainId !== null"
+    class="chain-id-warning badge badge-danger"
+    data-cy="cadence-chain-id-warning"
+    role="alert"
+    i18n="cadence.unexpected-chain-id|Warning shown when an AuxPoW block has an unexpected chain ID"
+  >Unexpected chain ID {{ cadence.chainId }}; expected {{ cadence.expectedChainId }}</span>
+</ng-container>

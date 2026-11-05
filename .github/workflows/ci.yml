@@ -1,0 +1,236 @@
+name: CI Pipeline for the Backend and Frontend
+
+on:
+  pull_request:
+    types: [opened, review_requested, synchronize]
+  push:
+    branches:
+      - main
+      - develop-qbit
+
+# Read-only token for every job. Nothing here needs secrets or write access,
+# so pull requests from forks run exactly the same checks.
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
+    strategy:
+      matrix:
+        node: ["26.12.1"]
+        flavor: ["dev", "prod"]
+      fail-fast: false
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    name: Backend (${{ matrix.flavor }}) - node ${{ matrix.node }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ${{ matrix.node }}/${{ matrix.flavor }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          registry-url: "https://registry.npmjs.org"
+          cache: 'npm'
+          cache-dependency-path: '${{ matrix.node }}/${{ matrix.flavor }}/backend/package-lock.json'
+
+      - name: Install npm 11.12.0
+        run: npm install -g npm@11.12.0
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.node }}/${{ matrix.flavor }}/backend/node_modules
+          key: ${{ runner.os }}-backend-${{ matrix.flavor }}-node-${{ matrix.node }}-${{ hashFiles(format('{0}/{1}/backend/package-lock.json', matrix.node, matrix.flavor)) }}
+          restore-keys: |
+            ${{ runner.os }}-backend-${{ matrix.flavor }}-node-${{ matrix.node }}-
+            ${{ runner.os }}-backend-${{ matrix.flavor }}-
+
+      - name: Read rust-toolchain file from repository
+        id: gettoolchain
+        run: echo "toolchain=$(cat ./rust/gbt/rust-toolchain)" >> "$GITHUB_OUTPUT"
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            ${{ matrix.node }}/${{ matrix.flavor }}/rust/gbt/target/
+          key: ${{ runner.os }}-cargo-${{ matrix.flavor }}-${{ hashFiles(format('{0}/{1}/rust/gbt/**/Cargo.lock', matrix.node, matrix.flavor)) }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.flavor }}-
+            ${{ runner.os }}-cargo-
+
+      - name: Install ${{ steps.gettoolchain.outputs.toolchain }} Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: ${{ steps.gettoolchain.outputs.toolchain }}
+
+      - name: Install
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm ci
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/backend
+
+      - name: Install (Prod dependencies only)
+        if: ${{ matrix.flavor == 'prod'}}
+        run: npm ci --omit=dev --omit=optional
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/backend
+
+      - name: Lint
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run lint
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/backend
+
+      - name: Unit Tests
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run test:ci
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/backend
+
+      - name: Build
+        run: npm run build
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/backend
+
+  frontend:
+    if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
+    strategy:
+      matrix:
+        node: ["26.12.1"]
+        flavor: ["dev", "prod"]
+      fail-fast: false
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    name: Frontend (${{ matrix.flavor }}) - node ${{ matrix.node }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: ${{ matrix.node }}/${{ matrix.flavor }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          registry-url: "https://registry.npmjs.org"
+          cache: 'npm'
+          cache-dependency-path: '${{ matrix.node }}/${{ matrix.flavor }}/frontend/package-lock.json'
+
+      - name: Install npm 11.12.0
+        run: npm install -g npm@11.12.0
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.node }}/${{ matrix.flavor }}/frontend/node_modules
+          key: ${{ runner.os }}-frontend-${{ matrix.flavor }}-node-${{ matrix.node }}-${{ hashFiles(format('{0}/{1}/frontend/package-lock.json', matrix.node, matrix.flavor)) }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-${{ matrix.flavor }}-node-${{ matrix.node }}-
+            ${{ runner.os }}-frontend-${{ matrix.flavor }}-
+
+      - name: Install (Prod dependencies only)
+        run: npm ci --omit=dev --omit=optional
+        if: ${{ matrix.flavor == 'prod'}}
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      - name: Install
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm ci
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      - name: Lint
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run lint
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      - name: qbit Script Smoke
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run smoke:qbit-scripts
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      - name: qbit Weight Smoke
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run smoke:qbit-weight
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      - name: qbit Block Target Smoke
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run smoke:qbit-block-target
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      # - name: Test
+      #   run: npm run test
+
+      - name: Build
+        run: npm run build
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+        env:
+          # CI skips the mining pool logo sync, so this build contains only the
+          # logos tracked in this repository. The Docker image build runs the
+          # sync and downloads the logos from mempool/mining-pool-logos.
+          SKIP_SYNC: 1
+
+  validate_docker_json:
+    if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    name: Validate generated backend Docker JSON
+
+    steps: 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: docker
+          persist-credentials: false
+
+      - name: Install jq
+        run: sudo apt-get install jq -y
+
+      - name: Create new start script to run on CI
+        run: |
+          sed '$d' start.sh > start_ci.sh
+        working-directory: docker/docker/backend
+
+      - name: Run the script to generate the sample JSON
+        run: |
+          sh start_ci.sh
+        working-directory: docker/docker/backend
+
+      - name: Validate JSON syntax
+        run: |
+          cat mempool-config.json | jq
+        working-directory: docker/docker/backend
+
+  # Quick checks on the files in the tree. Unlike the build jobs, this runs on
+  # ops pull requests too: it takes seconds, and any pull request can carry an
+  # upstream cherry-pick.
+  repository_checks:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 5
+    name: Repository checks
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Upstream mempool pull requests add contributors/<name>.txt to sign
+      # upstream's contributor license agreement. qbit-explorer has no CLA
+      # (CONTRIBUTING.md, License), and README.md (Upstream) says to keep
+      # contributors/ out of the tree.
+      - name: Check for upstream CLA files
+        run: |
+          files=$(git ls-files contributors)
+          if [ -n "$files" ]; then
+            echo "::error title=Upstream CLA files::These contributors/ files sign upstream mempool's CLA, but qbit-explorer has no CLA (CONTRIBUTING.md#license). Remove them in another commit with 'git rm -r contributors' and push; pull requests are squash-merged, so they never reach main (README.md#upstream)."
+            echo "$files"
+            exit 1
+          fi
+          echo "No files under contributors/."

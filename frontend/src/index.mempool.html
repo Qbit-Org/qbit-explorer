@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+
+  <!-- LOAD BEARING COMMENTS - DO NOT TOUCH! -->
+  <!-- TITLE -->
+  <title>qbit Explorer</title>
+  <!-- END TITLE -->
+
+  <!-- CONFIG -->
+  <script src="/resources/config.js"></script>
+  <!-- END CONFIG -->
+   <!-- CUSTOMIZATION -->
+  <script src="/resources/customize.js"></script>
+  <!-- END CUSTOMIZATION -->
+  <base href="/">
+
+  <!-- Warm up the connection for full-document navigations back to qbit.org
+       (logo/banner/nav links leave for the Next.js site). No crossorigin
+       variant: nothing on this page fetches CORS resources (fonts/XHR) from
+       qbit.org, and document navigations use the plain connection pool.
+       QBIT_SITE_CHROME=false removes those links, so this page then never
+       contacts qbit.org, and leaves only the spinner in the pre-boot skeleton
+       below. An unset value means on, as in state.service.ts. -->
+  <script>
+    if (window.__env && window.__env.QBIT_SITE_CHROME !== undefined && !window.__env.QBIT_SITE_CHROME) {
+      document.documentElement.classList.add('no-qbit-chrome');
+    } else {
+      document.head.appendChild(Object.assign(document.createElement('link'), { rel: 'preconnect', href: 'https://qbit.org' }));
+    }
+  </script>
+
+  <!-- META -->
+  <meta name="description" content="Explore the qbit blockchain: real-time transactions, blocks, mempool, fees, mining, and network health." />
+  <meta property="og:title" content="qbit Explorer" />
+  <meta property="og:site_name" content="qbit Explorer" />
+  <meta property="og:type" content="website" />
+  <!-- absolute because link-preview crawlers (e.g. X) need absolute image
+       URLs; every deployment shares the canonical explorer host's copy -->
+  <meta property="og:image" content="https://mempool.qbit.org/resources/previews/qbit-social-preview.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="675" />
+  <meta property="og:description" content="Explore the qbit blockchain: real-time transactions, blocks, mempool, fees, mining, and network health." />
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="qbit Explorer">
+  <meta name="twitter:description" content="Explore the qbit blockchain: real-time transactions, blocks, mempool, fees, mining, and network health." />
+  <meta name="twitter:image" content="https://mempool.qbit.org/resources/previews/qbit-social-preview.png" />
+  <!-- END META -->
+
+  <!-- FAVICONS -->
+  <!-- browsers cache icons by URL: when the icons change, bump ?v= here and
+       in favicons/site.webmanifest and favicons/browserconfig.xml -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/resources/favicons/apple-touch-icon.png?v=2">
+  <link rel="icon" type="image/png" sizes="32x32" href="/resources/favicons/favicon-32x32.png?v=2">
+  <link rel="icon" type="image/png" sizes="16x16" href="/resources/favicons/favicon-16x16.png?v=2">
+  <link rel="manifest" href="/resources/favicons/site.webmanifest">
+  <link rel="shortcut icon" href="/resources/favicons/favicon.ico?v=2">
+  <link id="canonical" rel="canonical" href="/">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="msapplication-TileColor" content="#000000">
+  <meta name="msapplication-config" content="/resources/favicons/browserconfig.xml">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="application-name" content="qbit Explorer">
+  <!-- END FAVICONS -->
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Pre-bootstrap qbit chrome (skeleton markup lives inside <app-root>
+       below). Contract-bound values (accent/line colors, banner/bar heights,
+       rail max-width, mono stack, banner text) are injected at build time by
+       generate-config.js from the vendored design contract
+       (src/resources/qbit-design/{tokens,nav}.json) via the --pb-* :root
+       style and the banner span; the literals below are FALLBACKS for that
+       injection failing and mirror the contract at commit time.
+       Font: 'Geist Mono' is declared in styles.scss with font-display: swap,
+       so until its woff2 arrives the fallback mono stack below renders. The
+       banner is a fixed-min-height single centered nowrap line, so the swap
+       only re-flows glyph widths and cannot shift the chrome geometry. -->
+  <style>
+    #qbit-preboot {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--pb-paper, #fff); /* color.paper */
+    }
+    /* mirrors master-page .qbit-banner */
+    .no-qbit-chrome #qbit-preboot .qbit-preboot-banner,
+    .no-qbit-chrome #qbit-preboot .qbit-preboot-bar-wrap {
+      display: none;
+    }
+    #qbit-preboot .qbit-preboot-banner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: var(--pb-banner-h, 36px); /* header.bannerHeightPx */
+      padding: 0.5rem 1rem;
+      overflow: hidden;
+      background: var(--pb-accent, #1ab553); /* color.accent */
+      color: #fff;
+      font-family: var(--pb-mono, 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace); /* font.mono */
+      font-size: 0.8rem;
+      font-weight: 600;
+      line-height: 1.25rem;
+      text-align: center;
+    }
+    #qbit-preboot .qbit-preboot-banner span {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* mirrors master-page .qbit-bar-wrap / .qbit-bar */
+    #qbit-preboot .qbit-preboot-bar-wrap {
+      background: var(--pb-paper, #fff); /* color.paper */
+      border-bottom: 1px solid rgba(16, 20, 18, 0.08); /* color.ink at 8% */
+    }
+    #qbit-preboot .qbit-preboot-bar {
+      display: flex;
+      align-items: center;
+      min-height: var(--pb-bar-h, 58px); /* header.heightPx */
+      max-width: var(--pb-maxw, 1280px); /* header.maxWidthPx */
+      margin: 0 auto;
+      padding: 0.5rem 0.5rem 0.5rem 1.25rem; /* shared rail inset */
+    }
+    #qbit-preboot .qbit-preboot-bar img {
+      display: block;
+      height: 32px;
+      width: auto; /* logo-full.svg is 736x320, so ~73.6px wide */
+    }
+    /* mirror the real header's responsive logo heights so the bootstrap
+       handoff never resizes the logo (master-page .qbit-logo img). The
+       annotated breakpoint is rewritten from tokens.json by
+       generate-config.js; 640px is qbit.org's own root-font step, not a
+       contract token */
+    @media (max-width: 879px) /* header.mobileBreakpointPx */ {
+      #qbit-preboot .qbit-preboot-bar img {
+        height: 28px;
+      }
+    }
+    @media (max-width: 640px) {
+      #qbit-preboot .qbit-preboot-bar img {
+        height: 26px;
+      }
+    }
+    #qbit-preboot .qbit-preboot-page {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+    }
+    #qbit-preboot .qbit-preboot-spinner {
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--pb-line, #dce7e0); /* color.line */
+      border-top-color: var(--pb-accent, #1ab553); /* color.accent */
+      border-radius: 50%;
+      animation: qbit-preboot-spin 0.9s linear infinite;
+    }
+    @keyframes qbit-preboot-spin {
+      to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #qbit-preboot .qbit-preboot-spinner {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Pre-bootstrap skeleton: tier-1 qbit chrome (accent banner + white
+       header bar with the logo) over a paper-white page, so full-document
+       navigations from/to qbit.org never flash the explorer's dark theme.
+       Removal mechanism: main.ts bootstraps AppComponent (selector
+       <app-root>) on DOMContentLoaded, and Angular empties the host
+       element's existing children when it renders into it — everything in
+       here disappears in the same frame the real header paints, no explicit
+       teardown hook needed. Geometry mirrors master-page's
+       .qbit-banner/.qbit-bar so the handoff does not jump. Deliberately
+       non-interactive and without nav links: links would shift as fonts and
+       runtime nav config settle — banner + logo alone read as "same site". -->
+  <app-root>
+    <div id="qbit-preboot" aria-hidden="true">
+      <div class="qbit-preboot-banner">
+        <!-- fallback only: generate-config.js re-injects this from the
+             vendored src/resources/qbit-design/nav.json banner.text on every
+             build, so it cannot drift from the contract -->
+        <span class="qbit-preboot-banner-text">Qbit Wallet is live &mdash; add it to Chrome</span>
+      </div>
+      <div class="qbit-preboot-bar-wrap">
+        <div class="qbit-preboot-bar">
+          <img src="/resources/qbit-design/logo-full.svg" alt="" width="74" height="32">
+        </div>
+      </div>
+      <div class="qbit-preboot-page">
+        <div class="qbit-preboot-spinner"></div>
+      </div>
+    </div>
+  </app-root>
+</body>
+
+</html>

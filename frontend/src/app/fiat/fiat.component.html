@@ -1,0 +1,17 @@
+<ng-container *ngIf="blockConversion; else noblockconversion">
+  <span [class]="colorClass" *ngIf="getBlockConversion() as conversion; else noconversion">
+    {{ conversion * value / 100000000 | fiatCurrency : digitsInfo : currency }}
+  </span>
+</ng-container>
+
+<ng-template #noblockconversion>
+  <ng-container *ngIf="(conversions$ | async) as conversions; else noconversion">
+    <span [class]="colorClass" *ngIf="getConversion(conversions) as conversion; else noconversion">
+      {{ conversion * value / 100000000 | fiatCurrency : digitsInfo : currency }}
+    </span>
+  </ng-container>
+</ng-template>
+
+<ng-template #noconversion>
+  <span>&nbsp;</span>
+</ng-template>

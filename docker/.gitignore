@@ -1,0 +1,2 @@
+# Local image selection for docker-compose.yml; see .env.example.
+.env

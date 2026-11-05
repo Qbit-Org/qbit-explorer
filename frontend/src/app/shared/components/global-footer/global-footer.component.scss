@@ -1,0 +1,386 @@
+// Two-tier footer, mirroring the two-tier header:
+//  1. .qbit-subfooter  — explorer-owned band (explorer links, selectors,
+//     version line) on the explorer's 1280px header rail.
+//  2. .qbit-footer     — pristine replica of qbit.org's SiteFooter on
+//     qbit.org's own 68rem content rail. Zero explorer content.
+// Colors and fonts arrive as --qbit-* custom properties published by
+// QbitDesignService from the vendored design contract
+// (src/resources/qbit-design/tokens.json).
+
+$mobile-breakpoint: 919px; // tokens.header.mobileBreakpointPx
+$narrow-breakpoint: 560px;
+
+// ---------------------------------------------------------------------------
+// Explorer sub-footer band
+// ---------------------------------------------------------------------------
+
+// no transparent top margin: it would show the shell's dark body between
+// paper content pages and this band; the band's own padding provides the
+// breathing room on every page
+.qbit-subfooter {
+  background: var(--qbit-surface);
+  border-top: 1px solid var(--qbit-line);
+  color: var(--qbit-ink);
+}
+
+.qbit-subfooter-inner {
+  // same rail as .qbit-bar / .qbit-subnav-inner so the sub-footer columns
+  // line up with the header chrome (the pristine footer below deliberately
+  // does NOT share this rail)
+  max-width: var(--qbit-header-max-width, 1280px);
+  margin: 0 auto;
+  padding: 2.25rem 1.25rem 1.5rem;
+  display: grid;
+  gap: 1.6rem;
+}
+
+// eyebrow-labeled explorer band: four balanced columns on desktop, collapsing
+// to 2 / 1 below the contract's mobile breakpoint
+.qbit-footer-explorer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.9rem 1.5rem;
+}
+
+.qbit-footer-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+
+  > a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem; // 32px touch target
+    font-family: var(--qbit-font-mono);
+    font-size: 13px;
+    line-height: 1.3;
+    color: var(--qbit-muted);
+    text-decoration: none;
+
+    &:visited {
+      color: var(--qbit-muted);
+    }
+
+    &:hover,
+    &:focus {
+      color: var(--qbit-ink);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.32em;
+    }
+  }
+}
+
+// echoes .qbit-mobile-eyebrow in the header's mobile menu
+.qbit-footer-eyebrow {
+  margin-bottom: 0.6rem;
+  font-family: var(--qbit-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qbit-muted);
+}
+
+.qbit-footer-selectors {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+
+  ::ng-deep select.form-control {
+    -webkit-appearance: none;
+    appearance: none;
+    // one flush column edge; !important beats the selector components'
+    // inline width:70-120px, which truncates the timezone label
+    width: 200px !important;
+    max-width: 100%;
+    font-family: var(--qbit-font-mono);
+    font-size: 13px;
+    background-color: var(--qbit-paper);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0%200%2012%208'%3E%3Cpath d='M1%201.5%206%206.5%2011%201.5' fill='none' stroke='%234f6056' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: right 0.6rem center;
+    background-repeat: no-repeat;
+    background-size: 0.6rem 0.4rem;
+    border: 1px solid var(--qbit-line);
+    border-radius: 0; // qbit.org square corners
+    color: var(--qbit-ink);
+    padding-right: 1.6rem;
+    min-height: 2rem; // 32px touch target
+
+    &:hover,
+    &:focus {
+      border-color: var(--qbit-accent);
+      box-shadow: none;
+      background-color: var(--qbit-paper);
+      color: var(--qbit-ink);
+    }
+  }
+}
+
+// slim meta row at the bottom of the explorer band
+.qbit-footer-version {
+  margin: 0;
+  font-family: var(--qbit-font-mono);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: rgb(79 96 86 / 68%);
+
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover,
+    &:focus {
+      color: var(--qbit-ink);
+      text-decoration: underline;
+    }
+  }
+}
+
+@media (max-width: $mobile-breakpoint) {
+  .qbit-footer-explorer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.6rem 1.25rem;
+  }
+}
+
+@media (max-width: $narrow-breakpoint) {
+  .qbit-footer-explorer {
+    grid-template-columns: 1fr;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pristine replica of qbit.org's site footer
+// ---------------------------------------------------------------------------
+
+.qbit-footer {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--qbit-paper); // white
+  border-top: 1px solid var(--qbit-line);
+  font-family: var(--qbit-font-sans);
+  color: var(--qbit-ink);
+
+  // qbit-dark.svg watermark bleeding off the right edge
+  &::before {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    top: 36%;
+    // pinned to qbit.org's 68rem content rail edge: = 176px at 1440
+    right: max(1rem, calc((100% - 68rem) / 2));
+    width: 384px; // 24rem
+    height: 384px;
+    transform: translate(32%, -50%);
+    background-image: url('/resources/qbit-dark.svg');
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0.04;
+  }
+}
+
+.qbit-footer-inner {
+  // qbit.org's 68rem content rail + 2x48px padding — deliberately NOT the
+  // header's 1280px rail
+  position: relative;
+  z-index: 1;
+  max-width: 1184px;
+  margin: 0 auto;
+  padding: 32px 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 32px;
+  row-gap: 24px;
+}
+
+.qbit-footer-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  align-self: start;
+  text-decoration: none;
+
+  img {
+    display: block;
+    height: 32px; // 2rem
+    width: auto;
+  }
+}
+
+.qbit-footer-links {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  column-gap: 3rem;
+  row-gap: 1.5rem;
+
+  @media (max-width: 900px) {
+    grid-template-columns: repeat(2, auto);
+    column-gap: 2.5rem;
+  }
+}
+
+.qbit-site-footer-group {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+
+  h2 {
+    margin: 0;
+    font-family: var(--qbit-font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--qbit-muted);
+  }
+
+  ul {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  a {
+    font-family: var(--qbit-font-mono);
+    font-size: 0.94rem;
+    color: rgb(7 17 11 / 74%);
+    text-decoration: none;
+
+    &:visited {
+      color: rgb(7 17 11 / 74%);
+    }
+
+    // same hover idiom as the header's .qbit-link
+    &:hover,
+    &:focus {
+      color: #07110b;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 0.32em;
+    }
+  }
+}
+
+.qbit-footer-legal {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  border-top: 1px solid var(--qbit-line);
+  padding-top: 16px;
+}
+
+.qbit-footer-notice {
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &:visited,
+    &:hover,
+    &:focus {
+      color: inherit;
+    }
+  }
+}
+
+.qbit-footer-copyright {
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.5;
+  color: var(--qbit-muted);
+
+  span {
+    padding: 0 0.5rem;
+    color: rgb(79 96 86 / 38%);
+  }
+}
+
+.qbit-footer-license {
+  margin: 8px 0 0;
+  max-width: 62rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: rgb(79 96 86 / 68%);
+}
+
+.qbit-footer-social {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  column-gap: 0.18rem;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.1rem;
+    min-width: 1.9rem;
+    color: var(--qbit-ink);
+    opacity: 0.8;
+    text-decoration: none;
+
+    &:visited {
+      color: var(--qbit-ink);
+    }
+
+    &:hover,
+    &:focus {
+      color: var(--qbit-ink);
+      opacity: 1;
+    }
+  }
+
+  svg {
+    height: 0.95rem;
+    width: 0.95rem;
+    fill: currentColor;
+  }
+}
+
+// qbit.org's own mobile breakpoint (max-[640px] in SiteFooter), NOT the
+// contract's 919px header breakpoint. qbit.org's root font is 15px here, so
+// its rem sizes are expressed below as px.
+@media (max-width: 640px) {
+  .qbit-footer::before {
+    right: 50%;
+    width: 330px; // 22rem at the 15px mobile root
+    height: 330px;
+    transform: translate(50%, -50%);
+    opacity: 0.035;
+  }
+
+  .qbit-footer-inner {
+    grid-template-columns: 1fr;
+    gap: 19px; // gap-5 at the 15px mobile root
+    padding: 24px 15px;
+  }
+
+  .qbit-footer-logo img {
+    height: 30px; // 2rem at the 15px mobile root
+  }
+
+  .qbit-footer-links {
+    justify-content: start;
+  }
+
+  .qbit-footer-legal {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding-top: 13px; // 0.85rem at the 15px mobile root
+  }
+
+  .qbit-footer-social {
+    justify-content: flex-start;
+  }
+}
