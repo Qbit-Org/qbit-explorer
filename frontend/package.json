@@ -56,7 +56,7 @@
     "cypress:run:regtest": "start-server-and-test cypress:serve:regtest http-get://localhost:4200 cypress:run"
   },
   "dependencies": {
-    "@angular-devkit/build-angular": "^20.3.38",
+    "@angular-devkit/build-angular": "^22.2.6",
     "@angular/animations": "^20.3.33",
     "@angular/cli": "^20.3.38",
     "@angular/common": "^20.3.33",
