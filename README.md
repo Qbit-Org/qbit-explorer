@@ -80,6 +80,12 @@ Upstream's release tags use the same names as ours: its releases run from
 upstream's tags out of your clone. To find an upstream release's commit, run
 `git ls-remote --tags upstream 'v3.3.1^{}'`.
 
+If you added the remote earlier without `--no-tags`, your clone may hold
+upstream's tags under our names, and a plain `git fetch` will not replace
+them. Stop the remote fetching tags, delete your local tags and fetch ours
+again: `git config remote.upstream.tagOpt --no-tags`, then
+`git tag -l | xargs git tag -d`, then `git fetch --tags origin`.
+
 Expect conflicts where qbit has changed the same code. Upstream merges pull
 requests with merge commits, so to pick a whole pull request at once,
 cherry-pick its merge commit with `-m 1`. The `-x` flag records the upstream
