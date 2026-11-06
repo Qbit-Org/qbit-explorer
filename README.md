@@ -75,19 +75,10 @@ git fetch upstream
 git cherry-pick -x <upstream-commit>
 ```
 
-Upstream's release tags have the same names as ours: upstream's run from
-`v1.0.0` to `v3.3.1` and beyond, and qbit-explorer's releases start again at
-`v1.0.0`. Git never replaces a tag your clone already has, so a clone that
-fetched upstream's tags can hold upstream's code under one of our release
-names. To avoid that:
-
-- To find an upstream release's commit, run
-  `git ls-remote --tags upstream 'v3.3.1^{}'` and use the commit it prints,
-  not the tag name.
-- If your clone already has upstream's tags, delete your local tags and fetch
-  ours again: `git tag -l | xargs git tag -d`, then `git fetch --tags origin`.
-- Push a release tag by name, for example `git push origin v1.0.1`, never with
-  `git push --tags`.
+Upstream's release tags use the same names as ours: its releases run from
+`v1.0.0` up, and ours start again at `v1.0.0`. The `--no-tags` flag keeps
+upstream's tags out of your clone. To find an upstream release's commit, run
+`git ls-remote --tags upstream 'v3.3.1^{}'`.
 
 Expect conflicts where qbit has changed the same code. Upstream merges pull
 requests with merge commits, so to pick a whole pull request at once,
