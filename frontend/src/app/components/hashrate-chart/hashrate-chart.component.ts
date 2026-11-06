@@ -514,6 +514,7 @@ export class HashrateChartComponent implements OnInit {
         }
       },
       legend: (this.widget || !hasData) ? undefined : {
+        top: 0,
         data: legendData,
         selected: {
           [this.aggregateLabel]: storedLegend[this.aggregateLabel]

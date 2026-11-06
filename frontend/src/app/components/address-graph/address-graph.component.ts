@@ -211,6 +211,7 @@ export class AddressGraphComponent implements OnChanges, OnDestroy {
       },
       graphic: graphicElements.length > 0 ? graphicElements : undefined,
       legend: (this.showLegend && !this.stateService.isAnyTestnet()) ? {
+        top: 0,
         data: [
           {
             name: $localize`:@@7e69426bd97a606d8ae6026762858e6e7c86a1fd:Balance`,
@@ -375,7 +376,7 @@ export class AddressGraphComponent implements OnChanges, OnDestroy {
           areaStyle: {
             opacity: 0.5,
           },
-          triggerLineEvent: true,
+          triggerEvent: true,
           type: 'line',
           smooth: false,
           step: 'end'
@@ -390,7 +391,7 @@ export class AddressGraphComponent implements OnChanges, OnDestroy {
           areaStyle: {
             opacity: 0.5,
           },
-          triggerLineEvent: true,
+          triggerEvent: true,
           type: 'line',
           smooth: false,
           step: 'end'
@@ -451,6 +452,7 @@ export class AddressGraphComponent implements OnChanges, OnDestroy {
       },
       graphic: graphicElements.length > 0 ? graphicElements : undefined,
       legend: {
+        top: 0,
         selected: this.selected,
       },
       dataZoom: this.allowZoom ? [{

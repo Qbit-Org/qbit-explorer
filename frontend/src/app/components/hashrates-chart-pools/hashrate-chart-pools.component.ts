@@ -255,6 +255,7 @@ export class HashrateChartPoolsComponent implements OnInit {
         }
       },
       legend: (this.isMobile() || data.series.length === 0) ? undefined : {
+        top: 0,
         data: data.legends
       },
       yAxis: data.series.length === 0 ? undefined : {
