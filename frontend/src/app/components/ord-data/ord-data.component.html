@@ -41,7 +41,7 @@
       }
       <span class="badge badge-ord" *ngIf="contentType.value.totalSize > 0">{{ contentType.value.totalSize | bytes:2:'B':undefined:true }}</span>
       <a *ngIf="contentType.value.delegate" [routerLink]="['/tx' | relativeUrl, contentType.value.delegate]">
-        <span i18n="ord.source-inscription">Source inscription</span>
+        <span i18n="ord.source-inscription">Source qscription</span>
       </a>
     </div>
     <pre *ngIf="contentType.value.json" class="name" style="white-space: pre-wrap; word-break: break-word;">{{ contentType.value.json | json }}</pre>

@@ -713,12 +713,15 @@ export class Common {
         }
       } else {
         // no prevouts, optimistically check witness-bearing inputs
-        if (vin.witness?.length >= 2 && (Common.inputIsMaybeP2mrInscription(vin) || Common.inputIsMaybeInscription(vin))) {
-          // try to parse the witness as a taproot or P2MR inscription
+        if (vin.witness?.length >= 2) {
+          // try to parse the witness as a P2MR or taproot inscription; the P2MR check comes first, since
+          // inputIsMaybeInscription reads witness[2] even when the witness has only two items
           try {
-            flags = Common.isInscription(vin, flags);
+            if (Common.inputIsMaybeP2mrInscription(vin) || Common.inputIsMaybeInscription(vin)) {
+              flags = Common.isInscription(vin, flags);
+            }
           } catch {
-            // witness script parsing will fail if this isn't really a taproot output
+            // witness script parsing will fail if this isn't really a taproot or P2MR output
           }
         }
       }

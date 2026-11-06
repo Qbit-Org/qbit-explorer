@@ -21,14 +21,14 @@
         <source>Previous</source>
         <context-group purpose="location">
           <context context-type="sourcefile">node_modules/src/carousel/carousel.ts</context>
-          <context context-type="linenumber">148,149</context>
+          <context context-type="linenumber">148</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ngb.carousel.next" datatype="html">
         <source>Next</source>
         <context-group purpose="location">
           <context context-type="sourcefile">node_modules/src/carousel/carousel.ts</context>
-          <context context-type="linenumber">176,177</context>
+          <context context-type="linenumber">169</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ngb.datepicker.previous-month" datatype="html">
@@ -39,7 +39,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">node_modules/src/datepicker/datepicker-navigation.ts</context>
-          <context context-type="linenumber">105,108</context>
+          <context context-type="linenumber">104,105</context>
         </context-group>
       </trans-unit>
       <trans-unit id="ngb.datepicker.next-month" datatype="html">
@@ -805,7 +805,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fee-rates-graph/block-fee-rates-graph.component.ts</context>
-          <context context-type="linenumber">74</context>
+          <context context-type="linenumber">75</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/graphs/graphs.component.html</context>
@@ -841,37 +841,37 @@
         <source>See qbit feerates visualized over time, including minimum and maximum feerates per block along with feerates at various percentiles.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fee-rates-graph/block-fee-rates-graph.component.ts</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4793828002882320882" datatype="html">
         <source>At block: <x id="PH" equiv-text="data[0].data[2]"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fee-rates-graph/block-fee-rates-graph.component.ts</context>
-          <context context-type="linenumber">257</context>
+          <context context-type="linenumber">262</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-health-graph/block-health-graph.component.ts</context>
-          <context context-type="linenumber">144</context>
+          <context context-type="linenumber">149</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">170</context>
+          <context context-type="linenumber">175</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8918254921747459635" datatype="html">
         <source>Around block: <x id="PH" equiv-text="data[0].data[2]"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fee-rates-graph/block-fee-rates-graph.component.ts</context>
-          <context context-type="linenumber">259</context>
+          <context context-type="linenumber">264</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-health-graph/block-health-graph.component.ts</context>
-          <context context-type="linenumber">146</context>
+          <context context-type="linenumber">151</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">172</context>
+          <context context-type="linenumber">177</context>
         </context-group>
       </trans-unit>
       <trans-unit id="6c453b11fd7bd159ae30bc381f367bc736d86909" datatype="html">
@@ -882,7 +882,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-graph/block-fees-graph.component.ts</context>
-          <context context-type="linenumber">70</context>
+          <context context-type="linenumber">71</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/graphs/graphs.component.html</context>
@@ -894,34 +894,34 @@
         <source>See the average mining fees earned per qbit block visualized in QBT over time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-graph/block-fees-graph.component.ts</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">72</context>
         </context-group>
       </trans-unit>
       <trans-unit id="23555386d8af1ff73f297e89dd4af3f4689fb9dd" datatype="html">
         <source>Indexing blocks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-graph/block-fees-graph.component.ts</context>
-          <context context-type="linenumber">120</context>
+          <context context-type="linenumber">125</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-subsidy-graph/block-fees-subsidy-graph.component.ts</context>
-          <context context-type="linenumber">148</context>
+          <context context-type="linenumber">153</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-rewards-graph/block-rewards-graph.component.ts</context>
-          <context context-type="linenumber">117</context>
+          <context context-type="linenumber">122</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">121</context>
+          <context context-type="linenumber">126</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">330</context>
+          <context context-type="linenumber">335</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrates-chart-pools/hashrate-chart-pools.component.ts</context>
-          <context context-type="linenumber">203</context>
+          <context context-type="linenumber">208</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/indexing-progress/indexing-progress.component.html</context>
@@ -933,7 +933,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/price-chart/price-chart.component.ts</context>
-          <context context-type="linenumber">136</context>
+          <context context-type="linenumber">141</context>
         </context-group>
       </trans-unit>
       <trans-unit id="41545303ec98792b738d6237adbd1f3b54a22196" datatype="html">
@@ -944,7 +944,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-subsidy-graph/block-fees-subsidy-graph.component.ts</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/graphs/graphs.component.html</context>
@@ -956,21 +956,21 @@
         <source>See the mining fees earned per qbit block compared to the qbit block subsidy, visualized in QBT over time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-subsidy-graph/block-fees-subsidy-graph.component.ts</context>
-          <context context-type="linenumber">80</context>
+          <context context-type="linenumber">81</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8538305450922736186" datatype="html">
         <source>At block <x id="PH" equiv-text="&apos;&lt;b style=&quot;color: white; margin-left: 2px&quot;&gt;&apos; + data[0].axisValue"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-subsidy-graph/block-fees-subsidy-graph.component.ts</context>
-          <context context-type="linenumber">196</context>
+          <context context-type="linenumber">201</context>
         </context-group>
       </trans-unit>
       <trans-unit id="8807945662832318286" datatype="html">
         <source>Around block <x id="PH" equiv-text="&apos;&lt;b style=&quot;color: white; margin-left: 2px&quot;&gt;&apos; + data[0].axisValue"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-fees-subsidy-graph/block-fees-subsidy-graph.component.ts</context>
-          <context context-type="linenumber">198</context>
+          <context context-type="linenumber">203</context>
         </context-group>
       </trans-unit>
       <trans-unit id="98ec8c22c6a0e036b9af829b20e84afc56a79af8" datatype="html">
@@ -1100,7 +1100,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-health-graph/block-health-graph.component.ts</context>
-          <context context-type="linenumber">64</context>
+          <context context-type="linenumber">65</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/graphs/graphs.component.html</context>
@@ -1112,14 +1112,14 @@
         <source>See qbit block health visualized over time. Block health is a measure of how many expected transactions were included in an actual mined block. Expected transactions are determined using the explorer&apos;s transaction selection model.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-health-graph/block-health-graph.component.ts</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">66</context>
         </context-group>
       </trans-unit>
       <trans-unit id="80065834848189518" datatype="html">
         <source>No data to display yet. Try again later.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-health-graph/block-health-graph.component.ts</context>
-          <context context-type="linenumber">110</context>
+          <context context-type="linenumber">115</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-spacing-chart/block-spacing-chart.component.ts</context>
@@ -1130,7 +1130,7 @@
         <source>Health</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-health-graph/block-health-graph.component.ts</context>
-          <context context-type="linenumber">191</context>
+          <context context-type="linenumber">196</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block/block.component.html</context>
@@ -1522,7 +1522,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-rewards-graph/block-rewards-graph.component.ts</context>
-          <context context-type="linenumber">68</context>
+          <context context-type="linenumber">69</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/graphs/graphs.component.html</context>
@@ -1534,7 +1534,7 @@
         <source>See qbit block rewards in QBT visualized over time. Block rewards are the total funds miners earn from the block subsidy and fees.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-rewards-graph/block-rewards-graph.component.ts</context>
-          <context context-type="linenumber">69</context>
+          <context context-type="linenumber">70</context>
         </context-group>
       </trans-unit>
       <trans-unit id="56fa1cd221491b6478998679cba2dc8d55ba330d" datatype="html">
@@ -1545,7 +1545,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">66</context>
+          <context context-type="linenumber">67</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/graphs/graphs.component.html</context>
@@ -1557,18 +1557,18 @@
         <source>See qbit block sizes (MB) and block weights (weight units) visualized over time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">67</context>
+          <context context-type="linenumber">68</context>
         </context-group>
       </trans-unit>
       <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
         <source>Size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">189</context>
+          <context context-type="linenumber">194</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">244</context>
+          <context context-type="linenumber">249</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block/block.component.html</context>
@@ -1619,11 +1619,11 @@
         <source>Weight</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">197</context>
+          <context context-type="linenumber">202</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">275</context>
+          <context context-type="linenumber">280</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block/block-preview.component.html</context>
@@ -1666,11 +1666,11 @@
         <source>Size per weight</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">205</context>
+          <context context-type="linenumber">210</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/block-sizes-weights-graph/block-sizes-weights-graph.component.ts</context>
-          <context context-type="linenumber">287</context>
+          <context context-type="linenumber">292</context>
         </context-group>
       </trans-unit>
       <trans-unit id="block.height" datatype="html">
@@ -2273,7 +2273,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">112</context>
+          <context context-type="linenumber">113</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/mining-dashboard/mining-dashboard.component.html</context>
@@ -3057,7 +3057,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">110</context>
+          <context context-type="linenumber">111</context>
         </context-group>
         <note priority="1" from="description">Permissionless mining lane label</note>
         <note priority="1" from="meaning">cadence.permissionless</note>
@@ -3074,7 +3074,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">111</context>
+          <context context-type="linenumber">112</context>
         </context-group>
         <note priority="1" from="description">AuxPoW mining lane label</note>
         <note priority="1" from="meaning">cadence.auxpow</note>
@@ -3238,7 +3238,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">138</context>
+          <context context-type="linenumber">139</context>
         </context-group>
         <note priority="1" from="description">mining.hashrate-difficulty</note>
       </trans-unit>
@@ -3292,7 +3292,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">115</context>
+          <context context-type="linenumber">116</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/pool-ranking/pool-ranking.component.html</context>
@@ -3316,7 +3316,7 @@
         <source>Aggregate</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">109</context>
+          <context context-type="linenumber">110</context>
         </context-group>
         <note priority="1" from="description">Aggregate network hashrate series</note>
         <note priority="1" from="meaning">mining.aggregate-hashrate</note>
@@ -3325,7 +3325,7 @@
         <source>Difficulty (Permissionless)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">113</context>
+          <context context-type="linenumber">114</context>
         </context-group>
         <note priority="1" from="description">Permissionless lane difficulty series</note>
         <note priority="1" from="meaning">mining.difficulty-permissionless</note>
@@ -3334,7 +3334,7 @@
         <source>Difficulty (AuxPoW)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">114</context>
+          <context context-type="linenumber">115</context>
         </context-group>
         <note priority="1" from="description">AuxPoW lane difficulty series</note>
         <note priority="1" from="meaning">mining.difficulty-auxpow</note>
@@ -3343,21 +3343,21 @@
         <source>See aggregate, permissionless, and AuxPoW hashrate alongside difficulty for the qbit<x id="PH" equiv-text="seoDescriptionNetwork(this.network)"/> network visualized over time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrate-chart/hashrate-chart.component.ts</context>
-          <context context-type="linenumber">139</context>
+          <context context-type="linenumber">140</context>
         </context-group>
       </trans-unit>
       <trans-unit id="mining.pools-historical-dominance" datatype="html">
         <source>Pools Historical Dominance</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrates-chart-pools/hashrate-chart-pools.component.ts</context>
-          <context context-type="linenumber">75</context>
+          <context context-type="linenumber">76</context>
         </context-group>
       </trans-unit>
       <trans-unit id="meta.descriptions.bitcoin.graphs.hashrate-pools" datatype="html">
         <source>See qbit mining pool dominance visualized over time: see how top mining pools&apos; share of total hashrate has fluctuated over time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/hashrates-chart-pools/hashrate-chart-pools.component.ts</context>
-          <context context-type="linenumber">76</context>
+          <context context-type="linenumber">77</context>
         </context-group>
       </trans-unit>
       <trans-unit id="5ee5eb7db86675abd5f0b0db835bf362ee9b23ff" datatype="html">
@@ -3609,15 +3609,11 @@
         </context-group>
         <note priority="1" from="description">ord.transfer-rune</note>
       </trans-unit>
-      <trans-unit id="99264845cdffed75db1a32df6e66febbdf1d99f1" datatype="html">
-        <source>Source inscription</source>
+      <trans-unit id="bf7aef753efcb4872b2c55b6c7ce7057d1df2097" datatype="html">
+        <source>Source qscription</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/ord-data/ord-data.component.html</context>
           <context context-type="linenumber">44</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/filters.utils.ts</context>
-          <context context-type="linenumber">108</context>
         </context-group>
         <note priority="1" from="description">ord.source-inscription</note>
       </trans-unit>
@@ -4103,14 +4099,14 @@
         <source>QBT Price</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/price-chart/price-chart.component.ts</context>
-          <context context-type="linenumber">77</context>
+          <context context-type="linenumber">82</context>
         </context-group>
       </trans-unit>
       <trans-unit id="price-chart.description" datatype="html">
         <source>See the QBT price visualized over time.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/price-chart/price-chart.component.ts</context>
-          <context context-type="linenumber">78</context>
+          <context context-type="linenumber">83</context>
         </context-group>
       </trans-unit>
       <trans-unit id="f13cbfe8cfc955918e9f64466d2cafddb4760d9a" datatype="html">
@@ -5312,8 +5308,8 @@
         </context-group>
         <note priority="1" from="description">transactions-list.peg-in</note>
       </trans-unit>
-      <trans-unit id="81f138da4f955badade9fb60e0e2248627fc647f" datatype="html">
-        <source>Inscription</source>
+      <trans-unit id="b984abb4f16d6ecf7e53925938e85cb443fc697e" datatype="html">
+        <source>Qscription</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/transactions-list/transactions-list.component.html</context>
           <context context-type="linenumber">118</context>
@@ -6411,6 +6407,13 @@
           <context context-type="linenumber">6</context>
         </context-group>
         <note priority="1" from="description">testnet3-deprecated</note>
+      </trans-unit>
+      <trans-unit id="5244975864478312838" datatype="html">
+        <source>Qscription</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/filters.utils.ts</context>
+          <context context-type="linenumber">108</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="6052761358428332094" datatype="html">
         <source>Batch payment</source>

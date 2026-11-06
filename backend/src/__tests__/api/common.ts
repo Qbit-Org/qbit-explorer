@@ -349,6 +349,14 @@ describe('Common', () => {
       expect(flags & TransactionFlags.inscription).toBe(TransactionFlags.inscription);
     });
 
+    test('does not throw on a two-item witness the taproot heuristic cannot parse, without prevouts', () => {
+      // a 65-byte first item and an annex: the taproot heuristic reads the missing witness[2]
+      const tx = withoutPrevouts(mint);
+      tx.vin = [{ ...tx.vin[0], witness: ['00'.repeat(65), '50'] }];
+
+      expect(() => Common.getTransactionFlags(tx)).not.toThrow();
+    });
+
     test('recognises the witness shape of a signed P2MR script-path spend', () => {
       const vin: IEsploraApi.Vin = etching.vin[0];
       const [signature, leafScript, controlBlock] = vin.witness;
