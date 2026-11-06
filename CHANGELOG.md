@@ -1,5 +1,40 @@
 # Changelog
 
+## 1.0.1
+
+### Added
+
+- Qscriptions, qord's inscriptions, on P2MR inputs: the transaction badge,
+  the decoded content and the inscription flag now read P2MR leaf scripts.
+  The interface calls them qscriptions. API fields, flags and filter keys
+  still say `inscription`.
+- `GET /api/block/:hash/txid/:index`, which returns the txid at that index in
+  a block as `text/plain`. A malformed index gets 400, and an unknown block or
+  an index past the last transaction gets 404. A malformed block hash gets
+  501, like the other block routes.
+
+### Fixed
+
+- Qrune mints and transfers no longer show "Error decoding data". The
+  explorer now finds each qrune's etching through the route above.
+- Without prevouts, the backend no longer throws while checking a two-item
+  witness for an inscription.
+
+### Changed
+
+- Qrune `1:0` is no longer shown as upstream's UNCOMMON•GOODS, which qord
+  doesn't have. It resolves like any other qrune ID.
+- Charts run on echarts 6.1.0, with their legends kept above the plot.
+- Frontend dependencies: `qs` 6.14.3 to 6.16.2, and `express` 4.22.1 to
+  4.22.3.
+
+### Documentation
+
+- The README fetches upstream without its tags, whose names clash with ours,
+  and shows how to fix a clone that already has them.
+- SECURITY.md asks for reports through GitHub's private vulnerability
+  reporting, with email as the alternative.
+
 ## 1.0.0
 
 The first public release of qbit-explorer, based on
