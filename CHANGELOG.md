@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.1
+
+### Added
+
+- Qscriptions, qord's inscriptions, on P2MR inputs: the transaction badge,
+  the decoded content and the inscription flag now read P2MR leaf scripts,
+  and the explorer calls them qscriptions.
+- `GET /api/block/:hash/txid/:index`, which answers the txid at that index in
+  a block, as Esplora and qbit-electrs do.
+
+### Fixed
+
+- Qrune mints and transfers no longer show "Error decoding data". The
+  explorer now finds each qrune's etching through the route above.
+
+### Changed
+
+- Charts run on echarts 6.1.0, with their legends kept above the plot.
+- `qs` and `express` in the frontend are updated.
+
+### Documentation
+
+- The README fetches upstream without its tags, whose names clash with ours,
+  and shows how to fix a clone that already has them.
+- SECURITY.md asks for reports through GitHub's private vulnerability
+  reporting, with email as the alternative.
+
 ## 1.0.0
 
 The first public release of qbit-explorer, based on
