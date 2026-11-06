@@ -14,7 +14,7 @@ import { OrdApiService } from '@app/services/ord-api.service';
 import { Inscription } from '@app/shared/ord/inscription.utils';
 import { Etching, Runestone } from '@app/shared/ord/rune.utils';
 import { ADDRESS_SIMILARITY_THRESHOLD, AddressMatch, AddressSimilarity, AddressType, AddressTypeInfo, checkedCompareAddressStrings, detectAddressType } from '@app/shared/address-utils';
-import { processInputSignatures, Sighash, SigInfo, SighashLabels, parseTaproot } from '@app/shared/transaction.utils';
+import { processInputSignatures, Sighash, SigInfo, SighashLabels, parseTaproot, witnessToP2TRScript } from '@app/shared/transaction.utils';
 import { ActivatedRoute } from '@angular/router';
 import { SighashFlag } from '@app/shared/transaction.utils';
 
@@ -322,6 +322,12 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
                 vin.inner_simplicityscript = vin.witness[1]; // simplicity program is the second witness element
               }
             }
+          } else if (['v2_p2mr', 'witness_v2_p2mr'].includes(vin.prevout?.scriptpubkey_type) && vin.witness?.length) {
+            // P2MR shares taproot's script-path witness layout, so its leaf script can carry an inscription envelope too
+            if (witnessToP2TRScript(vin.witness)?.includes('0063036f7264')) {
+              vin.isInscription = true;
+              tx.largeInput = true;
+            }
           }
         }
 
@@ -599,8 +605,10 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
 
     if (type === 'vin') {
       if (!this.showOrdData[key].inscriptions) {
-        const tapscript = tx.vin[index].taprootInfo?.scriptPath?.script;
-        this.showOrdData[key].inscriptions = this.ordApiService.decodeInscriptions(tapscript);
+        const vin = tx.vin[index];
+        const isP2mr = ['v2_p2mr', 'witness_v2_p2mr'].includes(vin.prevout?.scriptpubkey_type);
+        const tapscript = isP2mr ? witnessToP2TRScript(vin.witness) : vin.taprootInfo?.scriptPath?.script;
+        this.showOrdData[key].inscriptions = tapscript ? this.ordApiService.decodeInscriptions(tapscript) : [];
       }
       this.showOrdData[key].show = !this.showOrdData[key].show;
 

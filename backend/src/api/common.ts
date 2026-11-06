@@ -627,6 +627,23 @@ export class Common {
     return isTaproot || !isNotTaproot;
   }
 
+  // P2MR has no key path, so a P2MR input is always a script-path spend with no scriptsig: not
+  // counting an annex, its witness ends with the leaf script and a control block of one byte, the
+  // leaf version with bit 0 set, plus 32 bytes per merkle node (qbit v1.0.0
+  // src/script/interpreter.cpp:2349-2381). Inscription envelopes need leaf version 0xc0, so 0xc1.
+  static inputIsMaybeP2mrInscription(vin: IEsploraApi.Vin): boolean {
+    if (vin.scriptsig?.length) {
+      return false;
+    }
+    const hasAnnex = vin.witness.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50');
+    const items = vin.witness.length - (hasAnnex ? 1 : 0);
+    if (items < 2) {
+      return false;
+    }
+    const controlBlock = vin.witness[items - 1];
+    return controlBlock.startsWith('c1') && (controlBlock.length - 2) % 64 === 0;
+  }
+
   static getTransactionFlags(tx: TransactionExtended, height?: number): number {
     let flags = tx.flags ? BigInt(tx.flags) : 0n;
 
@@ -675,7 +692,13 @@ export class Common {
           case 'v0_p2wpkh': flags |= TransactionFlags.p2wpkh; break;
           case 'v0_p2wsh': flags |= TransactionFlags.p2wsh; break;
           case 'witness_v2_p2mr':
-          case 'v2_p2mr': flags |= TransactionFlags.p2mr; break;
+          case 'v2_p2mr': {
+            flags |= TransactionFlags.p2mr;
+            // P2MR shares taproot's script-path witness layout, so its leaf script can carry an inscription envelope too
+            if (vin.witness?.length) {
+              flags = Common.isInscription(vin, flags);
+            }
+          } break;
           case 'anchor': flags |= TransactionFlags.anchor; break;
           case 'v1_p2tr': {
             flags |= TransactionFlags.p2tr;
@@ -690,8 +713,8 @@ export class Common {
         }
       } else {
         // no prevouts, optimistically check witness-bearing inputs
-        if (vin.witness?.length >= 2 && Common.inputIsMaybeInscription(vin)) {
-          // try to parse the witness as a taproot inscription
+        if (vin.witness?.length >= 2 && (Common.inputIsMaybeP2mrInscription(vin) || Common.inputIsMaybeInscription(vin))) {
+          // try to parse the witness as a taproot or P2MR inscription
           try {
             flags = Common.isInscription(vin, flags);
           } catch {
