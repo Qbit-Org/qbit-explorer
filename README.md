@@ -66,14 +66,25 @@ The history keeps upstream's commits up to that release. Commit
 adds the qbit changes on top of it, and the commits after it are this
 repository's pull requests.
 
-To bring in an upstream fix, add the upstream remote and cherry-pick the
-commit:
+To bring in an upstream fix, add the upstream remote without its tags, then
+cherry-pick the commit:
 
 ```sh
-git remote add upstream https://github.com/mempool/mempool.git
+git remote add --no-tags upstream https://github.com/mempool/mempool.git
 git fetch upstream
 git cherry-pick -x <upstream-commit>
 ```
+
+Upstream's release tags use the same names as ours: its releases run from
+`v1.0.0` up, and ours start again at `v1.0.0`. The `--no-tags` flag keeps
+upstream's tags out of your clone. To find an upstream release's commit, run
+`git ls-remote --tags upstream 'v3.3.1^{}'`.
+
+If you added the remote earlier without `--no-tags`, your clone may hold
+upstream's tags under our names, and a plain `git fetch` will not replace
+them. Stop the remote fetching tags, delete your local tags and fetch ours
+again: `git config remote.upstream.tagOpt --no-tags`, then
+`git tag -l | xargs git tag -d`, then `git fetch --tags origin`.
 
 Expect conflicts where qbit has changed the same code. Upstream merges pull
 requests with merge commits, so to pick a whole pull request at once,
