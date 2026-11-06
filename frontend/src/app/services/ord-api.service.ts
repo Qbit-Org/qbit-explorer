@@ -3,7 +3,7 @@ import { catchError, forkJoin, map, Observable, of, switchMap, tap } from 'rxjs'
 import { Inscription } from '@app/shared/ord/inscription.utils';
 import { Transaction } from '@interfaces/electrs.interface';
 import { getNextInscriptionMark, hexToBytes, extractInscriptionData } from '@app/shared/ord/inscription.utils';
-import { decipherRunestone, Runestone, Etching, UNCOMMON_GOODS } from '@app/shared/ord/rune.utils';
+import { decipherRunestone, Runestone, Etching } from '@app/shared/ord/rune.utils';
 import { ElectrsApiService } from '@app/services/electrs-api.service';
 
 
@@ -54,27 +54,24 @@ export class OrdApiService {
   }
 
   // Get etching from runeId by looking up the transaction that etched the rune
+  // qbit has no hardcoded UNCOMMON•GOODS at 1:0, so every qrune ID resolves through its etching
   getEtchingFromRuneId$(runeId: string): Observable<{ runeId: string; etching: Etching; txid: string; }> {
-    if (runeId === '1:0') {
-      return of({ runeId, etching: UNCOMMON_GOODS, txid: '0000000000000000000000000000000000000000000000000000000000000000' });
-    } else {
-      const [blockNumber, txIndex] = runeId.split(':');
-      return this.electrsApiService.getBlockHashFromHeight$(parseInt(blockNumber)).pipe(
-        switchMap(blockHash => this.electrsApiService.getBlockTxId$(blockHash, parseInt(txIndex))),
-        switchMap(txId => this.electrsApiService.getTransaction$(txId)),
-        switchMap(tx => {
-          const runestone = decipherRunestone(tx);
-          if (runestone) {
-            const etching = runestone.etching;
-            if (etching) {
-              return of({ runeId, etching, txid: tx.txid });
-            }
+    const [blockNumber, txIndex] = runeId.split(':');
+    return this.electrsApiService.getBlockHashFromHeight$(parseInt(blockNumber)).pipe(
+      switchMap(blockHash => this.electrsApiService.getBlockTxId$(blockHash, parseInt(txIndex))),
+      switchMap(txId => this.electrsApiService.getTransaction$(txId)),
+      switchMap(tx => {
+        const runestone = decipherRunestone(tx);
+        if (runestone) {
+          const etching = runestone.etching;
+          if (etching) {
+            return of({ runeId, etching, txid: tx.txid });
           }
-          return of(null);
-        }),
-        catchError(() => of(null))
-      );
-    }
+        }
+        return of(null);
+      }),
+      catchError(() => of(null))
+    );
   }
 
   decodeInscriptions(witness: string): Inscription[] | null {

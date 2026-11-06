@@ -908,7 +908,13 @@ export function getTransactionFlags(tx: Transaction, cpfpInfo?: CpfpInfo, replac
       case 'v0_p2wpkh': flags |= TransactionFlags.p2wpkh; break;
       case 'v0_p2wsh': flags |= TransactionFlags.p2wsh; break;
       case 'witness_v2_p2mr':
-      case 'v2_p2mr': flags |= TransactionFlags.p2mr; break;
+      case 'v2_p2mr': {
+        flags |= TransactionFlags.p2mr;
+        // P2MR shares taproot's script-path witness layout, so its leaf script can carry an inscription envelope too
+        if (vin.witness?.length && vin.inner_witnessscript_asm?.includes('OP_0 OP_IF')) {
+          flags |= TransactionFlags.inscription;
+        }
+      } break;
       case 'anchor': flags |= TransactionFlags.anchor; break;
       case 'v1_p2tr': {
         flags |= TransactionFlags.p2tr;
@@ -1191,13 +1197,13 @@ function convertScriptSigAsm(hex: string): string {
 // Copied from mempool backend https://github.com/mempool/mempool/blob/14e49126c3ca8416a8d7ad134a95c5e090324d69/backend/src/api/transaction-utils.ts#L327
 /**
  * This function must only be called when we know the witness we are parsing
- * is a taproot witness.
+ * is a taproot witness, or a P2MR witness, which shares its script-path layout.
  * @param witness An array of hex strings that represents the witness stack of
  *                the input.
  * @returns null if the witness is not a script spend, and the hex string of
  *          the script item if it is a script spend.
  */
-function witnessToP2TRScript(witness: string[]): string | null {
+export function witnessToP2TRScript(witness: string[]): string | null {
   if (witness.length < 2) {return null;}
   // Note: see BIP341 for parsing details of witness stack
 

@@ -304,6 +304,80 @@ describe('Common', () => {
     });
   });
 
+  describe('qbit P2MR qscriptions', () => {
+    // etching: qbit mainnet 2de5d758…adac8, which qscribes POST•QUANTUM•GOODS's logo (qscription 61, a
+    // 525-byte SVG) in its P2MR leaf script and etches the qrune. mint: 4eced44e…5fc7, which mints it
+    // from a P2MR input whose leaf script is a plain <pubkey> OP_CHECKSIGPQC, with no envelope.
+    const { etching, mint } = require('./test-data/qbit-p2mr-qscriptions.json');
+
+    // Non-esplora backends see block transactions without prevouts, so without inner scripts either.
+    function withoutPrevouts(tx: TransactionExtended): TransactionExtended {
+      return { ...tx, vin: tx.vin.map(({ prevout, inner_witnessscript_asm, ...vin }) => vin as IEsploraApi.Vin) };
+    }
+
+    test('flags a P2MR qscription reveal as an inscription', () => {
+      const flags = BigInt(Common.getTransactionFlags(etching));
+
+      expect(flags & TransactionFlags.inscription).toBe(TransactionFlags.inscription);
+      expect(flags & TransactionFlags.p2mr).toBe(TransactionFlags.p2mr);
+    });
+
+    test('flags a P2MR qscription reveal without prevouts', () => {
+      const flags = BigInt(Common.getTransactionFlags(withoutPrevouts(etching)));
+
+      expect(flags & TransactionFlags.inscription).toBe(TransactionFlags.inscription);
+    });
+
+    test.each([
+      ['with prevouts', (tx: TransactionExtended): TransactionExtended => tx],
+      ['without prevouts', withoutPrevouts],
+    ])('does not flag a P2MR spend without an envelope %s', (_name, prepare) => {
+      const flags = BigInt(Common.getTransactionFlags(prepare(mint)));
+
+      expect(flags & TransactionFlags.inscription).toBe(0n);
+    });
+
+    test('flags a P2MR leaf script that takes no arguments, without prevouts', () => {
+      // a 65-byte leaf script as the first witness item makes the taproot heuristic read witness[2], which
+      // does not exist, so the P2MR check must run first
+      const leafScript = '0063036f7264' + '51'.repeat(58) + '68'; // OP_0 OP_IF "ord" ... OP_ENDIF, 65 bytes
+      const tx = withoutPrevouts(etching);
+      tx.vin = [{ ...tx.vin[0], witness: [leafScript, 'c1'] }];
+
+      const flags = BigInt(Common.getTransactionFlags(tx));
+
+      expect(flags & TransactionFlags.inscription).toBe(TransactionFlags.inscription);
+    });
+
+    test('does not throw on a two-item witness the taproot heuristic cannot parse, without prevouts', () => {
+      // a 65-byte first item and an annex: the taproot heuristic reads the missing witness[2]
+      const tx = withoutPrevouts(mint);
+      tx.vin = [{ ...tx.vin[0], witness: ['00'.repeat(65), '50'] }];
+
+      expect(() => Common.getTransactionFlags(tx)).not.toThrow();
+    });
+
+    test('recognises the witness shape of a signed P2MR script-path spend', () => {
+      const vin: IEsploraApi.Vin = etching.vin[0];
+      const [signature, leafScript, controlBlock] = vin.witness;
+      const shape = (witness: string[], scriptsig = ''): boolean => Common.inputIsMaybeP2mrInscription({ ...vin, scriptsig, witness });
+
+      expect(controlBlock).toBe('c1'); // a single-leaf tree: leaf version 0xc0, with bit 0 set
+      expect(shape([signature, leafScript, controlBlock])).toBe(true);
+      expect(shape([signature + '01', leafScript, controlBlock])).toBe(true); // sighash byte after the signature
+      expect(shape(['', signature, leafScript, controlBlock])).toBe(true); // other leaf script arguments
+      expect(shape([leafScript, controlBlock])).toBe(true); // a leaf script that takes no arguments
+      expect(shape([signature, leafScript, controlBlock + '00'.repeat(32)])).toBe(true); // one merkle node
+      expect(shape([signature, leafScript, controlBlock, '50'])).toBe(true); // annex
+
+      expect(shape([signature, leafScript, controlBlock], '00')).toBe(false); // scriptsig
+      expect(shape([signature, leafScript, 'c0'])).toBe(false); // control byte without bit 0
+      expect(shape([signature, leafScript, controlBlock + '00'])).toBe(false); // control block of 2 bytes
+      expect(shape([controlBlock])).toBe(false); // no leaf script
+      expect(shape(['30'.repeat(71), '02' + '00'.repeat(32)])).toBe(false); // P2WPKH: signature, compressed pubkey
+    });
+  });
+
   describe('qbit script ASM', () => {
     test('renders opcode 0xb3 as OP_CHECKSIGPQC', () => {
       expect(transactionUtils.convertScriptSigAsm('b3')).toBe('OP_CHECKSIGPQC');

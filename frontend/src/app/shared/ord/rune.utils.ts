@@ -56,28 +56,6 @@ type Message = {
   edicts: Edict[];
 }
 
-export const UNCOMMON_GOODS: Etching = {
-  divisibility: 0,
-  premine: 0n,
-  symbol: '⧉',
-  terms: {
-    cap: U128_MAX_BIGINT,
-    amount: 1n,
-    offset: {
-      start: 0n,
-      end: 0n,
-    },
-    height: {
-      start: 840000n,
-      end: 1050000n,
-    },
-  },
-  turbo: false,
-  name: 'UNCOMMONGOODS',
-  spacedName: 'UNCOMMON•GOODS',
-  supply: U128_MAX_BIGINT,
-};
-
 enum Tag {
   Body = 0,
   Flags = 2,

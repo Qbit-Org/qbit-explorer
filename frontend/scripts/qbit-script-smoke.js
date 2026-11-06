@@ -211,4 +211,47 @@ for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 100
   }
 }
 
+// qscriptions and qrunes: qbit's inscriptions and runes, which ride in P2MR leaf scripts and runestones
+{
+  const { of } = require('rxjs');
+  const { witnessToP2TRScript } = require('../src/app/shared/transaction.utils.ts');
+  const { decipherRunestone } = require('../src/app/shared/ord/rune.utils.ts');
+  const { OrdApiService } = require('../src/app/services/ord-api.service.ts');
+  // real qbit mainnet transactions, shared with the backend tests: `etching` qscribes POST•QUANTUM•GOODS's
+  // 525-byte SVG logo in its P2MR leaf script and etches the qrune 163891:2, and `mint` mints it
+  const { etching, mint } = require('../../backend/src/__tests__/api/test-data/qbit-p2mr-qscriptions.json');
+  const MAINNET_163891 = '00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401';
+
+  const qscriptionFlags = BigInt(getTransactionFlags(etching, undefined, false, undefined, ''));
+  assert((qscriptionFlags & TransactionFlags.inscription) === TransactionFlags.inscription, 'P2MR qscription reveal not flagged as an inscription');
+  const mintFlags = BigInt(getTransactionFlags(mint, undefined, false, undefined, ''));
+  assert((mintFlags & TransactionFlags.inscription) === 0n, 'P2MR spend without an envelope flagged as an inscription');
+
+  const leafScript = witnessToP2TRScript(etching.vin[0].witness);
+  assert(leafScript === etching.vin[0].witness[1], 'P2MR leaf script is not the second-to-last witness item');
+  assert(leafScript.includes('0063036f7264'), 'P2MR leaf script lacks the inscription envelope');
+  const ordApi = new OrdApiService({
+    getBlockHashFromHeight$: (height) => of(height === 163891 ? MAINNET_163891 : '00'.repeat(32)),
+    getBlockTxId$: (hash, index) => of(hash === MAINNET_163891 && index === 2 ? etching.txid : mint.txid),
+    getTransaction$: (txid) => of(txid === etching.txid ? etching : mint),
+  });
+  const qscriptions = ordApi.decodeInscriptions(leafScript);
+  assert(qscriptions.length === 1, `expected one qscription, got ${qscriptions.length}`);
+  assert(qscriptions[0].content_type_str === 'image/svg+xml', `qscription content type: ${qscriptions[0].content_type_str}`);
+  assert(qscriptions[0].body_length === 525, `qscription body length: ${qscriptions[0].body_length}`);
+
+  const etched = decipherRunestone(etching)?.etching;
+  assert(etched?.spacedName === 'POST•QUANTUM•GOODS' && etched.symbol === '⚛' && etched.supply === 21000000n, `etching: ${etched?.spacedName}`);
+  assert(decipherRunestone(mint)?.mint?.toString() === '163891:2', 'mint does not name qrune 163891:2');
+
+  // a mint names its qrune by ID only, so its etching is looked up through block/:hash/txid/:index
+  let resolved;
+  ordApi.getEtchingFromRuneId$('163891:2').subscribe((result) => resolved = result);
+  assert(resolved?.etching?.spacedName === 'POST•QUANTUM•GOODS' && resolved.txid === etching.txid, `qrune 163891:2 resolved to ${resolved?.etching?.spacedName}`);
+  // qbit has no hardcoded UNCOMMON•GOODS: 1:0 is looked up like any other ID, and a transaction without an etching names no qrune
+  let uncommon = 'not resolved';
+  ordApi.getEtchingFromRuneId$('1:0').subscribe((result) => uncommon = result);
+  assert(uncommon === null, `qrune 1:0 resolved to ${uncommon?.etching?.spacedName}`);
+}
+
 console.log('qbit script smoke passed');

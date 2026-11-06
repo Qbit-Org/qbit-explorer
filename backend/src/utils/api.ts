@@ -27,6 +27,15 @@ export function isTxNotFoundError(e: unknown): boolean {
   return (e as { response?: { status?: number } })?.response?.status === 404;
 }
 
+// A block lookup fails as "not found" as Core RPC error -5 ("Block not found") in "none"/"electrum"
+// modes, and as electrs's HTTP 404 in esplora mode. Both must map to HTTP 404.
+export function isBlockNotFoundError(e: unknown): boolean {
+  if ((e as { code?: unknown })?.code === -5) {
+    return true;
+  }
+  return (e as { response?: { status?: number } })?.response?.status === 404;
+}
+
 // An address lookup can fail because of the request in several ways depending on MEMPOOL_BACKEND:
 //
 // electrum mode checks the address with the node's validateaddress RPC first and rejects with

@@ -19,7 +19,7 @@ import difficultyAdjustment from '../difficulty-adjustment';
 import transactionRepository from '../../repositories/TransactionRepository';
 import rbfCache from '../rbf-cache';
 import { calculateMempoolTxCpfp } from '../cpfp';
-import { getAddressLookupError, handleError, isTxNotFoundError } from '../../utils/api';
+import { getAddressLookupError, handleError, isBlockNotFoundError, isTxNotFoundError } from '../../utils/api';
 import poolsUpdater from '../../tasks/pools-updater';
 import chainTips from '../chain-tips';
 
@@ -85,6 +85,7 @@ class BitcoinRoutes {
       .get(config.MEMPOOL.API_URL_PREFIX + 'blocks/tip/hash', this.getBlockTipHash)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/raw', this.getRawBlock)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/txids', this.getTxIdsForBlock)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/txid/:index', this.getTxIdForBlockIndex)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/txs', this.getBlockTransactions)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/txs/:index', this.getBlockTransactions)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block-height/:height', this.getBlockHeight)
@@ -939,6 +940,36 @@ class BitcoinRoutes {
       res.json(result);
     } catch (e) {
       handleError(req, res, 500, 'Failed to get txids for block');
+    }
+  }
+
+  // Esplora's GET /block/:hash/txid/:index. The frontend resolves qrune IDs (block:tx) to their
+  // etching transactions with it, so without it mints and transfers cannot be decoded.
+  private async getTxIdForBlockIndex(req: Request, res: Response): Promise<void> {
+    if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
+      handleError(req, res, 501, `Invalid block hash`);
+      return;
+    }
+    const index = /^\d+$/.test(req.params.index) ? Number(req.params.index) : NaN;
+    if (!Number.isSafeInteger(index)) {
+      handleError(req, res, 400, 'Invalid transaction index');
+      return;
+    }
+    try {
+      const txids = await bitcoinApi.$getTxIdsForBlock(req.params.hash);
+      if (index >= txids.length) {
+        handleError(req, res, 404, 'Transaction index out of range');
+        return;
+      }
+      res.setHeader('content-type', 'text/plain');
+      res.setHeader('Expires', new Date(Date.now() + 1000 * 3600 * 24 * 30).toUTCString());
+      res.send(txids[index]);
+    } catch (e) {
+      if (isBlockNotFoundError(e)) {
+        handleError(req, res, 404, 'Block not found');
+        return;
+      }
+      handleError(req, res, 500, 'Failed to get txid for block index');
     }
   }
 
