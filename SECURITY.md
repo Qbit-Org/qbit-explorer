@@ -11,18 +11,15 @@ node, or database behind an instance as a priority.
 **Do not open a public issue, pull request, or discussion for a security
 problem.**
 
-Report it privately by email to **contact@qbit.org**, with
-`qbit-explorer security` in the subject. This is the only reporting channel
-for now: GitHub private vulnerability reporting is not yet enabled for this
-repository. Email is not encrypted, so keep the first message short and we
-will reply to agree a private way to continue.
-
-Once private vulnerability reporting is enabled, you will also be able to
-report through GitHub:
+Report it privately through GitHub:
 
 1. Go to the repository's **Security** tab.
 2. Choose **Report a vulnerability**.
 3. Fill in the advisory form.
+
+Or email **contact@qbit.org**, with `qbit-explorer security` in the subject.
+Email is not encrypted, so keep the first message short and we will reply to
+agree a private way to continue.
 
 Please include:
 
