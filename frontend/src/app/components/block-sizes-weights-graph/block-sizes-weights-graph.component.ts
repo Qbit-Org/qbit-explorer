@@ -188,6 +188,7 @@ export class BlockSizesWeightsGraphComponent implements OnInit {
         }
       },
       legend: data.sizes.length === 0 ? undefined : {
+        top: 0,
         padding: 10,
         data: [
           {

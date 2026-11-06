@@ -287,6 +287,7 @@ export class BlockFeeRatesGraphComponent implements OnInit {
         },
       },
       legend: (this.widget || data.series.length === 0) ? undefined : {
+        top: 0,
         padding: [10, 75],
         data: data.legends,
         selected:  JSON.parse(this.storageService.getValue('fee_rates_legend') || 'null') ?? {

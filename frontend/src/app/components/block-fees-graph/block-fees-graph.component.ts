@@ -189,6 +189,7 @@ export class BlockFeesGraphComponent implements OnInit {
         }
       },
       legend: data.blockFees.length === 0 ? undefined : {
+        top: 0,
         data: [
           {
             name: 'Fees QBT',

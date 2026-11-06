@@ -188,6 +188,7 @@ export class BlockRewardsGraphComponent implements OnInit {
         }
       },
       legend: data.blockRewards.length === 0 ? undefined : {
+        top: 0,
         data: [
           {
             name: 'Rewards QBT',
