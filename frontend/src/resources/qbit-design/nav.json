@@ -57,6 +57,11 @@
       "external": false
     },
     {
+      "label": "Mine",
+      "href": "/mine",
+      "external": false
+    },
+    {
       "label": "Ecosystem",
       "href": "/ecosystem",
       "external": false
@@ -122,6 +127,11 @@
     {
       "label": "Pool",
       "href": "/pool",
+      "external": false
+    },
+    {
+      "label": "Mine",
+      "href": "/mine",
       "external": false
     },
     {
