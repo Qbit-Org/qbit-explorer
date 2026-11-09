@@ -24,6 +24,11 @@ export function formatScriptPubKeyType(value: string | null | undefined, scriptp
   }
 }
 
+// qbit-electrs and this frontend's decoder call P2MR v2_p2mr, and qbitd's RPC calls it witness_v2_p2mr
+export function isP2mrType(value: string | null | undefined): boolean {
+  return value === 'v2_p2mr' || value === 'witness_v2_p2mr';
+}
+
 export function getReservedWitnessVersion(scriptpubkey?: string | null): number | null {
   if (!scriptpubkey || scriptpubkey.length < 4 || !/^[0-9a-fA-F]+$/.test(scriptpubkey)) {
     return null;

@@ -1,7 +1,12 @@
 import http from 'http';
 import { AddressInfo } from 'net';
+import config from '../../config';
 import EsploraApi from '../../api/bitcoin/esplora-api';
+import logger from '../../logger';
 import { getAddressLookupError, isTxNotFoundError } from '../../utils/api';
+
+const BITCOIN_ADDRESS = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
+const INVALID_ADDRESS_REASON = 'invalid qbit address HRP: expected qb, got bc';
 
 describe('Esplora API', () => {
   test('should proxy batched outspends to the public Esplora endpoint', async () => {
@@ -25,13 +30,25 @@ describe('Esplora API', () => {
     });
   });
 
+  test.each([
+    ['the first page of confirmed transactions', (api: EsploraApi) => api.$getAddressChainTransactions('qb1address'), '/address/qb1address/txs/chain'],
+    ['the confirmed transactions after the last one seen', (api: EsploraApi) => api.$getAddressChainTransactions('qb1address', 'last-seen-tx'),
+      '/address/qb1address/txs/chain/last-seen-tx'],
+    ['the unconfirmed transactions', (api: EsploraApi) => api.$getAddressMempoolTransactions('qb1address'), '/address/qb1address/txs/mempool'],
+  ])('should proxy %s of an address to electrs', async (_label, lookup, path) => {
+    const api = new EsploraApi();
+    const transactions = [{ txid: 'tx' }];
+    const get = jest.spyOn(api['failoverRouter'], '$get').mockResolvedValue(transactions);
+
+    await expect(lookup(api)).resolves.toStrictEqual(transactions);
+    expect(get).toHaveBeenCalledWith(path);
+  });
+
   describe('against an electrs HTTP server', () => {
     const RAW_BLOCK = Buffer.from('00e01332ce72108dd402ed0308506600ff', 'hex');
     // Valid JSON numbers: axios' JSON transform would turn these into numbers
     const NUMERIC_HEX = '1000000000000000000000';
     const LEADING_ZERO_HEX = '0200000001000000';
-    const BITCOIN_ADDRESS = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
-    const INVALID_ADDRESS_REASON = 'invalid qbit address HRP: expected qb, got bc';
     let server: http.Server;
     let api: EsploraApi;
 
@@ -95,6 +112,130 @@ describe('Esplora API', () => {
       const error = await api.$getAddress(BITCOIN_ADDRESS).catch((e) => e);
       expect(error?.response?.status).toBe(400);
       expect(getAddressLookupError(error)).toEqual({ status: 400, reason: INVALID_ADDRESS_REASON });
+    });
+  });
+
+  describe('failover between electrs hosts', () => {
+    const esplora = { ...config.ESPLORA };
+    const official = config.MEMPOOL.OFFICIAL;
+    // the configured host, which answers every request with `answer`, and its
+    // fallback, which answers 500
+    let primary: http.Server;
+    let fallback: http.Server;
+    let primaryPort: number;
+    let primaryUrl: string;
+    let fallbackUrl: string;
+    let answer: [number, string];
+    let api: EsploraApi;
+
+    const listen = (server: http.Server, port = 0): Promise<void> => new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
+    const close = (server: http.Server): Promise<void> => new Promise((resolve) => server.close(() => resolve()));
+    const activeHost = (): string | undefined => api.getHealthStatus().find((host) => host.active)?.host;
+    const isUnreachable = (url: string): boolean | undefined => api.getHealthStatus().find((host) => host.host === url)?.unreachable;
+
+    beforeAll(async () => {
+      // closing each connection after answering lets a closed listener refuse the next request
+      primary = http.createServer((req, res) => {
+        res.writeHead(answer[0], { 'content-type': answer[0] === 200 ? 'application/json' : 'text/plain', connection: 'close' });
+        res.end(answer[1]);
+      });
+      fallback = http.createServer((req, res) => {
+        res.writeHead(500, { 'content-type': 'text/plain' });
+        res.end('Internal Server Error');
+      });
+      await listen(primary);
+      await listen(fallback);
+      primaryPort = (primary.address() as AddressInfo).port;
+      primaryUrl = `http://127.0.0.1:${primaryPort}`;
+      fallbackUrl = `http://127.0.0.1:${(fallback.address() as AddressInfo).port}`;
+    });
+
+    afterAll(async () => {
+      Object.assign(config.ESPLORA, esplora);
+      config.MEMPOOL.OFFICIAL = official;
+      for (const server of [primary, fallback]) {
+        server.closeAllConnections();
+        if (server.listening) {
+          await close(server);
+        }
+      }
+    });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      config.ESPLORA.REST_API_URL = primaryUrl;
+      config.ESPLORA.FALLBACK = [fallbackUrl];
+      // only official instances list their hosts in getHealthStatus
+      config.MEMPOOL.OFFICIAL = true;
+      api = new EsploraApi();
+    });
+
+    test.each([
+      ['an unknown object', 404, 'Transaction not found'],
+      ['an invalid address', 400, INVALID_ADDRESS_REASON],
+      ['an address over the UTXO limit', 400, 'Too many unspent transaction outputs (>50000). Contact support to raise limits.'],
+      ['an address over the history limit', 400, 'Too many history transactions (>10000). Contact support to raise limits.'],
+      ['an after_txid it cannot find', 422, 'after_txid not found'],
+    ])('keeps a host that rejects %s, logging it at debug', async (_, code, reason) => {
+      answer = [code, reason];
+
+      for (let i = 0; i < 10; i++) {
+        await expect(api.$getAddress(BITCOIN_ADDRESS)).rejects.toMatchObject({ response: { status: code } });
+      }
+
+      expect(activeHost()).toBe(primaryUrl);
+      expect(isUnreachable(primaryUrl)).toBe(false);
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(`esplora request rejected ${code} ${primaryUrl}/address/${BITCOIN_ADDRESS}`);
+    });
+
+    test.each([
+      ['electrs losing its node', 400, 'Connection error: disconnected from daemon while receiving'],
+      ['an electrs node error', 400, 'getblock RPC error: connection refused'],
+      ['an electrs database error', 400, 'Corruption: block checksum mismatch'],
+      ['a 422 electrs does not send', 422, 'Unprocessable Entity'],
+      ['a proxy refusing access', 403, 'Forbidden'],
+      ['a proxy asking for credentials', 401, 'Unauthorized'],
+      ['a proxy asking for proxy credentials', 407, 'Proxy Authentication Required'],
+      ['a misdirected request', 421, 'Misdirected Request'],
+      ['a proxy closing the request', 499, ''],
+      ['a timeout', 408, 'Request Timeout'],
+      ['a rate limit', 429, 'Too Many Requests'],
+      ['an internal error', 500, 'Internal Server Error'],
+      ['a bad gateway', 502, 'Bad Gateway'],
+    ])('fails a host over for %s (%d)', async (_, code, reason) => {
+      answer = [code, reason];
+
+      for (let i = 0; i < 6; i++) {
+        await expect(api.$getAddress(BITCOIN_ADDRESS)).rejects.toMatchObject({ response: { status: code } });
+      }
+
+      expect(activeHost()).toBe(fallbackUrl);
+      expect(isUnreachable(primaryUrl)).toBe(true);
+      expect(logger.warn).toHaveBeenCalledWith(`esplora request failed ${code} ${primaryUrl}/address/${BITCOIN_ADDRESS}`);
+    });
+
+    test('keeps the active host when the fallback it retries refused requests on fails', async () => {
+      // The router picks its fallback in its minute-long health poll, which
+      // also fetches each host's public web origin and re-arms its own timer,
+      // so set the fallback that poll would pick instead of running it.
+      const router = api['failoverRouter'];
+      router.fallbackHost = router.hosts.find((host) => host.host === fallbackUrl)!;
+      answer = [200, '{}'];
+
+      // the primary refuses every other connection, and each refused request
+      // is retried on the fallback, which fails it
+      for (let i = 0; i < 6; i++) {
+        await close(primary);
+        await expect(api.$getAddress(BITCOIN_ADDRESS)).rejects.toMatchObject({ response: { status: 500 } });
+        await listen(primary, primaryPort);
+        await expect(api.$getAddress(BITCOIN_ADDRESS)).resolves.toEqual({});
+      }
+
+      expect(activeHost()).toBe(primaryUrl);
+      expect(isUnreachable(primaryUrl)).toBe(false);
+      expect(isUnreachable(fallbackUrl)).toBe(true);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(`Too many esplora failures on ${fallbackUrl},`));
     });
   });
 });

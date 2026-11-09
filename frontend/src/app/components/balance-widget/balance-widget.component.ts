@@ -3,6 +3,7 @@ import { StateService } from '@app/services/state.service';
 import { Address, AddressTxSummary } from '@interfaces/electrs.interface';
 import { ElectrsApiService } from '@app/services/electrs-api.service';
 import { Observable, catchError, of } from 'rxjs';
+import { httpErrorStatus } from '@app/shared/http-error.utils';
 
 @Component({
   selector: 'app-balance-widget',
@@ -43,7 +44,7 @@ export class BalanceWidgetComponent implements OnInit, OnChanges {
       ? this.electrsApiService.getScriptHashSummary$((this.address.length === 66 ? '21' : '41') + this.address + 'ac')
       : this.electrsApiService.getAddressSummary$(this.address)).pipe(
       catchError(e => {
-        this.error = `Failed to fetch address balance history: ${e?.status || ''} ${e?.statusText || 'unknown error'}`;
+        this.error = `Failed to fetch address balance history: ${httpErrorStatus(e) || 'unknown error'}`;
         return of(null);
       }),
     )).subscribe(addressSummary => {

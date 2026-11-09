@@ -137,10 +137,22 @@ class Mempool {
         transactionUtils.addInnerScriptsToVin(vin);
       }
       count++;
+      // getTransactionFlags keeps any static flags it is given, and a cache written by an older
+      // release holds flags from that release's rules, so classify restored transactions afresh,
+      // before they reach Redis. Projected blocks classify mempool transactions without a height
+      // too, so a restored transaction gets the flags it would get live. If classification
+      // fails, keep the cached flags rather than abandon the rest of the restore.
+      const cachedFlags = this.mempoolCache[txid].flags;
+      this.mempoolCache[txid].flags = undefined;
+      try {
+        this.mempoolCache[txid].flags = Common.getTransactionFlags(this.mempoolCache[txid]);
+      } catch (e) {
+        this.mempoolCache[txid].flags = cachedFlags;
+        logger.warn(`Failed to reclassify cached mempool transaction ${txid}, keeping its cached flags: ${e instanceof Error ? e.message : e}`);
+      }
       if (config.MEMPOOL.CACHE_ENABLED && config.REDIS.ENABLED) {
         await redisCache.$addTransaction(this.mempoolCache[txid]);
       }
-      this.mempoolCache[txid].flags = Common.getTransactionFlags(this.mempoolCache[txid]);
       this.mempoolCache[txid].cpfpChecked = false;
       this.mempoolCache[txid].cpfpDirty = true;
       this.mempoolCache[txid].cpfpUpdated = undefined;

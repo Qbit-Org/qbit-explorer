@@ -6,6 +6,7 @@ import { StateService } from '@app/services/state.service';
 import { hash, Hash } from '@app/shared/sha256';
 import { AddressType, AddressTypeInfo, detectAddressType, getAddressNetworkParams } from '@app/shared/address-utils';
 import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '@app/shared/weight-units';
+import { isP2mrType } from '@app/shared/scriptpubkey-type.utils';
 import * as secp256k1 from '@noble/secp256k1';
 
 // Bitcoin Core default policy settings
@@ -1307,7 +1308,7 @@ export function addInnerScriptsToVin(vin: Vin): void {
   }
 
   // P2MR shares taproot's script-path witness layout
-  if ((vin.prevout.scriptpubkey_type === 'v1_p2tr' || vin.prevout.scriptpubkey_type === 'v2_p2mr') && vin.witness) {
+  if ((vin.prevout.scriptpubkey_type === 'v1_p2tr' || isP2mrType(vin.prevout.scriptpubkey_type)) && vin.witness) {
     const witnessScript = witnessToP2TRScript(vin.witness);
     if (witnessScript !== null) {
       vin.inner_witnessscript_asm = convertScriptSigAsm(witnessScript);

@@ -33,7 +33,7 @@ describe('Mempool Backend Config', () => {
         BLOCK_TARGET_SPACING_SECONDS: 60,
         INITIAL_BLOCKS_AMOUNT: 8,
         MEMPOOL_BLOCKS_AMOUNT: 8,
-        INDEXING_BLOCKS_AMOUNT: 11000,
+        INDEXING_BLOCKS_AMOUNT: 110000,
         USE_SECOND_NODE_FOR_MINFEE: false,
         EXTERNAL_ASSETS: [],
         EXTERNAL_MAX_RETRY: 1,
@@ -164,6 +164,21 @@ describe('Mempool Backend Config', () => {
         API: 'http://localhost:1234',
       });
     });
+  });
+
+  test('should index as many days of blocks by default as upstream does on Bitcoin', () => {
+    // upstream mempool indexes 11000 blocks by default, about 76 days of 600 s Bitcoin blocks
+    const upstreamIndexedSeconds = 11000 * 600;
+    const sample = JSON.parse(fs.readFileSync(`${__dirname}/../../mempool-config.sample.json`, 'utf8'));
+    for (const configFile of [{}, sample]) {
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => (configFile), { virtual: true });
+
+        const config = jest.requireActual('../config').default;
+
+        expect(config.MEMPOOL.INDEXING_BLOCKS_AMOUNT * config.MEMPOOL.BLOCK_TARGET_SPACING_SECONDS).toBeGreaterThanOrEqual(upstreamIndexedSeconds);
+      });
+    }
   });
 
   test('should override the default values with the passed values', () => {

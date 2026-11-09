@@ -194,7 +194,8 @@ const defaults: IConfig = {
     'BLOCK_TARGET_SPACING_SECONDS': 60,
     'INITIAL_BLOCKS_AMOUNT': 8,
     'MEMPOOL_BLOCKS_AMOUNT': 8,
-    'INDEXING_BLOCKS_AMOUNT': 11000, // 0 = disable indexing, -1 = index all blocks
+    // about 76 days of 60 s qbit blocks, the history upstream's 11000 indexes on Bitcoin
+    'INDEXING_BLOCKS_AMOUNT': 110000, // 0 = disable indexing, -1 = index all blocks
     'BLOCKS_SUMMARIES_INDEXING': false,
     'GOGGLES_INDEXING': false,
     'USE_SECOND_NODE_FOR_MINFEE': false,

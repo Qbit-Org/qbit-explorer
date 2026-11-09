@@ -7,6 +7,8 @@ jest.mock('../../api/bitcoin/bitcoin-api-factory', () => ({
   default: {
     $getAddress: jest.fn(),
     $getAddressTransactions: jest.fn(),
+    $getAddressChainTransactions: jest.fn(),
+    $getAddressMempoolTransactions: jest.fn(),
     $getAddressTransactionSummary: jest.fn(),
     $getAddressUtxos: jest.fn(),
   },
@@ -18,7 +20,8 @@ import bitcoinApi from '../../api/bitcoin/bitcoin-api-factory';
 import bitcoinClient from '../../api/bitcoin/bitcoin-client';
 import bitcoinRoutes from '../../api/bitcoin/bitcoin.routes';
 
-type AddressLookup = '$getAddress' | '$getAddressTransactions' | '$getAddressTransactionSummary' | '$getAddressUtxos';
+type AddressLookup = '$getAddress' | '$getAddressTransactions' | '$getAddressChainTransactions' | '$getAddressMempoolTransactions'
+  | '$getAddressTransactionSummary' | '$getAddressUtxos';
 const mockedApi = bitcoinApi as unknown as Record<AddressLookup, jest.Mock>;
 
 // P2MR output of mainnet block 161370
@@ -34,9 +37,14 @@ function electrsError(status: number, reason?: string): Error {
 const routes: [string, AddressLookup, string][] = [
   ['address/:address', '$getAddress', 'Failed to get address'],
   ['address/:address/txs', '$getAddressTransactions', 'Failed to get address transactions'],
+  ['address/:address/txs/chain', '$getAddressChainTransactions', 'Failed to get address chain transactions'],
+  ['address/:address/txs/mempool', '$getAddressMempoolTransactions', 'Failed to get address mempool transactions'],
   ['address/:address/txs/summary', '$getAddressTransactionSummary', 'Failed to get address transaction summary'],
   ['address/:address/utxo', '$getAddressUtxos', 'Failed to get address'],
 ];
+
+// Routes that only the esplora backend (qbit-electrs) can answer
+const esploraOnly = ['address/:address/txs/summary', 'address/:address/txs/chain', 'address/:address/txs/mempool'];
 
 describe('address routes', () => {
   const backend = config.MEMPOOL.BACKEND;
@@ -163,7 +171,7 @@ describe('address routes', () => {
   });
 
   // electrum mode checks addresses with the node's validateaddress RPC
-  test.each(routes.filter(([route]) => !route.endsWith('/summary')))('GET %s responds 400 when the node rejects the address under the electrum backend', async (route, lookup) => {
+  test.each(routes.filter(([route]) => !esploraOnly.includes(route)))('GET %s responds 400 when the node rejects the address under the electrum backend', async (route, lookup) => {
     config.MEMPOOL.BACKEND = 'electrum';
     mockedApi[lookup].mockRejectedValue(new Error('Invalid Bitcoin address'));
 
@@ -173,7 +181,7 @@ describe('address routes', () => {
     expect(await res.json()).toEqual({ error: 'Invalid Bitcoin address' });
   });
 
-  describe.each(routes.filter(([route]) => route.includes('/txs')))('GET %s?after_txid', (route, lookup) => {
+  describe.each(routes.filter(([route]) => route.endsWith('/txs') || route.endsWith('/txs/summary')))('GET %s?after_txid', (route, lookup) => {
     const txid = '053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b';
     const url = (afterTxid: string): string => baseUrl + route.replace(':address', ADDRESS) + `?after_txid=${encodeURIComponent(afterTxid)}`;
 
@@ -202,6 +210,56 @@ describe('address routes', () => {
 
       expect(res.status).toBe(422);
       expect(await res.json()).toEqual({ error: 'after_txid not found' });
+    });
+  });
+
+  describe('GET address/:address/txs/chain/:last_seen_txid', () => {
+    const txid = '053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b';
+    const url = (lastSeenTxId: string): string => baseUrl + `address/${ADDRESS}/txs/chain/${lastSeenTxId}`;
+
+    test('asks electrs for the first page without one', async () => {
+      mockedApi.$getAddressChainTransactions.mockResolvedValue([]);
+
+      const res = await fetch(baseUrl + `address/${ADDRESS}/txs/chain`);
+
+      expect(res.status).toBe(200);
+      expect(mockedApi.$getAddressChainTransactions).toHaveBeenCalledWith(ADDRESS, undefined);
+    });
+
+    test('passes a valid txid through', async () => {
+      const data = [{ txid, status: { confirmed: true } }];
+      mockedApi.$getAddressChainTransactions.mockResolvedValue(data);
+
+      const res = await fetch(url(txid));
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(data);
+      expect(mockedApi.$getAddressChainTransactions).toHaveBeenCalledWith(ADDRESS, txid);
+    });
+
+    // $getAddressChainTransactions appends it to the electrs request path
+    test.each([
+      ['a path', encodeURIComponent('../../../broadcast?tx=00')],
+      ['63 hex characters', txid.slice(1)],
+      ['65 hex characters', txid + '0'],
+      ['a non-hex character', 'g' + txid.slice(1)],
+    ])('responds 400 without a lookup for %s', async (_label, lastSeenTxId) => {
+      const res = await fetch(url(lastSeenTxId));
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'Invalid transaction ID' });
+      expect(mockedApi.$getAddressChainTransactions).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each(['none', 'electrum'])('under the %s backend', (backendName) => {
+    test.each(routes.filter(([route]) => esploraOnly.includes(route) && !route.endsWith('/summary')))('GET %s responds 405 without a lookup', async (route, lookup) => {
+      config.MEMPOOL.BACKEND = backendName as typeof config.MEMPOOL.BACKEND;
+
+      const res = await fetch(baseUrl + route.replace(':address', ADDRESS));
+
+      expect(res.status).toBe(405);
+      expect(mockedApi[lookup]).not.toHaveBeenCalled();
     });
   });
 
