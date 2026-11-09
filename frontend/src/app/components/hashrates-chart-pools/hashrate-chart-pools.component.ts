@@ -41,6 +41,7 @@ export class HashrateChartPoolsComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['6m', '1y', '2y', '3y', 'all'];
 
   hashrates: Hashrate[];
   chartOptions: EChartsOption = {};
@@ -99,6 +100,8 @@ export class HashrateChartPoolsComponent implements OnInit {
           this.isLoading = true;
           return this.apiService.getHistoricalPoolsHashrate$(timespan)
             .pipe(
+              filter((response) => !this.miningService.switchToShownRange(
+                this.radioGroupForm.controls.dateSpan, this.rangeButtons, parseInt(response.headers.get('x-total-count'), 10))),
               tap((response) => {
                 this.hashrates = response.body;
                 // Prepare series (group all hashrates data point by pool)
@@ -118,7 +121,6 @@ export class HashrateChartPoolsComponent implements OnInit {
               ))
             );
         }),
-        filter((stats) => !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

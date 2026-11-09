@@ -36,6 +36,7 @@ export class BlockFeesGraphComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['1m', '3m', '6m', '1y', '2y', '3y', 'all'];
 
   chartOptions: EChartsOption = {};
   chartInitOptions = {
@@ -92,6 +93,8 @@ export class BlockFeesGraphComponent implements OnInit {
           this.isLoading = true;
           return this.apiService.getHistoricalBlockFees$(timespan)
             .pipe(
+              filter((response) => !this.miningService.switchToShownRange(
+                this.radioGroupForm.controls.dateSpan, this.rangeButtons, parseInt(response.headers.get('x-total-count'), 10))),
               tap((response) => {
                 this.prepareChartOptions({
                   blockFees: response.body.map(val => [val.timestamp * 1000, val.avgFees / 100000000, val.avgHeight]),
@@ -106,7 +109,6 @@ export class BlockFeesGraphComponent implements OnInit {
               }),
             );
         }),
-        filter((stats) => !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

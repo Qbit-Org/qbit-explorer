@@ -38,6 +38,7 @@ export class BlockFeeRatesGraphComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['24h', '3d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', 'all'];
 
   chartOptions: EChartsOption = {};
   chartInitOptions = {
@@ -114,6 +115,8 @@ export class BlockFeeRatesGraphComponent implements OnInit {
           this.isLoading = true;
           return this.apiService.getHistoricalBlockFeeRates$(timespan)
             .pipe(
+              filter((response) => this.widget || !this.miningService.switchToShownRange(
+                this.radioGroupForm.controls.dateSpan, this.rangeButtons, parseInt(response.headers.get('x-total-count'), 10))),
               tap((response) => {
                 // Group by percentile
                 const seriesData = this.widget ? { 'Median': [] } : {
@@ -206,7 +209,6 @@ export class BlockFeeRatesGraphComponent implements OnInit {
               }),
             );
         }),
-        filter((stats) => this.widget || !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

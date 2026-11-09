@@ -40,6 +40,7 @@ export class PriceChartComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['1m', '3m', '6m', '1y', '2y', '3y', 'all'];
 
   chartOptions: EChartsOption = {};
   chartInitOptions = {
@@ -106,6 +107,8 @@ export class PriceChartComponent implements OnInit {
           this.isLoading = true;
           return this.apiService.getHistoricalBlockFees$(timespan)
             .pipe(
+              filter((response) => this.widget || !this.miningService.switchToShownRange(
+                this.radioGroupForm.controls.dateSpan, this.rangeButtons, parseInt(response.headers.get('x-total-count'), 10))),
               tap((response) => {
                 this.prepareChartOptions({
                   priceData: response.body.filter(val => val[this.currency] > 0).map(val => [val.timestamp * 1000, val[this.currency], val.avgHeight]),
@@ -126,7 +129,6 @@ export class PriceChartComponent implements OnInit {
               }),
             );
         }),
-        filter((stats) => this.widget || !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

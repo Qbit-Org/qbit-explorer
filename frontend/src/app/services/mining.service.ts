@@ -122,28 +122,26 @@ export class MiningService {
 
   /**
    * Range buttons show once the indexed blocks cover their timespan, so on a young chain a
-   * graph's default, saved or linked range can be one whose button is hidden. Switches the graph
-   * to the widest range on show instead, and returns whether it did, so the graph can drop what
-   * it loaded for the hidden range.
+   * graph's default, saved or linked range can be one whose button is hidden, and a link can name
+   * a range the graph has no button for. Switches the graph to the widest range on show instead,
+   * and returns whether it did, so the graph can drop what it loaded before anything renders.
    */
-  public switchToShownRange(dateSpan: AbstractControl, indexedBlockCount: number): boolean {
-    const hiddenTimespan = dateSpan.value;
-    const timespan = shownTimespan(hiddenTimespan, indexedBlockCount, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
-    if (timespan === hiddenTimespan) {
+  public switchToShownRange(dateSpan: AbstractControl, rangeButtons: string[], indexedBlockCount: number): boolean {
+    const requestedTimespan = dateSpan.value;
+    const timespan = shownTimespan(requestedTimespan, rangeButtons, indexedBlockCount, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
+    if (timespan === requestedTimespan) {
       return false;
     }
     // stats can arrive synchronously, from a cache, before the graph listens for range changes
     queueMicrotask(() => {
-      if (dateSpan.value !== hiddenTimespan) {
+      if (dateSpan.value !== requestedTimespan) {
         return;
       }
-      // graphs save the range they load as the preference every mining graph opens with, but
-      // this one isn't the visitor's choice, so keep theirs
-      const preference = this.storageService.getValue('miningWindowPreference');
+      // Every mining graph opens at this preference. Graphs save the range they load, and a link
+      // to the pools pages saves its range, before anyone knows it's hidden; keep the visitor's.
+      const preference = this.storageService.getValueBefore('miningWindowPreference', requestedTimespan);
       dateSpan.setValue(timespan);
-      if (preference) {
-        this.storageService.setValue('miningWindowPreference', preference);
-      }
+      this.storageService.restoreValue('miningWindowPreference', preference);
     });
     return true;
   }

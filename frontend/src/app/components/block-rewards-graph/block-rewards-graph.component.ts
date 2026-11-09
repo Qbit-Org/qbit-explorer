@@ -36,6 +36,7 @@ export class BlockRewardsGraphComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['1m', '3m', '6m', '1y', '2y', '3y', 'all'];
 
   chartOptions: EChartsOption = {};
   chartInitOptions = {
@@ -89,6 +90,8 @@ export class BlockRewardsGraphComponent implements OnInit {
           this.isLoading = true;
           return this.apiService.getHistoricalBlockRewards$(timespan)
             .pipe(
+              filter((response) => !this.miningService.switchToShownRange(
+                this.radioGroupForm.controls.dateSpan, this.rangeButtons, parseInt(response.headers.get('x-total-count'), 10))),
               tap((response) => {
                 this.prepareChartOptions({
                   blockRewards: response.body.map(val => [val.timestamp * 1000, val.avgRewards / 100000000, val.avgHeight]),
@@ -103,7 +106,6 @@ export class BlockRewardsGraphComponent implements OnInit {
               }),
             );
         }),
-        filter((stats) => !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

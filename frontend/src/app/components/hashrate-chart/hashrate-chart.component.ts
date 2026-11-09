@@ -92,6 +92,7 @@ export class HashrateChartComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['3m', '6m', '1y', '2y', '3y', 'all'];
 
   chartOptions: EChartsOption = {};
   chartInitOptions = {
@@ -170,13 +171,17 @@ export class HashrateChartComponent implements OnInit {
           this.stateService.chainTip$
             .pipe(
               switchMap(() => {
-                return this.apiService.getHistoricalHashrate$(this.timespan);
+                // drop a refresh for a range the graph has since left, such as one it switched from
+                const timespan = this.timespan;
+                return this.apiService.getHistoricalHashrate$(timespan).pipe(filter(() => timespan === this.timespan));
               })
             )
         ),
         fromEvent(window, 'resize').pipe(startWith(null)),
       ).pipe(
         map(([response]) => response),
+        filter((response) => this.widget || !this.miningService.switchToShownRange(
+          this.radioGroupForm.controls.dateSpan, this.rangeButtons, parseInt(response.headers.get('x-total-count') || '0', 10))),
         tap((response) => {
           const data = response.body;
           if (!data) {
@@ -247,7 +252,6 @@ export class HashrateChartComponent implements OnInit {
               && data.currentDifficultyAuxpow != null,
           };
         }),
-        filter((stats) => this.widget || !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

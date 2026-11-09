@@ -45,10 +45,12 @@ export class RewardStatsComponent implements OnInit {
       )
       .pipe(
         map((stats) => {
+          // the blocks the stats cover: fewer than the window while fewer are indexed
+          const blockCount = Math.min(REWARD_STATS_BLOCK_COUNT, stats.endBlock - stats.startBlock + 1);
           return {
             totalReward: stats.totalReward,
             feePerTx: stats.totalFee / stats.totalTx,
-            feePerBlock: stats.totalFee / REWARD_STATS_BLOCK_COUNT,
+            feePerBlock: stats.totalFee / blockCount,
           };
         })
       );
