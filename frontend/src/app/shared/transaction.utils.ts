@@ -5,7 +5,7 @@ import { CpfpInfo, RbfInfo, TransactionStripped } from '@interfaces/node-api.int
 import { StateService } from '@app/services/state.service';
 import { hash, Hash } from '@app/shared/sha256';
 import { AddressType, AddressTypeInfo, detectAddressType, getAddressNetworkParams } from '@app/shared/address-utils';
-import { feeRatePerVsize, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '@app/shared/weight-units';
+import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '@app/shared/weight-units';
 import * as secp256k1 from '@noble/secp256k1';
 
 // Bitcoin Core default policy settings
@@ -17,14 +17,28 @@ const MAX_P2SH_SIGOPS = 15;
 const MAX_STANDARD_P2WSH_STACK_ITEMS = 100;
 const MAX_STANDARD_P2WSH_STACK_ITEM_SIZE = 80;
 const MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE = 80;
+const MAX_STANDARD_P2MR_STACK_ITEM_SIZE = 16 * 1024; // qbit policy: per leaf script argument, leaf version 0xc0
+const MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES = 128 * 1024; // qbit policy: all leaf script arguments, leaf version 0xc0
 const MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600;
 const MAX_STANDARD_SCRIPTSIG_SIZE = 1650;
+const MAX_SCRIPT_SIZE = 10_000;
 const DUST_RELAY_TX_FEE_SATS_PER_KVB = 750; // qbit policy: 0.75 sat/vB
 const PQC_SIG_SIZE = 3680; // qbit bounded SLH-DSA signature bytes
+// qbit policy: with no witness discount, the dust threshold prices every output but P2MR with the
+// 148-byte legacy spend, and P2MR with a single-key spend: outpoint, empty scriptsig and sequence,
+// then a 3-item witness of a 3,681-byte PQC signature with its sighash byte, the 34-byte
+// <pubkey> OP_CHECKSIGPQC leaf script and the 1-byte control block, each with its length
+const DUST_SPEND_SIZE = 148;
+const P2MR_DUST_SPEND_SIZE = 41 + 1 + (3 + PQC_SIG_SIZE + 1) + (1 + 34) + (1 + 1); // 3,763 bytes
 export const MAX_OP_RETURN_RELAY = 200_000; // qbit policy: -datacarriersize default, shared by all OP_RETURN outputs
 const MAX_DUST_OUTPUTS_PER_TX = 1; // qbit policy: ephemeral dust allows one dust output
 const DEFAULT_PERMIT_BAREMULTISIG = true;
 const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
+const TRUC_VERSION = 3;
+const TRUC_MAX_VSIZE = 50_000; // qbit policy: sigop-adjusted vsize of any v3 transaction
+const TAPROOT_LEAF_MASK = 0xfe;
+const TAPROOT_LEAF_TAPSCRIPT = 0xc0;
+const P2MR_LEAF_VERSION = 0xc0;
 
 const TAPROOT_NUMS_INTERNAL_KEY = '50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
 const SECP256K1_ORDER = BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
@@ -497,13 +511,18 @@ export function fillUnsignedInput(vin: Vin): { missingSigs: number, bytes: numbe
   return { missingSigs, bytes, addToWitness };
 }
 
+// qbit prices an output's serialized size plus the size of the input that would spend it at the dust
+// relay fee, rounding the fee up, and unspendable outputs have no dust threshold
 export function getDustThreshold(scriptpubkey: string): number {
-  let dustSize = (scriptpubkey.length / 2);
-  dustSize += getVarIntLength(dustSize);
-  dustSize += 8;
-  dustSize += isWitnessProgram(scriptpubkey) ? 67 : 148;
-  const fee = Math.floor(dustSize * DUST_RELAY_TX_FEE_SATS_PER_KVB / 1000);
-  return fee === 0 && DUST_RELAY_TX_FEE_SATS_PER_KVB > 0 ? 1 : fee;
+  const scriptSize = scriptpubkey.length / 2;
+  if (scriptpubkey.startsWith('6a') || scriptSize > MAX_SCRIPT_SIZE) {
+    return 0;
+  }
+  // value, script length and script
+  let dustSize = 8 + getVarIntLength(scriptSize) + scriptSize;
+  const witnessProgram = isWitnessProgram(scriptpubkey);
+  dustSize += (witnessProgram && witnessProgram.version === 2 && witnessProgram.program.length === 64) ? P2MR_DUST_SPEND_SIZE : DUST_SPEND_SIZE;
+  return Math.floor((dustSize * DUST_RELAY_TX_FEE_SATS_PER_KVB + 999) / 1000);
 }
 
 function isDustOutput(value: number, scriptpubkey: string): boolean {
@@ -527,6 +546,12 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
 
   // tx-size
   if (tx.weight > MAX_STANDARD_TX_WEIGHT) {
+    return true;
+  }
+
+  // TRUC-violation: a v3 transaction's sigop-adjusted vsize must be within TRUC_MAX_VSIZE
+  // (qbit also caps a v3 child of an unconfirmed v3 parent at 45,500 vB, which needs the mempool to check)
+  if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(tx.sigops || 0)) > TRUC_MAX_VSIZE) {
     return true;
   }
 
@@ -587,16 +612,34 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
         // script path spend
         // control block is required
         if (!taprootInfo.controlBlock.length) {
-          return false;
-        } else {
-          // Leaf version must be 0xc0 (aka Tapscript, see BIP 342)
-          if (taprootInfo.scriptPath.leafVersion !== 0xc0) {
-            return false;
-          }
+          return true;
         }
-        // remaining witness items (except for the script) must be within MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE limit
-        if (taprootInfo.stack.some(v => v.length > 160)) {
-          return false;
+        // with leaf version 0xc0 (aka Tapscript, see BIP 342), the remaining witness items (except for the script)
+        // must be within the MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE limit
+        if (taprootInfo.scriptPath.leafVersion === TAPROOT_LEAF_TAPSCRIPT
+          && taprootInfo.stack.some(item => item.length / 2 > MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE)) {
+          return true;
+        }
+      }
+    }
+    if (['v2_p2mr', 'witness_v2_p2mr'].includes(vin.prevout?.scriptpubkey_type || '') && vin.witness?.length) {
+      // P2MR has no key path, so it needs a leaf script and a control block; annex is non-standard
+      if (vin.witness.length < 2 || vin.witness[vin.witness.length - 1].startsWith('50')) {
+        return true;
+      }
+      const controlBlock = vin.witness[vin.witness.length - 1];
+      if (!controlBlock.length) {
+        return true;
+      }
+      // with leaf version 0xc0, the remaining witness items (except for the script) must be within the
+      // MAX_STANDARD_P2MR_STACK_ITEM_SIZE limit, and together within MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES
+      if ((parseInt(controlBlock.slice(0, 2), 16) & TAPROOT_LEAF_MASK) === P2MR_LEAF_VERSION) {
+        let stackBytes = 0;
+        for (const item of vin.witness.slice(0, -2)) {
+          stackBytes += item.length / 2;
+          if (item.length / 2 > MAX_STANDARD_P2MR_STACK_ITEM_SIZE || stackBytes > MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES) {
+            return true;
+          }
         }
       }
     }
@@ -609,13 +652,18 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
   let dustCount = 0;
   for (const vout of tx.vout) {
     // scriptpubkey
+    const witnessProgram = isWitnessProgram(vout.scriptpubkey);
+    if (witnessProgram && witnessProgram.version >= 3) {
+      // qbit keeps witness versions 3 to 16 dormant, so outputs to them are non-standard
+      return true;
+    }
     if (['nonstandard', 'provably_unspendable', 'empty'].includes(vout.scriptpubkey_type)) {
       // (non-standard output type)
       return true;
     } else if (vout.scriptpubkey_type === 'unknown') {
-      // undefined segwit version/length combinations are actually standard in outputs
+      // undefined witness v1 and v2 program lengths are actually standard in outputs
       // https://github.com/bitcoin/bitcoin/blob/2c79abc7ad4850e9e3ba32a04c530155cda7f980/src/script/interpreter.cpp#L1950-L1951
-      if (vout.scriptpubkey.startsWith('00') || !isWitnessProgram(vout.scriptpubkey)) {
+      if (vout.scriptpubkey.startsWith('00') || !witnessProgram) {
         return true;
       }
     } else if (vout.scriptpubkey_type === 'multisig') {
@@ -913,6 +961,10 @@ export function getTransactionFlags(tx: Transaction, cpfpInfo?: CpfpInfo, replac
         // P2MR shares taproot's script-path witness layout, so its leaf script can carry an inscription envelope too
         if (vin.witness?.length && vin.inner_witnessscript_asm?.includes('OP_0 OP_IF')) {
           flags |= TransactionFlags.inscription;
+        }
+        // and P2MR spends can carry an annex, as taproot spends can
+        if (vin.witness?.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50')) {
+          flags |= TransactionFlags.annex;
         }
       } break;
       case 'anchor': flags |= TransactionFlags.anchor; break;
