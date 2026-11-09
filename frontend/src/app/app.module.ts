@@ -69,9 +69,14 @@ const providers = [
         provideHttpClient(withInterceptorsFromDi()),
         DatePipe,
         ...providers,
-        // enterprise mode (customize.enterprise) applies its settings when this
-        // service is created: create it at startup, before any page reads them
-        provideAppInitializer(() => { inject(EnterpriseService); }),
+        // enterprise mode applies its settings when this service is created:
+        // with customize.enterprise set, create it at startup, before any page
+        // reads them. Other builds leave it to the pages that inject it.
+        provideAppInitializer(() => {
+          if (window?.['__env']?.customize?.enterprise) {
+            inject(EnterpriseService);
+          }
+        }),
       ] })
 export class AppModule { }
 

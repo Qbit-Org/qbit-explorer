@@ -10,6 +10,12 @@ const JsonRPC = function (opts) {
 };
 
 JsonRPC.prototype.call = function (method, params) {
+  return this.send(method, params, true);
+};
+
+// `retryWithNewCookie`: after a 401 with cookie auth, read the cookie file
+// again and send the call once more if the cookie changed
+JsonRPC.prototype.send = function (method, params, retryWithNewCookie): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const time = Date.now();
     let requestJSON;
@@ -55,8 +61,9 @@ JsonRPC.prototype.call = function (method, params) {
       requestOptions.ca = this.opts.sslCa;
     }
 
-    // use HTTP auth if user and password set
-    if (this.opts.cookie) {
+    // use HTTP auth if user and password set. With a cookie, even an empty
+    // path, never fall back to them: the call fails until the cookie can be read
+    if (typeof this.opts.cookie === 'string') {
       if (!this.cachedCookie) {
         this.cachedCookie = readFileSync(this.opts.cookie).toString();
       }
@@ -123,9 +130,26 @@ JsonRPC.prototype.call = function (method, params) {
           // if we authenticated using a cookie and it failed, read the cookie file again
           if (
             response.statusCode === 401 /* Unauthorized */ &&
-            this.opts.cookie
+            typeof this.opts.cookie === 'string'
           ) {
+            const rejectedCookie = this.cachedCookie;
             this.cachedCookie = undefined;
+            // qbitd writes a new cookie each time it starts, and turns a call
+            // with the old one away before running it, so a retry can't run
+            // the call twice
+            if (retryWithNewCookie) {
+              let cookie;
+              try {
+                cookie = readFileSync(this.opts.cookie).toString();
+              } catch (e) {
+                cookie = undefined;
+              }
+              if (cookie && cookie !== rejectedCookie) {
+                this.cachedCookie = cookie;
+                resolve(this.send(method, params, false));
+                return;
+              }
+            }
           }
 
           if (response.statusCode !== 200) {

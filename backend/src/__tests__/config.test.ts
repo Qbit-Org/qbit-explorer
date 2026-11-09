@@ -178,7 +178,10 @@ describe('Mempool Backend Config', () => {
       const config = jest.requireActual('../config').default;
 
       // docker/backend/start.sh doesn't map MEMPOOL.HTTP_HOST yet, so the
-      // fixture, which lists the keys of the Docker template, leaves it out
+      // fixture, which lists the keys of the Docker template, leaves it out.
+      // TODO: compare with fixture.MEMPOOL again once start.sh maps
+      // MEMPOOL_HTTP_HOST, in the patcher-coordinated follow-up to #22, which
+      // also adds HTTP_HOST to the fixture and the Docker template
       expect(config.MEMPOOL).toStrictEqual({ ...fixture.MEMPOOL, HTTP_HOST: '' });
 
       expect(config.ELECTRUM).toStrictEqual(fixture.ELECTRUM);
@@ -249,6 +252,7 @@ describe('Mempool Backend Config', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mempool-config-file-'));
     const file = path.join(dir, 'operator.json');
     fs.writeFileSync(file, JSON.stringify({ MEMPOOL: { NETWORK: 'regtest', HTTP_PORT: 18999 } }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
       process.chdir(dir);
       // config.ts used to pass the value straight to require(), which reads a
@@ -262,7 +266,56 @@ describe('Mempool Backend Config', () => {
           expect(config.MEMPOOL.HTTP_PORT).toBe(18999);
         });
       }
+      expect(warn).not.toHaveBeenCalled();
+
+      // with no file at either path, the error names the working-directory one
+      jest.isolateModules(() => {
+        process.env.MEMPOOL_CONFIG_FILE = 'missing.json';
+        expect(() => jest.requireActual('../config')).toThrow(path.join(process.cwd(), 'missing.json'));
+      });
     } finally {
+      warn.mockRestore();
+      process.chdir(cwd);
+      delete process.env.MEMPOOL_CONFIG_FILE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('should still read a MEMPOOL_CONFIG_FILE relative to dist/, with a deprecation warning', () => {
+    // Earlier versions passed MEMPOOL_CONFIG_FILE straight to require(), which
+    // resolves ./ and ../ against the directory of config.js: dist/ in a build,
+    // src/ here. So ../mempool-config.json, run from backend/, meant
+    // backend/mempool-config.json.
+    const configFile = './__tests__/fixtures/mempool-config.legacy.json';
+    const legacyFile = path.join(__dirname, 'fixtures', 'mempool-config.legacy.json');
+    const cwd = process.cwd();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mempool-config-file-'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      process.chdir(dir);
+      process.env.MEMPOOL_CONFIG_FILE = configFile;
+      jest.isolateModules(() => {
+        const config = jest.requireActual('../config').default;
+
+        expect(config.MEMPOOL.NETWORK).toBe('testnet4');
+        expect(config.MEMPOOL.HTTP_PORT).toBe(18990);
+      });
+      expect(warn.mock.calls).toStrictEqual([[
+        `MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory, and `
+          + `${path.join(process.cwd(), configFile)} doesn't exist. Reading ${legacyFile} instead, where earlier `
+          + 'versions found it. Set MEMPOOL_CONFIG_FILE to that absolute path: this fallback will be removed.'
+      ]]);
+
+      // a file at the working-directory path comes first, without a warning
+      warn.mockClear();
+      fs.mkdirSync(path.join(dir, '__tests__', 'fixtures'), { recursive: true });
+      fs.writeFileSync(path.join(dir, configFile), JSON.stringify({ MEMPOOL: { NETWORK: 'regtest' } }));
+      jest.isolateModules(() => {
+        expect(jest.requireActual('../config').default.MEMPOOL.NETWORK).toBe('regtest');
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
       process.chdir(cwd);
       delete process.env.MEMPOOL_CONFIG_FILE;
       fs.rmSync(dir, { recursive: true, force: true });

@@ -46,12 +46,13 @@ the reference nginx configuration would expose.
 The REST ports are qbit-electrs defaults. On every network the backend listens
 on `127.0.0.1` port 8999, where the reference nginx configuration sends API
 requests: the templates set `MEMPOOL.HTTP_HOST` to `127.0.0.1`. That setting
-takes an IP address, such as `127.0.0.1` or `::1`, not a host name. Without it,
-or with `""`, the backend listens on port 8999 on every interface, even when
-`MEMPOOL.UNIX_SOCKET_PATH` is also set, so block the port in the host firewall
-and let only nginx reach it. Keep RPC, REST and MariaDB on localhost too. Only
-nginx and, if you want to serve peers, the qbitd P2P port should accept outside
-connections.
+takes an IP address, such as `127.0.0.1` or `::1`, not a host name, and applies
+to that TCP port only. `MEMPOOL.UNIX_SOCKET_PATH`, if set, opens a separate
+listener on that socket, next to the TCP port. Without `HTTP_HOST`, or with
+`""`, the backend listens on port 8999 on every interface, so block the port in
+the host firewall and let only nginx reach it. Keep RPC, REST and MariaDB on
+localhost too. Only nginx and, if you want to serve peers, the qbitd P2P port
+should accept outside connections.
 
 ## Requirements
 
@@ -183,6 +184,9 @@ PID file to `backend/dist` unless `DATABASE.PID_DIR` is set, and any
 `backend/mempool-config.json`, or the file named by `MEMPOOL_CONFIG_FILE` when
 that variable is set. A relative `MEMPOOL_CONFIG_FILE` is resolved against the
 directory the backend starts in, which is `backend/` for the npm scripts below.
+Earlier versions resolved it against `backend/dist/`. If no file exists at the
+new location but one does there, the backend reads that one and logs a
+deprecation warning.
 
 The backend authenticates to qbitd with the RPC cookie at
 `/var/lib/qbit/.cookie` (`CORE_RPC.COOKIE` and `CORE_RPC.COOKIE_PATH`), so add
@@ -193,8 +197,26 @@ take effect:
 sudo usermod -aG qbit <backend user>
 ```
 
-qbitd writes a new cookie each time it starts. Once qbitd rejects the old one,
-the backend reads the file again, so it keeps working across qbitd restarts.
+qbitd writes a new cookie each time it starts. When qbitd turns a call away
+because it carries the old cookie, the backend reads the file again and sends
+the call once more with the new one, so a qbitd restart needs no backend
+restart.
+
+With `CORE_RPC.COOKIE` true, the backend never falls back to
+`CORE_RPC.USERNAME` and `CORE_RPC.PASSWORD`. If it can't read the cookie, it
+logs an error at startup that names the path and the fix, and RPC calls fail
+until it can.
+
+**Upgrading from the earlier templates:** they authenticated with an `rpcauth`
+user name and password, filled in through the `__QBIT_RPC_USER__` and
+`__QBIT_RPC_PASS__` placeholders. The templates no longer have those
+placeholders, so tooling that fills them in now does nothing. Either add the
+backend's user to the `qbit` group as above, or keep the password: set
+`CORE_RPC.COOKIE` to `false`, set `CORE_RPC.USERNAME` and `CORE_RPC.PASSWORD`,
+and keep the `rpcauth` line in `qbit.conf`. qbit's
+[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
+generates that line.
+
 Start the backend with:
 
 ```sh

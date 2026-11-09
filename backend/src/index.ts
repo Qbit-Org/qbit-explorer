@@ -42,6 +42,7 @@ import bitcoinSecondClient from './api/bitcoin/bitcoin-second-client';
 import aboutRoutes from './api/about.routes';
 import mempoolBlocks from './api/mempool-blocks';
 import stratumApi from './api/services/stratum';
+import { rpcCookieProblems } from './api/bitcoin/rpc-cookie';
 
 class Server {
   private wss: WebSocket.Server | undefined;
@@ -113,6 +114,12 @@ class Server {
       console.error(`unhandledRejection:`, reason, promise);
       this.forceExit('unhandledRejection', 1);
     });
+
+    // with COOKIE set, RPC calls never fall back to a password, so say up
+    // front when the cookie can't be read
+    for (const problem of rpcCookieProblems(config)) {
+      logger.err(problem);
+    }
 
     if (config.MEMPOOL.BACKEND === 'esplora') {
       bitcoinApi.startHealthChecks();

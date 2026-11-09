@@ -134,10 +134,11 @@ the cookie (`getent group qbit`) with `group_add`:
       - /var/lib/qbit/rpc:/qbit-rpc:ro
 ```
 
-Set both cookie variables. The image leaves `CORE_RPC_COOKIE_PATH` empty, and
-with an empty path the backend uses `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD`
-instead. To use a password, as the sample `docker-compose.yml` does, add an
-`rpcauth` line to `qbit.conf` (qbit's
+Set both cookie variables. The image leaves `CORE_RPC_COOKIE_PATH` empty, so
+with `CORE_RPC_COOKIE` alone the backend has no cookie to read: it logs an error
+at startup, and RPC calls fail. It doesn't fall back to `CORE_RPC_USERNAME` and
+`CORE_RPC_PASSWORD`. To use a password, as the sample `docker-compose.yml`
+does, add an `rpcauth` line to `qbit.conf` (qbit's
 [`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
 prints one) and set `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD` instead of the
 cookie variables.
@@ -157,8 +158,11 @@ Esplora-compatible REST API, on port 3000 by default for mainnet. It must
 listen (`--http-addr`) on an address the containers can reach. With the
 `qbit.conf` above it uses the same cookie: start it with
 `--daemon-dir /var/lib/qbit/rpc` and `--jsonrpc-import`, so that it reads
-`.cookie` from that directory and fetches blocks over RPC. Point the backend at
-it:
+`.cookie` from that directory and fetches blocks over RPC. qbit-electrs uses an
+explicit `--daemon-dir` as given on every chain, and adds the chain's
+subdirectory, such as `testnet4/`, only to its default. Its `--cookie` option
+takes the credentials themselves, which `ps` shows and which go stale when
+qbitd restarts, so don't use it here. Point the backend at it:
 
 ```yaml
   api:

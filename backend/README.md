@@ -117,7 +117,7 @@ You can also set env var `MEMPOOL_CONFIG_FILE` to specify a custom config file l
 ```
 MEMPOOL_CONFIG_FILE=/path/to/mempool-config.json npm run start
 ```
-A relative path is resolved against `backend/`, the directory `npm run start` runs in.
+A relative path is resolved against `backend/`, the directory `npm run start` runs in. Earlier versions resolved it against `backend/dist/`: if no file exists at the new location but one does there, the backend reads that one and logs a deprecation warning.
 
 When it's running, you should see it polling the mempool, with output like this:
 

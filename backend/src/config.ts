@@ -1,9 +1,32 @@
+import { existsSync } from 'fs';
 import { isIP } from 'net';
 import path from 'path';
 
-// resolve a relative MEMPOOL_CONFIG_FILE against the working directory, not this file
+// A relative MEMPOOL_CONFIG_FILE is resolved against the working directory.
+// Earlier versions passed it straight to require(), which resolves ./ and ../
+// against this file's directory, dist/: keep reading such a file when the
+// working directory has none, with a warning. The logger can't warn here,
+// because it reads this config.
+function configFilePath(configFile: string): string {
+  const fromWorkingDirectory = path.resolve(configFile);
+  if (existsSync(fromWorkingDirectory)) {
+    return fromWorkingDirectory;
+  }
+  let legacy: string;
+  try {
+    legacy = require.resolve(configFile);
+  } catch (e) {
+    return fromWorkingDirectory;
+  }
+  // eslint-disable-next-line no-console
+  console.warn(`MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory, and ${fromWorkingDirectory} `
+    + `doesn't exist. Reading ${legacy} instead, where earlier versions found it. Set MEMPOOL_CONFIG_FILE to that `
+    + 'absolute path: this fallback will be removed.');
+  return legacy;
+}
+
 const configFromFile = require(
-    process.env.MEMPOOL_CONFIG_FILE ? path.resolve(process.env.MEMPOOL_CONFIG_FILE) : '../mempool-config.json'
+    process.env.MEMPOOL_CONFIG_FILE ? configFilePath(process.env.MEMPOOL_CONFIG_FILE) : '../mempool-config.json'
 );
 
 export const QBIT_NETWORKS = ['mainnet', 'testnet', 'testnet4', 'signet', 'regtest'] as const;

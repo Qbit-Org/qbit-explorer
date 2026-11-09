@@ -6,7 +6,7 @@ This guide brings up the qbit explorer stack on a development machine:
 - optional [Qbit-Org/qbit-electrs](https://github.com/Qbit-Org/qbit-electrs)
   indexer
 - MariaDB for mempool backend state
-- mempool backend on `http://localhost:8999`
+- mempool backend on `http://127.0.0.1:8999`
 - mempool frontend on `http://localhost:4200`
 
 The first usable loop can run with `MEMPOOL.BACKEND=none` against qbitd RPC
@@ -61,7 +61,7 @@ npm ci
 | qbit-electrs testnet4 Electrum | 40001 | Testnet4 only | `Qbit-Org/qbit-electrs:src/config.rs:141` |
 | qbit-electrs testnet4 Esplora HTTP | 3004 | Testnet4 only | `Qbit-Org/qbit-electrs:src/config.rs:167` |
 | MariaDB via repo compose | 33306 -> 3306 | Yes | `backend/docker-compose.test.yml:12-13` |
-| Backend REST/WebSocket | 8999 | Yes | `backend/src/config.ts:189` |
+| Backend REST/WebSocket | 8999 | Yes | `backend/src/config.ts:211` |
 | Frontend dev server | 4200 | Yes | Angular CLI default; `frontend/package.json` `serve` |
 
 Common conflicts:
@@ -79,33 +79,33 @@ Backend config keys live in `backend/src/config.ts`; sample values live in
 
 | Key | qbit local value | Source |
 | --- | --- | --- |
-| `MEMPOOL_CONFIG_FILE` | Path to the local config file; a relative path is resolved against the backend's working directory | `backend/src/config.ts:5-6` |
-| `MEMPOOL.NETWORK` | `regtest` for local qbitd | `backend/src/config.ts:16`, `:187` |
-| `MEMPOOL.BACKEND` | `none`, `esplora`, or `electrum` | `backend/src/config.ts:17`, `:188` |
-| `MEMPOOL.HTTP_PORT` | 8999 | `backend/src/config.ts:18`, `:189` |
-| `MEMPOOL.API_URL_PREFIX` | `/api/v1/` | `backend/src/config.ts:22`, `:193` |
-| `MEMPOOL.BLOCK_WEIGHT_UNITS` | 2000000 | `backend/src/config.ts:28`, `:199`; qbit `src/consensus/consensus.h:14-15` |
-| `MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT` | 400000 | `backend/src/config.ts:222`; qbit `src/policy/policy.h:34-37` |
-| `CORE_RPC.HOST` | `127.0.0.1` | `backend/src/config.ts:242-243` |
-| `CORE_RPC.PORT` | 18452 for regtest | `backend/src/config.ts:244`; qbit `src/chainparamsbase.cpp:53-54` |
-| `CORE_RPC.USERNAME` / `PASSWORD` | `mempool` / `mempool` in the examples | `backend/src/config.ts:245-246` |
-| `CORE_RPC.COOKIE` | `false` for password-based local examples | `backend/src/config.ts:248-249` |
-| `DATABASE.HOST` | `127.0.0.1` | `backend/src/config.ts:261-263` |
+| `MEMPOOL_CONFIG_FILE` | Path to the local config file; a relative path is resolved against the backend's working directory | `backend/src/config.ts:27-28` |
+| `MEMPOOL.NETWORK` | `regtest` for local qbitd | `backend/src/config.ts:38`, `:209` |
+| `MEMPOOL.BACKEND` | `none`, `esplora`, or `electrum` | `backend/src/config.ts:39`, `:210` |
+| `MEMPOOL.HTTP_PORT` | 8999 | `backend/src/config.ts:40`, `:211` |
+| `MEMPOOL.API_URL_PREFIX` | `/api/v1/` | `backend/src/config.ts:44`, `:215` |
+| `MEMPOOL.BLOCK_WEIGHT_UNITS` | 2000000 | `backend/src/config.ts:50`, `:221`; qbit `src/consensus/consensus.h:14-15` |
+| `MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT` | 400000 | `backend/src/config.ts:244`; qbit `src/policy/policy.h:34-37` |
+| `CORE_RPC.HOST` | `127.0.0.1` | `backend/src/config.ts:264-265` |
+| `CORE_RPC.PORT` | 18452 for regtest | `backend/src/config.ts:266`; qbit `src/chainparamsbase.cpp:53-54` |
+| `CORE_RPC.USERNAME` / `PASSWORD` | `mempool` / `mempool` in the examples | `backend/src/config.ts:267-268` |
+| `CORE_RPC.COOKIE` | `false` for password-based local examples | `backend/src/config.ts:270-271` |
+| `DATABASE.HOST` | `127.0.0.1` | `backend/src/config.ts:283-285` |
 | `DATABASE.PORT` | 33306 with repo compose | `backend/docker-compose.test.yml:12-13` |
 | `DATABASE.DATABASE` / `USERNAME` / `PASSWORD` | `mempool_test` / `mempool_test` / `mempool_test` with repo compose | `backend/docker-compose.test.yml:6-10` |
-| `ESPLORA.REST_API_URL` | qbit-electrs HTTP base URL, `http://127.0.0.1:3002` for a local regtest instance | `backend/src/config.ts:227-228`; qbit-electrs `src/config.rs:163` |
-| `ESPLORA.UNIX_SOCKET_PATH` | `null` for HTTP | `backend/src/config.ts:227-229` |
-| `ELECTRUM.HOST` | qbit-electrs host | `backend/src/config.ts:237-238` |
+| `ESPLORA.REST_API_URL` | qbit-electrs HTTP base URL, `http://127.0.0.1:3002` for a local regtest instance | `backend/src/config.ts:249-250`; qbit-electrs `src/config.rs:163` |
+| `ESPLORA.UNIX_SOCKET_PATH` | `null` for HTTP | `backend/src/config.ts:249-251` |
+| `ELECTRUM.HOST` | qbit-electrs host | `backend/src/config.ts:259-260` |
 | `ELECTRUM.PORT` | 60401 for a local regtest qbit-electrs | qbit-electrs `src/config.rs:143` |
-| `ELECTRUM.TLS_ENABLED` | `false` for plaintext local Electrum; match your hosted endpoint | `backend/src/config.ts:237-240` |
+| `ELECTRUM.TLS_ENABLED` | `false` for plaintext local Electrum; match your hosted endpoint | `backend/src/config.ts:259-262` |
 | `LIGHTNING.ENABLED` | `false` | `backend/mempool-config.sample.json:106-107` |
 | `REDIS.ENABLED` | `false` | `backend/mempool-config.sample.json:136-137` |
-| `FIAT_PRICE.ENABLED` | `false` for qbit local work | `backend/src/config.ts:167-168`, `:338-339` |
+| `FIAT_PRICE.ENABLED` | `false` for qbit local work | `backend/src/config.ts:189-190`, `:360-361` |
 
 Frontend config is generated from `frontend/update-config.js` into
 `frontend/mempool-frontend-config.json`. The local Angular serve config uses
 `frontend/proxy.conf.local.js`, where `/api/v1/**` and `/regtest/api/**` proxy
-to `http://localhost:8999` (`frontend/proxy.conf.local.js:15-32`).
+to `http://127.0.0.1:8999` (`frontend/proxy.conf.local.js:15-32`).
 
 ## Regtest Harness
 
@@ -399,7 +399,7 @@ npm run serve
 Open `http://localhost:4200`.
 
 The `local` Angular serve config uses `frontend/proxy.conf.local.js`, which
-proxies `/api/v1/**` and `/regtest/api/**` to `http://localhost:8999`.
+proxies `/api/v1/**` and `/regtest/api/**` to `http://127.0.0.1:8999`.
 
 To enable regtest and testnet4 in the frontend and pin the qbit display
 settings explicitly:
