@@ -502,6 +502,14 @@ class ElectrsApi implements AbstractBitcoinApi {
     return this.failoverRouter.$get<IEsploraApi.Transaction[]>('/address/' + address + '/txs', 'json', txId ? { after_txid: txId } : null);
   }
 
+  $getAddressChainTransactions(address: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]> {
+    return this.failoverRouter.$get<IEsploraApi.Transaction[]>('/address/' + address + '/txs/chain' + (lastSeenTxId ? '/' + lastSeenTxId : ''));
+  }
+
+  $getAddressMempoolTransactions(address: string): Promise<IEsploraApi.Transaction[]> {
+    return this.failoverRouter.$get<IEsploraApi.Transaction[]>('/address/' + address + '/txs/mempool');
+  }
+
   $getAddressUtxos(address: string): Promise<IEsploraApi.UTXO[]> {
     return this.failoverRouter.$get<IEsploraApi.UTXO[]>('/address/' + address + '/utxo');
   }
