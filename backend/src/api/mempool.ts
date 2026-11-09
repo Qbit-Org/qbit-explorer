@@ -140,6 +140,9 @@ class Mempool {
       if (config.MEMPOOL.CACHE_ENABLED && config.REDIS.ENABLED) {
         await redisCache.$addTransaction(this.mempoolCache[txid]);
       }
+      // getTransactionFlags keeps any static flags it is given, and a cache written by an older
+      // release holds flags from that release's rules, so classify restored transactions afresh
+      this.mempoolCache[txid].flags = undefined;
       this.mempoolCache[txid].flags = Common.getTransactionFlags(this.mempoolCache[txid]);
       this.mempoolCache[txid].cpfpChecked = false;
       this.mempoolCache[txid].cpfpDirty = true;
