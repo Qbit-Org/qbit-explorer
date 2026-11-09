@@ -3,7 +3,7 @@ import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EChartsOption, PieSeriesOption } from '@app/graphs/echarts';
 import { merge, Observable } from 'rxjs';
-import { map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
+import { filter, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
 import { SeoService } from '@app/services/seo.service';
 import { StorageService } from '@app//services/storage.service';
 import { MiningService, MiningStats } from '@app/services/mining.service';
@@ -109,6 +109,7 @@ export class PoolRankingComponent implements OnInit {
           this.isLoading = false;
           this.prepareChartOptions(data);
         }),
+        filter((stats) => this.widget || !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.totalBlockCount)),
         shareReplay(1)
       );
   }

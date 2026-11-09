@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, LOCALE_ID, OnInit, HostBinding } from '@angular/core';
 import { EChartsOption } from '@app/graphs/echarts';
 import { Observable } from 'rxjs';
-import { delay, map, retryWhen, share, startWith, switchMap, tap } from 'rxjs/operators';
+import { delay, filter, map, retryWhen, share, startWith, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '@app/services/api.service';
 import { SeoService } from '@app/services/seo.service';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
@@ -118,6 +118,7 @@ export class HashrateChartPoolsComponent implements OnInit {
               ))
             );
         }),
+        filter((stats) => !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

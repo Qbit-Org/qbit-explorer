@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Inject, Input, LOCALE_ID, OnInit } from '@angular/core';
 import { echarts, EChartsOption } from '@app/graphs/echarts';
 import { Observable } from 'rxjs';
-import { map, share, startWith, switchMap, tap } from 'rxjs/operators';
+import { filter, map, share, startWith, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '@app/services/api.service';
 import { SeoService } from '@app/services/seo.service';
 import { formatNumber } from '@angular/common';
@@ -106,6 +106,7 @@ export class BlockFeesGraphComponent implements OnInit {
               }),
             );
         }),
+        filter((stats) => !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

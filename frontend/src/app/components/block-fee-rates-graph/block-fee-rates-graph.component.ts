@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, LOCALE_ID, NgZone, OnInit } from '@angular/core';
 import { echarts, EChartsOption } from '@app/graphs/echarts';
 import { Observable, combineLatest, of } from 'rxjs';
-import { map, share, startWith, switchMap, tap } from 'rxjs/operators';
+import { filter, map, share, startWith, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '@app/services/api.service';
 import { SeoService } from '@app/services/seo.service';
 import { formatNumber } from '@angular/common';
@@ -206,6 +206,7 @@ export class BlockFeeRatesGraphComponent implements OnInit {
               }),
             );
         }),
+        filter((stats) => this.widget || !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

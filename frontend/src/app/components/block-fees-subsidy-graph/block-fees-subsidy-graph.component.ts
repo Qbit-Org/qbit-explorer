@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, Inject, Input, LOCALE_ID, NgZone, OnInit } from '@angular/core';
 import { EChartsOption } from '@app/graphs/echarts';
 import { Observable } from 'rxjs';
-import { catchError, map, share, startWith, switchMap, tap } from 'rxjs/operators';
+import { catchError, filter, map, share, startWith, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '@app/services/api.service';
 import { SeoService } from '@app/services/seo.service';
 import { formatNumber } from '@angular/common';
@@ -134,6 +134,7 @@ export class BlockFeesSubsidyGraphComponent implements OnInit {
               }),
             );
         }),
+        filter((stats) => !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, stats.blockCount)),
         share()
       );
   }

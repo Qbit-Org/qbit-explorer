@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
+import { AbstractControl } from '@angular/forms';
 import { Observable, of } from 'rxjs';
 import { map, tap } from 'rxjs/operators';
 import { PoolsStats, SinglePoolStats } from '@interfaces/node-api.interface';
 import { ApiService } from '@app/services/api.service';
 import { StateService } from '@app/services/state.service';
 import { StorageService } from '@app/services/storage.service';
+import { shownTimespan } from '@app/shared/block-target.utils';
 
 export interface MiningUnits {
   hashrateDivider: number;
@@ -116,6 +118,34 @@ export class MiningService {
       return min;
     }
     return preference;
+  }
+
+  /**
+   * Range buttons show once the indexed blocks cover their timespan, so on a young chain a
+   * graph's default, saved or linked range can be one whose button is hidden. Switches the graph
+   * to the widest range on show instead, and returns whether it did, so the graph can drop what
+   * it loaded for the hidden range.
+   */
+  public switchToShownRange(dateSpan: AbstractControl, indexedBlockCount: number): boolean {
+    const hiddenTimespan = dateSpan.value;
+    const timespan = shownTimespan(hiddenTimespan, indexedBlockCount, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
+    if (timespan === hiddenTimespan) {
+      return false;
+    }
+    // stats can arrive synchronously, from a cache, before the graph listens for range changes
+    queueMicrotask(() => {
+      if (dateSpan.value !== hiddenTimespan) {
+        return;
+      }
+      // graphs save the range they load as the preference every mining graph opens with, but
+      // this one isn't the visitor's choice, so keep theirs
+      const preference = this.storageService.getValue('miningWindowPreference');
+      dateSpan.setValue(timespan);
+      if (preference) {
+        this.storageService.setValue('miningWindowPreference', preference);
+      }
+    });
+    return true;
   }
 
   private generateMiningStats(response): MiningStats {

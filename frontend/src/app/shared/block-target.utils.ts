@@ -20,3 +20,16 @@ export function expectedBlocksForSeconds(seconds: number, targetSpacingSeconds: 
 export function expectedBlocksForTimespan(timespan: string, targetSpacingSeconds: number): number {
   return expectedBlocksForSeconds(TIMESPAN_SECONDS[timespan] ?? 0, targetSpacingSeconds);
 }
+
+/**
+ * Graphs show a range button once the indexed blocks cover its timespan, and always show ALL.
+ * Returns the range to load for a requested one: the requested range while its button shows,
+ * otherwise ALL, the widest range on show.
+ */
+export function shownTimespan(timespan: string, indexedBlockCount: number, targetSpacingSeconds: number): string {
+  const seconds = TIMESPAN_SECONDS[timespan];
+  if (seconds === undefined) {
+    return timespan; // ALL, or a range no button gates
+  }
+  return indexedBlockCount >= expectedBlocksForSeconds(seconds, targetSpacingSeconds) ? timespan : 'all';
+}
