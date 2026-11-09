@@ -1,4 +1,10 @@
-import { getAddressLookupError, isTxNotFoundError } from '../../utils/api';
+import { getAddressLookupError, isEsploraRequestError, isTxNotFoundError } from '../../utils/api';
+
+// How the esplora backend surfaces an electrs error: axios rejects with electrs's status, and its
+// plain-text reason as the response body
+function axiosError(status: number, data: unknown): Error {
+  return Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data } });
+}
 
 describe('isTxNotFoundError', () => {
   test('matches all Bitcoin Core not-found message variants', () => {
@@ -32,10 +38,6 @@ describe('isTxNotFoundError', () => {
 });
 
 describe('getAddressLookupError', () => {
-  function axiosError(status: number, data: unknown): Error {
-    return Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data } });
-  }
-
   test('matches the node rejecting an address under the electrum backend', () => {
     expect(getAddressLookupError(new Error('Invalid Bitcoin address'))).toEqual({ status: 400, reason: 'Invalid Bitcoin address' });
   });
@@ -71,6 +73,10 @@ describe('getAddressLookupError', () => {
     }
   });
 
+  test('does not pass on a 422 for anything but an after_txid electrs cannot find', () => {
+    expect(getAddressLookupError(axiosError(422, 'Unprocessable Entity'))).toBeUndefined();
+  });
+
   test('does not match esplora errors with other statuses', () => {
     for (const status of [404, 413, 500, 503]) {
       expect(getAddressLookupError(axiosError(status, 'invalid qbit address HRP: expected qb, got bc'))).toBeUndefined();
@@ -82,5 +88,36 @@ describe('getAddressLookupError', () => {
     expect(getAddressLookupError('Invalid Bitcoin address')).toBeUndefined();
     expect(getAddressLookupError(null)).toBeUndefined();
     expect(getAddressLookupError(undefined)).toBeUndefined();
+  });
+});
+
+describe('isEsploraRequestError', () => {
+  test.each([
+    [404, 'Transaction not found'],
+    [400, 'invalid qbit address HRP: expected qb, got bc'],
+    [400, 'Too many unspent transaction outputs (>50000). Contact support to raise limits.'],
+    [400, 'Too many history transactions (>10000). Contact support to raise limits.'],
+    [422, 'after_txid not found'],
+  ])('blames the request for a %d %p', (status, reason) => {
+    expect(isEsploraRequestError(axiosError(status, reason))).toBe(true);
+  });
+
+  test.each([
+    [400, 'getblock RPC error: connection refused'],
+    [400, 'Connection error: disconnected from daemon while receiving'],
+    [401, 'Unauthorized'],
+    [403, 'Forbidden'],
+    [407, 'Proxy Authentication Required'],
+    [421, 'Misdirected Request'],
+    [422, 'Unprocessable Entity'],
+    [499, ''],
+    [500, 'Internal Server Error'],
+  ])('blames the host for a %d %p', (status, reason) => {
+    expect(isEsploraRequestError(axiosError(status, reason))).toBe(false);
+  });
+
+  test('blames the host when nothing answered', () => {
+    expect(isEsploraRequestError(Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:3000'), { code: 'ECONNREFUSED' }))).toBe(false);
+    expect(isEsploraRequestError(Object.assign(new Error('timeout of 10000ms exceeded'), { code: 'ECONNABORTED' }))).toBe(false);
   });
 });
