@@ -764,6 +764,11 @@ class BitcoinRoutes {
       const transactions = await bitcoinApi.$getScriptHashTransactions(electrumScripthash, lastTxId);
       res.json(transactions);
     } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;

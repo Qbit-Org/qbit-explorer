@@ -8,6 +8,7 @@ import logger from '../../logger';
 import crypto from 'crypto-js';
 import loadingIndicators from '../loading-indicators';
 import memoryCache from '../memory-cache';
+import { AFTER_TXID_NOT_FOUND, isTxNotFoundError } from '../../utils/api';
 
 class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
   private electrumClient: any;
@@ -90,13 +91,7 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       const history = await this.$getScriptHashHistory(addressInfo.scriptPubKey);
       history.sort((a, b) => (b.height || 9999999) - (a.height || 9999999));
 
-      let startingIndex = 0;
-      if (lastSeenTxId) {
-        const pos = history.findIndex((historicalTx) => historicalTx.tx_hash === lastSeenTxId);
-        if (pos) {
-          startingIndex = pos + 1;
-        }
-      }
+      const startingIndex = await this.$getHistoryIndexAfter(history, lastSeenTxId);
       const endIndex = Math.min(startingIndex + 10, history.length);
 
       for (let i = startingIndex; i < endIndex; i++) {
@@ -171,13 +166,7 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       }
       history.sort((a, b) => (b.height || 9999999) - (a.height || 9999999));
 
-      let startingIndex = 0;
-      if (lastSeenTxId) {
-        const pos = history.findIndex((historicalTx) => historicalTx.tx_hash === lastSeenTxId);
-        if (pos) {
-          startingIndex = pos + 1;
-        }
-      }
+      const startingIndex = await this.$getHistoryIndexAfter(history, lastSeenTxId);
       const endIndex = Math.min(startingIndex + 10, history.length);
 
       for (let i = startingIndex; i < endIndex; i++) {
@@ -226,6 +215,32 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       }
     }
     return result;
+  }
+
+  /**
+   * Where a page of a newest-first history starts after lastSeenTxId, matching esplora: past the
+   * end for a transaction that is not in the history, and Error(AFTER_TXID_NOT_FOUND), a 422, for
+   * one the node does not know either, such as one that left the mempool.
+   *
+   * @asyncUnsafe
+   */
+  private async $getHistoryIndexAfter(history: IElectrumApi.ScriptHashHistory[], lastSeenTxId?: string): Promise<number> {
+    if (!lastSeenTxId) {
+      return 0;
+    }
+    const pos = history.findIndex((historicalTx) => historicalTx.tx_hash === lastSeenTxId);
+    if (pos !== -1) {
+      return pos + 1;
+    }
+    try {
+      await this.$getRawTransaction(lastSeenTxId, true);
+    } catch (e) {
+      if (isTxNotFoundError(e)) {
+        throw new Error(AFTER_TXID_NOT_FOUND);
+      }
+      throw e;
+    }
+    return history.length;
   }
 
   private $getScriptHashUnspent(scriptHash: string): Promise<IElectrumApi.ScriptHashUtxos[]> {
