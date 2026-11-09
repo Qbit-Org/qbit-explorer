@@ -1,5 +1,9 @@
+import { isIP } from 'net';
+import path from 'path';
+
+// resolve a relative MEMPOOL_CONFIG_FILE against the working directory, not this file
 const configFromFile = require(
-    process.env.MEMPOOL_CONFIG_FILE ? process.env.MEMPOOL_CONFIG_FILE : '../mempool-config.json'
+    process.env.MEMPOOL_CONFIG_FILE ? path.resolve(process.env.MEMPOOL_CONFIG_FILE) : '../mempool-config.json'
 );
 
 export const QBIT_NETWORKS = ['mainnet', 'testnet', 'testnet4', 'signet', 'regtest'] as const;
@@ -12,6 +16,7 @@ interface IConfig {
     NETWORK: QbitNetwork;
     BACKEND: 'esplora' | 'electrum' | 'none';
     HTTP_PORT: number;
+    HTTP_HOST: string;
     UNIX_SOCKET_PATH: string;
     SPAWN_CLUSTER_PROCS: number;
     API_URL_PREFIX: string;
@@ -182,6 +187,7 @@ const defaults: IConfig = {
     'NETWORK': 'mainnet',
     'BACKEND': 'none',
     'HTTP_PORT': 8999,
+    'HTTP_HOST': '', // '' = listen on every interface
     'UNIX_SOCKET_PATH': '',
     'SPAWN_CLUSTER_PROCS': 0,
     'API_URL_PREFIX': '/api/v1/',
@@ -371,6 +377,10 @@ class Config implements IConfig {
     const configs = this.merge(configFromFile, defaults);
     if (!QBIT_NETWORKS.includes(configs.MEMPOOL.NETWORK)) {
       throw new Error(`Unsupported MEMPOOL.NETWORK "${configs.MEMPOOL.NETWORK}". Supported qbit networks: ${QBIT_NETWORKS.join(', ')}`);
+    }
+    const httpHost: unknown = configs.MEMPOOL.HTTP_HOST;
+    if (typeof httpHost !== 'string' || (httpHost !== '' && !isIP(httpHost))) {
+      throw new Error(`Invalid MEMPOOL.HTTP_HOST ${JSON.stringify(httpHost)}: set an IP address such as 127.0.0.1 or ::1, or "" to listen on every interface`);
     }
     this.MEMPOOL = configs.MEMPOOL;
     this.ESPLORA = configs.ESPLORA;

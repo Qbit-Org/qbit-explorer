@@ -1,5 +1,5 @@
 import { BrowserModule } from '@angular/platform-browser';
-import { ModuleWithProviders, NgModule } from '@angular/core';
+import { ModuleWithProviders, NgModule, inject, provideAppInitializer } from '@angular/core';
 import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { ZONE_SERVICE } from '@app/injection-tokens';
@@ -68,7 +68,10 @@ const providers = [
       providers: [
         provideHttpClient(withInterceptorsFromDi()),
         DatePipe,
-        ...providers
+        ...providers,
+        // enterprise mode (customize.enterprise) applies its settings when this
+        // service is created: create it at startup, before any page reads them
+        provideAppInitializer(() => { inject(EnterpriseService); }),
       ] })
 export class AppModule { }
 

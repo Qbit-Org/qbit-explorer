@@ -200,11 +200,12 @@ class Server {
       void this.$runLightningBackend();
     }
 
-    this.server.listen(config.MEMPOOL.HTTP_PORT, () => {
+    // without a host, Node listens on every interface
+    this.server.listen(config.MEMPOOL.HTTP_PORT, config.MEMPOOL.HTTP_HOST || undefined, () => {
       if (worker) {
         logger.info(`Mempool Server worker #${process.pid} started`);
       } else {
-        logger.notice(`Mempool Server is running on port ${config.MEMPOOL.HTTP_PORT}`);
+        logger.notice(`Mempool Server is running on ${config.MEMPOOL.HTTP_HOST ? config.MEMPOOL.HTTP_HOST + ' ' : ''}port ${config.MEMPOOL.HTTP_PORT}`);
       }
     });
     // nginx (1.29.7+) keeps idle upstream connections for 60s; outlast that so it never

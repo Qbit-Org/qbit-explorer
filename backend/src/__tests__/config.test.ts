@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 describe('Mempool Backend Config', () => {
   beforeEach(() => {
@@ -20,6 +22,7 @@ describe('Mempool Backend Config', () => {
         BLOCKS_SUMMARIES_INDEXING: false,
         GOGGLES_INDEXING: false,
         HTTP_PORT: 8999,
+        HTTP_HOST: '',
         UNIX_SOCKET_PATH: '',
         SPAWN_CLUSTER_PROCS: 0,
         API_URL_PREFIX: '/api/v1/',
@@ -174,7 +177,9 @@ describe('Mempool Backend Config', () => {
 
       const config = jest.requireActual('../config').default;
 
-      expect(config.MEMPOOL).toStrictEqual(fixture.MEMPOOL);
+      // docker/backend/start.sh doesn't map MEMPOOL.HTTP_HOST yet, so the
+      // fixture, which lists the keys of the Docker template, leaves it out
+      expect(config.MEMPOOL).toStrictEqual({ ...fixture.MEMPOOL, HTTP_HOST: '' });
 
       expect(config.ELECTRUM).toStrictEqual(fixture.ELECTRUM);
 
@@ -212,6 +217,58 @@ describe('Mempool Backend Config', () => {
     });
   });
 
+  test('should accept an IP address or nothing as MEMPOOL.HTTP_HOST', () => {
+    // '' listens on every interface, as the backend did before the setting existed
+    for (const host of ['', '127.0.0.1', '0.0.0.0', '10.1.2.3', '::1', '::', '2001:db8::1']) {
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MEMPOOL: { HTTP_HOST: host } }), { virtual: true });
+
+        expect(jest.requireActual('../config').default.MEMPOOL.HTTP_HOST).toBe(host);
+      });
+    }
+  });
+
+  test('should reject a MEMPOOL.HTTP_HOST that is not an IP address', () => {
+    // Node would look a host name up and bind to its first address, which for
+    // localhost may be ::1 while nginx-mempool.conf proxies to 127.0.0.1
+    const hosts = ['localhost', 'example.org', ' 127.0.0.1', '127.0.0.1 ', '127.0.0.1:8999', '[::1]',
+      '256.0.0.1', '127.1', '*', null, 0, 127, false, true, [], {}];
+    for (const host of hosts) {
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MEMPOOL: { HTTP_HOST: host } }), { virtual: true });
+
+        expect(() => jest.requireActual('../config')).toThrow(
+          `Invalid MEMPOOL.HTTP_HOST ${JSON.stringify(host)}: set an IP address such as 127.0.0.1 or ::1, or "" to listen on every interface`
+        );
+      });
+    }
+  });
+
+  test('should resolve a relative MEMPOOL_CONFIG_FILE against the working directory', () => {
+    const cwd = process.cwd();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mempool-config-file-'));
+    const file = path.join(dir, 'operator.json');
+    fs.writeFileSync(file, JSON.stringify({ MEMPOOL: { NETWORK: 'regtest', HTTP_PORT: 18999 } }));
+    try {
+      process.chdir(dir);
+      // config.ts used to pass the value straight to require(), which reads a
+      // bare name as a package and a ./ path as relative to dist/ (or src/)
+      for (const configFile of ['operator.json', './operator.json', file]) {
+        jest.isolateModules(() => {
+          process.env.MEMPOOL_CONFIG_FILE = configFile;
+          const config = jest.requireActual('../config').default;
+
+          expect(config.MEMPOOL.NETWORK).toBe('regtest');
+          expect(config.MEMPOOL.HTTP_PORT).toBe(18999);
+        });
+      }
+    } finally {
+      process.chdir(cwd);
+      delete process.env.MEMPOOL_CONFIG_FILE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('should keep production templates on qbit networks, local services and full indexing', () => {
     const productionDir = `${__dirname}/../../../production`;
     // qbit-electrs REST defaults: 3000 mainnet, 3004 testnet4, 3002 regtest
@@ -237,8 +294,15 @@ describe('Mempool Backend Config', () => {
         expect(config.MEMPOOL.BACKEND).toBe('esplora');
         expect(config.CORE_RPC.PORT).toBe(port);
         expect(config.ESPLORA.REST_API_URL).toBe(esploraUrl);
-        // the port nginx-mempool.conf proxies the API and WebSocket to
+        // the address and port nginx-mempool.conf proxies the API and WebSocket
+        // to; listening only there keeps the backend off the host's other interfaces
+        expect(config.MEMPOOL.HTTP_HOST).toBe('127.0.0.1');
         expect(config.MEMPOOL.HTTP_PORT).toBe(8999);
+        // qbitd's RPC cookie at the rpccookiefile path in production/README.md, so
+        // the templates hold no RPC password
+        expect(productionConfig.CORE_RPC).toStrictEqual({ PORT: port, COOKIE: true, COOKIE_PATH: '/var/lib/qbit/.cookie' });
+        expect(config.CORE_RPC.COOKIE).toBe(true);
+        expect(config.CORE_RPC.COOKIE_PATH).toBe('/var/lib/qbit/.cookie');
         // every network indexes the same way
         expect(config.MEMPOOL.INDEXING_BLOCKS_AMOUNT).toBe(-1);
         expect(config.MEMPOOL.BLOCKS_SUMMARIES_INDEXING).toBe(true);
