@@ -27,6 +27,13 @@ export function isTxNotFoundError(e: unknown): boolean {
   return (e as { response?: { status?: number } })?.response?.status === 404;
 }
 
+// Whether Core has ruled a transaction out. Of the "No such mempool" answers above, only the one for a synced
+// txindex does: the other two only say the transaction is not in the mempool, while txindex is disabled or
+// still building.
+export function isTxNotInMempoolOrChainError(e: unknown): boolean {
+  return e instanceof Error && e.message.startsWith('No such mempool or blockchain transaction');
+}
+
 // A block lookup fails as "not found" as Core RPC error -5 ("Block not found") in "none"/"electrum"
 // modes, and as electrs's HTTP 404 in esplora mode. Both must map to HTTP 404.
 export function isBlockNotFoundError(e: unknown): boolean {
@@ -36,10 +43,14 @@ export function isBlockNotFoundError(e: unknown): boolean {
   return (e as { response?: { status?: number } })?.response?.status === 404;
 }
 
+// electrs's reason for an after_txid it cannot find, which the electrum backend answers with too
+export const AFTER_TXID_NOT_FOUND = 'after_txid not found';
+
 // An address lookup can fail because of the request in several ways depending on MEMPOOL_BACKEND:
 //
 // electrum mode checks the address with the node's validateaddress RPC first and rejects with
-// Error('Invalid Bitcoin address').
+// Error('Invalid Bitcoin address'). It rejects an after_txid that is neither in the address's history
+// nor known to the node with Error(AFTER_TXID_NOT_FOUND), as esplora mode's 422 below.
 //
 // esplora mode surfaces electrs's HTTP errors as axios errors ("Request failed with status code 400")
 // carrying response.status, with electrs's plain-text reason as response.data. electrs answers 400 for
@@ -54,6 +65,9 @@ export function isBlockNotFoundError(e: unknown): boolean {
 export function getAddressLookupError(e: unknown): { status: number, reason: string } | undefined {
   if (e instanceof Error && e.message === 'Invalid Bitcoin address') {
     return { status: 400, reason: e.message };
+  }
+  if (e instanceof Error && e.message === AFTER_TXID_NOT_FOUND) {
+    return { status: 422, reason: e.message };
   }
   const response = (e as { response?: { status?: number, data?: unknown } })?.response;
   const reason = typeof response?.data === 'string' ? response.data : '';

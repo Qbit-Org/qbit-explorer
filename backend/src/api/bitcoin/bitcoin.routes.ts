@@ -795,6 +795,11 @@ class BitcoinRoutes {
       const addressData = await bitcoinApi.$getScriptHash(electrumScripthash);
       res.json(addressData);
     } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;
@@ -820,9 +825,18 @@ class BitcoinRoutes {
       if (req.query.after_txid && typeof req.query.after_txid === 'string') {
         lastTxId = req.query.after_txid;
       }
+      if (lastTxId && !TXID_REGEX.test(lastTxId)) {
+        handleError(req, res, 400, `Invalid transaction ID`);
+        return;
+      }
       const transactions = await bitcoinApi.$getScriptHashTransactions(electrumScripthash, lastTxId);
       res.json(transactions);
     } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;
@@ -847,6 +861,11 @@ class BitcoinRoutes {
       const addressData = await bitcoinApi.$getScriptHashUtxos(electrumScripthash);
       res.json(addressData);
     } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;

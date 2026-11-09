@@ -60,6 +60,10 @@ describe('getAddressLookupError', () => {
     expect(getAddressLookupError(axiosError(422, 'after_txid not found'))).toEqual({ status: 422, reason: 'after_txid not found' });
   });
 
+  test('answers 422 for an after_txid the node does not have under the electrum backend', () => {
+    expect(getAddressLookupError(new Error('after_txid not found'))).toEqual({ status: 422, reason: 'after_txid not found' });
+  });
+
   test('does not blame the request for an electrs failure that also answers 400', () => {
     for (const data of [
       'getblock RPC error: connection refused',
