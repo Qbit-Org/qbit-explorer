@@ -120,7 +120,8 @@ describe('raw transaction and raw block routes', () => {
     test('rejects an invalid txid', async () => {
       const res = await fetch(baseUrl + 'tx/not-a-txid/hex');
 
-      expect(res.status).toBe(501);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'Invalid transaction ID' });
       expect(mockedApi.$getTransactionHex).not.toHaveBeenCalled();
     });
   });
