@@ -4,6 +4,7 @@ import { Address, AddressTxSummary } from '@interfaces/electrs.interface';
 import { ElectrsApiService } from '@app/services/electrs-api.service';
 import { Observable, Subscription, catchError, map, of, switchMap, zip } from 'rxjs';
 import { PriceService } from '@app/services/price.service';
+import { httpErrorStatus } from '@app/shared/http-error.utils';
 
 @Component({
   selector: 'app-address-transactions-widget',
@@ -51,7 +52,7 @@ export class AddressTransactionsWidgetComponent implements OnInit, OnChanges, On
       ? this.electrsApiService.getScriptHashSummary$((this.address.length === 66 ? '21' : '41') + this.address + 'ac')
       : this.electrsApiService.getAddressSummary$(this.address)).pipe(
       catchError(e => {
-        this.error = `Failed to fetch address history: ${e?.status || ''} ${e?.statusText || 'unknown error'}`;
+        this.error = `Failed to fetch address history: ${httpErrorStatus(e) || 'unknown error'}`;
         return of(null);
       })
     )).pipe(
