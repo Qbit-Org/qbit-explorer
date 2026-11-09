@@ -1,10 +1,12 @@
 import { Injectable } from '@angular/core';
+import { AbstractControl } from '@angular/forms';
 import { Observable, of } from 'rxjs';
 import { map, tap } from 'rxjs/operators';
 import { PoolsStats, SinglePoolStats } from '@interfaces/node-api.interface';
 import { ApiService } from '@app/services/api.service';
 import { StateService } from '@app/services/state.service';
 import { StorageService } from '@app/services/storage.service';
+import { shownTimespan } from '@app/shared/block-target.utils';
 
 export interface MiningUnits {
   hashrateDivider: number;
@@ -116,6 +118,32 @@ export class MiningService {
       return min;
     }
     return preference;
+  }
+
+  /**
+   * Range buttons show once the indexed blocks cover their timespan, so on a young chain a
+   * graph's default, saved or linked range can be one whose button is hidden, and a link can name
+   * a range the graph has no button for. Switches the graph to the widest range on show instead,
+   * and returns whether it did, so the graph can drop what it loaded before anything renders.
+   */
+  public switchToShownRange(dateSpan: AbstractControl, rangeButtons: string[], indexedBlockCount: number): boolean {
+    const requestedTimespan = dateSpan.value;
+    const timespan = shownTimespan(requestedTimespan, rangeButtons, indexedBlockCount, this.stateService.env.BLOCK_TARGET_SPACING_SECONDS);
+    if (timespan === requestedTimespan) {
+      return false;
+    }
+    // stats can arrive synchronously, from a cache, before the graph listens for range changes
+    queueMicrotask(() => {
+      if (dateSpan.value !== requestedTimespan) {
+        return;
+      }
+      // Every mining graph opens at this preference. Graphs save the range they load, and a link
+      // to the pools pages saves its range, before anyone knows it's hidden; keep the visitor's.
+      const preference = this.storageService.getValueBefore('miningWindowPreference', requestedTimespan);
+      dateSpan.setValue(timespan);
+      this.storageService.restoreValue('miningWindowPreference', preference);
+    });
+    return true;
   }
 
   private generateMiningStats(response): MiningStats {

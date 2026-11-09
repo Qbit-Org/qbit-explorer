@@ -5,6 +5,9 @@ import { Router, ActivatedRoute } from '@angular/router';
   providedIn: 'root'
 })
 export class StorageService {
+  // what each key held before this page last changed it
+  private previousValues: { [key: string]: string | null } = {};
+
   constructor(private router: Router, private route: ActivatedRoute) {
     this.setDefaultValueIfNeeded('graphWindowPreference', '2h');
     this.setDefaultValueIfNeeded('miningWindowPreference', '1w');
@@ -43,10 +46,39 @@ export class StorageService {
 
   setValue(key: string, value: any): void {
     try {
+      const previousValue = localStorage.getItem(key);
+      if (previousValue !== String(value)) {
+        this.previousValues[key] = previousValue;
+      }
       localStorage.setItem(key, value);
     } catch (e) {
       console.log(e);
     }
+  }
+
+  /**
+   * What a key held before this page last set it to `value`: its current value if the page
+   * didn't, or null if it was unset.
+   */
+  getValueBefore(key: string, value: string): string | null {
+    const currentValue = this.getValue(key);
+    if (currentValue === value && this.previousValues[key] !== undefined) {
+      return this.previousValues[key];
+    }
+    return currentValue;
+  }
+
+  /**
+   * Sets a key back to an earlier value, or removes it if that was unset, and forgets the changes
+   * the earlier value replaces.
+   */
+  restoreValue(key: string, value: string | null): void {
+    if (value === null) {
+      this.removeItem(key);
+    } else {
+      this.setValue(key, value);
+    }
+    delete this.previousValues[key];
   }
 
   removeItem(key: string): void {

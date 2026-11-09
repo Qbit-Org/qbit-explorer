@@ -20,3 +20,20 @@ export function expectedBlocksForSeconds(seconds: number, targetSpacingSeconds: 
 export function expectedBlocksForTimespan(timespan: string, targetSpacingSeconds: number): number {
   return expectedBlocksForSeconds(TIMESPAN_SECONDS[timespan] ?? 0, targetSpacingSeconds);
 }
+
+/**
+ * Graphs show a range button once the indexed blocks cover its timespan, and always show a button
+ * without one, such as ALL. Returns the range to load for a requested one: the requested range
+ * while the graph shows a button for it, otherwise the widest range on show. `rangeButtons` lists
+ * the graph's buttons, narrowest first.
+ */
+export function shownTimespan(timespan: string, rangeButtons: string[], indexedBlockCount: number, targetSpacingSeconds: number): string {
+  const isShown = (range: string): boolean => {
+    const seconds = TIMESPAN_SECONDS[range];
+    return seconds === undefined || indexedBlockCount >= expectedBlocksForSeconds(seconds, targetSpacingSeconds);
+  };
+  if (rangeButtons.includes(timespan) && isShown(timespan)) {
+    return timespan;
+  }
+  return [...rangeButtons].reverse().find(isShown) ?? timespan;
+}
