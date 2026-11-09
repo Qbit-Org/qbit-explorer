@@ -1241,7 +1241,7 @@ export function addInnerScriptsToVin(vin: Vin): void {
   }
 
   // P2MR shares taproot's script-path witness layout
-  if ((vin.prevout.scriptpubkey_type === 'v1_p2tr' || vin.prevout.scriptpubkey_type === 'v2_p2mr') && vin.witness) {
+  if (['v1_p2tr', 'v2_p2mr', 'witness_v2_p2mr'].includes(vin.prevout.scriptpubkey_type) && vin.witness) {
     const witnessScript = witnessToP2TRScript(vin.witness);
     if (witnessScript !== null) {
       vin.inner_witnessscript_asm = convertScriptSigAsm(witnessScript);

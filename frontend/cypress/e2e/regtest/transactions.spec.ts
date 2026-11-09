@@ -1,4 +1,4 @@
-import { loadSeed, RegtestSeed, rowValues, seedOutput, showTransactionDetails } from '../../support/regtest';
+import { loadSeed, qbitCli, RegtestSeed, rowValues, seedOutput, showTransactionDetails } from '../../support/regtest';
 
 describe('transaction page', () => {
   let seed: RegtestSeed;
@@ -81,5 +81,13 @@ describe('transaction page', () => {
     rowValues('Size').should('contain.text', '101 B');
     rowValues('Virtual size').should('contain.text', '101 vB');
     rowValues('Weight').should('contain.text', '101 WU');
+  });
+
+  // On regtest, only unconfirmed transactions show their features, but the preview page always does
+  it('shows no Taproot badge in the features of a P2MR transaction', () => {
+    qbitCli('getrawtransaction', seedOutput(seed, 'p2mr').txid).then((hex) => {
+      cy.visit(`/regtest/tx/preview#tx=${hex}&offline=true`);
+      rowValues('Features').should('contain.text', 'RBF').and('not.contain.text', 'Taproot');
+    });
   });
 });

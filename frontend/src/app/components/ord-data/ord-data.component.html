@@ -59,7 +59,11 @@
 
 <ng-template #runeName let-id>
   {{ runeInfo[id]?.etching.symbol || '' }}
-  <a [routerLink]="['/tx' | relativeUrl, runeInfo[id]?.txid]" class="rune-link">
-    <span class="name">{{ runeInfo[id]?.etching.spacedName }}</span>
-  </a>
+  @if (runeInfo[id]?.txid) {
+    <a [routerLink]="['/tx' | relativeUrl, runeInfo[id].txid]" class="rune-link">
+      <span class="name">{{ runeInfo[id].etching.spacedName }}</span>
+    </a>
+  } @else {
+    <span class="name">{{ runeInfo[id]?.etching?.spacedName || id }}</span>
+  }
 </ng-template>

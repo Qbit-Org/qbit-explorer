@@ -214,7 +214,7 @@ for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 100
 // qscriptions and qrunes: qbit's inscriptions and runes, which ride in P2MR leaf scripts and runestones
 {
   const { of } = require('rxjs');
-  const { witnessToP2TRScript } = require('../src/app/shared/transaction.utils.ts');
+  const { addInnerScriptsToVin, witnessToP2TRScript } = require('../src/app/shared/transaction.utils.ts');
   const { decipherRunestone } = require('../src/app/shared/ord/rune.utils.ts');
   const { OrdApiService } = require('../src/app/services/ord-api.service.ts');
   // real qbit mainnet transactions, shared with the backend tests: `etching` qscribes POST•QUANTUM•GOODS's
@@ -226,6 +226,20 @@ for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 100
   assert((qscriptionFlags & TransactionFlags.inscription) === TransactionFlags.inscription, 'P2MR qscription reveal not flagged as an inscription');
   const mintFlags = BigInt(getTransactionFlags(mint, undefined, false, undefined, ''));
   assert((mintFlags & TransactionFlags.inscription) === 0n, 'P2MR spend without an envelope flagged as an inscription');
+
+  // A decoded transaction or PSBT has no leaf script until addInnerScriptsToVin reads it from the witness,
+  // whichever name its prevout gives the P2MR type
+  for (const scriptpubkey_type of ['v2_p2mr', 'witness_v2_p2mr']) {
+    const decoded = JSON.parse(JSON.stringify(etching));
+    for (const vin of decoded.vin) {
+      delete vin.inner_witnessscript_asm;
+      vin.prevout.scriptpubkey_type = scriptpubkey_type;
+      addInnerScriptsToVin(vin);
+    }
+    assert(decoded.vin[0].inner_witnessscript_asm === etching.vin[0].inner_witnessscript_asm, `${scriptpubkey_type} prevout: leaf script not read from the witness`);
+    const decodedFlags = BigInt(getTransactionFlags(decoded, undefined, false, undefined, ''));
+    assert((decodedFlags & TransactionFlags.inscription) === TransactionFlags.inscription, `${scriptpubkey_type} prevout: qscription reveal not flagged as an inscription`);
+  }
 
   const leafScript = witnessToP2TRScript(etching.vin[0].witness);
   assert(leafScript === etching.vin[0].witness[1], 'P2MR leaf script is not the second-to-last witness item');
@@ -252,6 +266,59 @@ for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 100
   let uncommon = 'not resolved';
   ordApi.getEtchingFromRuneId$('1:0').subscribe((result) => uncommon = result);
   assert(uncommon === null, `qrune 1:0 resolved to ${uncommon?.etching?.spacedName}`);
+}
+
+// qbit's addresses are P2MR, so a transaction's features show no Taproot badge, struck through or not,
+// and no hint to save fees with Taproot. The SegWit and RBF badges show as upstream shows them.
+{
+  const { TxFeaturesComponent } = require('../src/app/components/tx-features/tx-features.component.ts');
+  const { etching } = require('../../backend/src/__tests__/api/test-data/qbit-p2mr-qscriptions.json');
+  for (const [name, network, status] of [
+    ['an unconfirmed mainnet transaction', '', { confirmed: false }],
+    ['a confirmed testnet4 transaction', 'testnet4', { confirmed: true, block_height: 10000 }],
+    ['a transaction on the preview page', '', { confirmed: null }],
+  ]) {
+    const features = new TxFeaturesComponent({ network });
+    features.tx = { ...etching, status };
+    features.ngOnChanges();
+    assert(features.taprootEnabled === false, `${name} shows a Taproot badge`);
+    assert(features.segwitEnabled && features.rbfEnabled, `${name} lost its SegWit or RBF badge`);
+  }
+}
+
+// HTTP/2 has no status text, so Angular's XHR backend fills in 'OK' and an error printed "400 OK"
+{
+  // @angular/common ships partially compiled, so it needs the JIT compiler outside an Angular build
+  require('@angular/compiler');
+  const { HttpRequest, HttpXhrBackend } = require('@angular/common/http');
+  const { HttpErrorPipe } = require('../src/app/shared/pipes/http-error-pipe/http-error.pipe.ts');
+  // mempool.qbit.org's answer to /api/address/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+  const body = '{"error":"invalid qbit address HRP: expected qb, got bc"}';
+  const errorText = (status, statusText, responseBody = body) => {
+    const listeners = {};
+    const xhr = {
+      DONE: 4, readyState: 1, status: 0, statusText: '', responseText: '', responseURL: '',
+      open() {}, setRequestHeader() {}, abort() {},
+      getAllResponseHeaders: () => 'content-type: application/json\r\n',
+      addEventListener: (event, listener) => listeners[event] = listener,
+      removeEventListener: (event) => delete listeners[event],
+      send() {
+        Object.assign(xhr, { readyState: 4, status, statusText, responseText: responseBody, response: responseBody });
+        listeners.load();
+      },
+    };
+    let text;
+    new HttpXhrBackend({ build: () => xhr }).handle(new HttpRequest('GET', '/api/address/bc1q'))
+      .subscribe({ error: (e) => text = new HttpErrorPipe().transform(e) });
+    return text;
+  };
+  const http2 = errorText(400, '');
+  assert(http2 === '400: invalid qbit address HRP: expected qb, got bc', `HTTP/2 error text: ${http2}`);
+  const http1 = errorText(400, 'Bad Request');
+  assert(http1 === '400 Bad Request: invalid qbit address HRP: expected qb, got bc', `HTTP/1.1 error text: ${http1}`);
+  // a 200 whose body is not JSON is an error too, and there OK is the right status text
+  const parseError = errorText(200, '', 'not json');
+  assert(parseError.startsWith('200 OK: SyntaxError'), `parse error text: ${parseError}`);
 }
 
 console.log('qbit script smoke passed');
