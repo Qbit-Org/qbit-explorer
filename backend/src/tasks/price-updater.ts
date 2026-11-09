@@ -9,8 +9,7 @@ import CoinbaseApi from './price-feeds/coinbase-api';
 import GeminiApi from './price-feeds/gemini-api';
 import KrakenApi from './price-feeds/kraken-api';
 import FreeCurrencyApi from './price-feeds/free-currency-api';
-
-export const QBIT_PRICE_FEEDS_AVAILABLE = false;
+import { QBIT_PRICE_FEEDS_AVAILABLE } from '../utils/qbit-price-feeds';
 
 export interface PriceFeed {
   name: string;

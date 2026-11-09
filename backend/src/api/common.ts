@@ -10,6 +10,7 @@ import logger from '../logger';
 import { getVarIntLength, opcodes, parseMultisigScript } from '../utils/bitcoin-script';
 import { IEsploraApi } from './bitcoin/esplora-api.interface';
 import { feeRatePerVsize, vsizeToWeight, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '../utils/weight-units';
+import { QBIT_PRICE_FEEDS_AVAILABLE } from '../utils/qbit-price-feeds';
 
 // Bitcoin Core default policy settings
 const MAX_STANDARD_TX_WEIGHT = 400_000;
@@ -943,6 +944,18 @@ export class Common {
     return (
       Common.indexingEnabled() &&
       config.MEMPOOL.CPFP_INDEXING === true
+    );
+  }
+
+  // must match the conditions under which the indexer runs the 'blocksPrices' task,
+  // otherwise queries will join against a blocks_prices table that is never populated
+  // qbit: there is no QBT price feed yet, so the price updater never stores a
+  // price and blocks_prices stays empty on every network
+  static blockPricesIndexingEnabled(): boolean {
+    return (
+      QBIT_PRICE_FEEDS_AVAILABLE &&
+      !['testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) &&
+      config.FIAT_PRICE.ENABLED === true
     );
   }
 
