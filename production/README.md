@@ -151,6 +151,10 @@ daemon directory only to find the cookie, so keep `--daemon-dir /var/lib/qbit`
 on every chain too. Without `--http-addr`, the REST API listens on the port from
 the table above, which is where the templates expect it.
 
+For address suggestions in search, add `--address-search`, and rebuild an
+existing index from an empty `--db-dir`, since qbit-electrs only indexes
+addresses for search as it indexes blocks.
+
 ## MariaDB
 
 Create a database and user for the instance. The backend connects over TCP to

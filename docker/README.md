@@ -141,6 +141,10 @@ backend at it:
 API) and `electrum` (an Electrum protocol server). qbit deployments normally use
 `none` or `esplora`.
 
+With `esplora`, search suggests addresses only when qbit-electrs runs with
+`--address-search`, with an index rebuilt from an empty `--db-dir` if it was
+built without the flag.
+
 qbit-electrs also serves the Electrum protocol, over plain TCP, on port 50001
 for mainnet, 40001 for testnet4 and 60401 for regtest. It listens on localhost
 unless `--electrum-rpc-addr` says otherwise. The image's Electrum defaults

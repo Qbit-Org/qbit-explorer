@@ -1,4 +1,4 @@
-import { getAddressLookupError, isEsploraRequestError, isTxNotFoundError } from '../../utils/api';
+import { getAddressLookupError, isAddressSearchDisabledError, isEsploraRequestError, isTxNotFoundError } from '../../utils/api';
 
 // How the esplora backend surfaces an electrs error: axios rejects with electrs's status, and its
 // plain-text reason as the response body
@@ -119,5 +119,33 @@ describe('isEsploraRequestError', () => {
   test('blames the host when nothing answered', () => {
     expect(isEsploraRequestError(Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:3000'), { code: 'ECONNREFUSED' }))).toBe(false);
     expect(isEsploraRequestError(Object.assign(new Error('timeout of 10000ms exceeded'), { code: 'ECONNABORTED' }))).toBe(false);
+  });
+});
+
+describe('isAddressSearchDisabledError', () => {
+  test.each([
+    'address search disabled',
+    'Address search disabled\n',
+    '  ADDRESS SEARCH DISABLED  ',
+    'error: address search disabled on this server',
+  ])('matches qbit-electrs without --address-search answering 400 %p', (reason) => {
+    expect(isAddressSearchDisabledError(axiosError(400, reason))).toBe(true);
+    // no suggestions to give says nothing against the host
+    expect(isEsploraRequestError(axiosError(400, reason))).toBe(true);
+  });
+
+  test.each([
+    [400, 'Corruption: block checksum mismatch'],
+    [400, ''],
+    [403, 'address search disabled'],
+    [500, 'address search disabled'],
+  ])('does not match a %d %p', (status, reason) => {
+    expect(isAddressSearchDisabledError(axiosError(status, reason))).toBe(false);
+  });
+
+  test('does not match an answer that is not text, or no answer', () => {
+    expect(isAddressSearchDisabledError(axiosError(400, { error: 'address search disabled' }))).toBe(false);
+    expect(isAddressSearchDisabledError(new Error('address search disabled'))).toBe(false);
+    expect(isAddressSearchDisabledError(undefined)).toBe(false);
   });
 });

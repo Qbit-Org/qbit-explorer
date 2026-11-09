@@ -238,4 +238,113 @@ describe('Esplora API', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(`Too many esplora failures on ${fallbackUrl},`));
     });
   });
+
+  describe('address prefix search', () => {
+    // P2MR output of mainnet block 161370
+    const QBIT_ADDRESS = 'qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h';
+    // qbit-electrs's answers, as status, content type and body
+    const FOUND: [number, string, string] = [200, 'application/json', JSON.stringify([QBIT_ADDRESS])];
+    const DISABLED: [number, string, string] = [400, 'text/plain', 'address search disabled'];
+    // two qbit-electrs hosts, each giving its own answer, and the requests
+    // they got, as "<host> <path>"
+    const servers: http.Server[] = [];
+    const urls: string[] = [];
+    const answers: [number, string, string][] = [];
+    const requests: string[] = [];
+    let api: EsploraApi;
+    let now: number;
+
+    // point the client at a host, as a failover would
+    const useHost = (i: number): void => {
+      Object.assign(api['failoverRouter'].activeHost, { host: urls[i], socket: false });
+    };
+
+    beforeAll(async () => {
+      for (const i of [0, 1]) {
+        const server = http.createServer((req, res) => {
+          requests.push(`${i} ${req.url}`);
+          res.writeHead(answers[i][0], { 'content-type': answers[i][1] });
+          res.end(answers[i][2]);
+        });
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        servers.push(server);
+        urls.push(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+      }
+    });
+
+    afterAll(async () => {
+      for (const server of servers) {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      requests.length = 0;
+      now = 1_794_000_000_000;
+      jest.spyOn(Date, 'now').mockImplementation(() => now);
+      api = new EsploraApi();
+      useHost(0);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    test('returns the addresses a host running with --address-search finds', async () => {
+      answers[0] = FOUND;
+
+      await expect(api.$getAddressPrefix('qb1zjrt')).resolves.toStrictEqual([QBIT_ADDRESS]);
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1zjrt']);
+    });
+
+    test('returns no addresses from a host without --address-search, without a warning or a counted failure', async () => {
+      answers[0] = DISABLED;
+
+      await expect(api.$getAddressPrefix('qb1zjrt')).resolves.toStrictEqual([]);
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(`esplora request rejected 400 ${urls[0]}/address-prefix/qb1zjrt`);
+      expect(api['failoverRouter'].activeHost.failures).toBe(0);
+    });
+
+    test('stops asking that host for 5 minutes', async () => {
+      answers[0] = DISABLED;
+      await api.$getAddressPrefix('qb1');
+
+      now += 5 * 60 * 1000 - 1;
+      await expect(api.$getAddressPrefix('qb1z')).resolves.toStrictEqual([]);
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1']);
+
+      // then asks again, and keeps asking once the host has its index
+      now += 1;
+      answers[0] = FOUND;
+      await expect(api.$getAddressPrefix('qb1zj')).resolves.toStrictEqual([QBIT_ADDRESS]);
+      await expect(api.$getAddressPrefix('qb1zjr')).resolves.toStrictEqual([QBIT_ADDRESS]);
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '0 /address-prefix/qb1zj', '0 /address-prefix/qb1zjr']);
+    });
+
+    test('asks another host straight away', async () => {
+      answers[0] = DISABLED;
+      answers[1] = FOUND;
+      await api.$getAddressPrefix('qb1');
+
+      useHost(1);
+      await expect(api.$getAddressPrefix('qb1z')).resolves.toStrictEqual([QBIT_ADDRESS]);
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '1 /address-prefix/qb1z']);
+    });
+
+    // electrs answers 400 for its own failures too, so only that reason means no index
+    test.each([
+      [400, 'Corruption: block checksum mismatch'],
+      [503, 'Service Unavailable'],
+    ])('fails on a %d %p, logging it, and asks again next time', async (status, reason) => {
+      answers[0] = [status, 'text/plain', reason];
+
+      await expect(api.$getAddressPrefix('qb1')).rejects.toMatchObject({ response: { status } });
+      expect(logger.warn).toHaveBeenCalledWith(`esplora request failed ${status} ${urls[0]}/address-prefix/qb1`);
+      await expect(api.$getAddressPrefix('qb1')).rejects.toMatchObject({ response: { status } });
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '0 /address-prefix/qb1']);
+    });
+  });
 });

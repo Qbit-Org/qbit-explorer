@@ -316,6 +316,11 @@ check_backend() {
     require_json "backend fees recommended" "$FETCH_OUT"
   fi
 
+  # Search suggestions; the harness runs qbit-electrs without --address-search
+  if fetch "backend address-prefix" "$API_URL/address-prefix/qbrt1"; then
+    require_json "backend address-prefix" "$FETCH_OUT"
+  fi
+
   if fetch "backend mining hashrate" "$API_URL/mining/hashrate/1w"; then
     require_json "backend mining hashrate" "$FETCH_OUT"
     validate_hashrate_response "$FETCH_OUT" "$height"

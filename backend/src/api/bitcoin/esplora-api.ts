@@ -9,7 +9,7 @@ import { Common } from '../common';
 import { SubmitPackageResult, TestMempoolAcceptResult } from './bitcoin-api.interface';
 import os from 'os';
 import { bitcoinCoreApi } from './bitcoin-api-factory';
-import { isEsploraRequestError } from '../../utils/api';
+import { isAddressSearchDisabledError, isEsploraRequestError } from '../../utils/api';
 interface FailoverHost {
   host: string,
   rtts: number[],
@@ -415,8 +415,14 @@ class FailoverRouter {
   }
 }
 
+// How long to stop asking a host that runs without --address-search, so that
+// typing a search doesn't send it a request per keystroke
+const ADDRESS_SEARCH_RECHECK_MS = 5 * 60 * 1000;
+
 class ElectrsApi implements AbstractBitcoinApi {
   private failoverRouter = new FailoverRouter();
+  // each host that answered "address search disabled", until when to skip it
+  private addressSearchDisabledUntil = new Map<string, number>();
 
   $getRawMempool(): Promise<IEsploraApi.Transaction['txid'][]> {
     return this.failoverRouter.$get<IEsploraApi.Transaction['txid'][]>('/mempool/txids');
@@ -539,8 +545,23 @@ class ElectrsApi implements AbstractBitcoinApi {
     throw new Error('Method getScriptHashUtxos not implemented.');
   }
 
-  $getAddressPrefix(prefix: string): string[] {
-    throw new Error('Method not implemented.');
+  /** @asyncUnsafe */
+  async $getAddressPrefix(prefix: string): Promise<string[]> {
+    const host = this.failoverRouter.activeHost.host;
+    if ((this.addressSearchDisabledUntil.get(host) ?? 0) > Date.now()) {
+      return [];
+    }
+    try {
+      const addresses = await this.failoverRouter.$get<string[]>('/address-prefix/' + prefix);
+      this.addressSearchDisabledUntil.delete(host);
+      return addresses;
+    } catch (e) {
+      if (isAddressSearchDisabledError(e)) {
+        this.addressSearchDisabledUntil.set(host, Date.now() + ADDRESS_SEARCH_RECHECK_MS);
+        return [];
+      }
+      throw e;
+    }
   }
 
   $sendRawTransaction(rawTransaction: string): Promise<string> {
