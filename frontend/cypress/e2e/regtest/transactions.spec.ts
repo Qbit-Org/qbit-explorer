@@ -1,4 +1,4 @@
-import { loadSeed, qbitCli, RegtestSeed, rowValues, seedOutput, showTransactionDetails } from '../../support/regtest';
+import { loadSeed, qbitCli, qbitCliJson, RegtestSeed, rowValues, seedOutput, showTransactionDetails } from '../../support/regtest';
 
 describe('transaction page', () => {
   let seed: RegtestSeed;
@@ -83,11 +83,26 @@ describe('transaction page', () => {
     rowValues('Weight').should('contain.text', '101 WU');
   });
 
-  // On regtest, only unconfirmed transactions show their features, but the preview page always does
-  it('shows no Taproot badge in the features of a P2MR transaction', () => {
-    qbitCli('getrawtransaction', seedOutput(seed, 'p2mr').txid).then((hex) => {
-      cy.visit(`/regtest/tx/preview#tx=${hex}&offline=true`);
-      rowValues('Features').should('contain.text', 'RBF').and('not.contain.text', 'Taproot');
+  // On regtest, only unconfirmed transactions show their features, but the preview page always does. A
+  // signed spend of a confirmed P2MR coin, left unbroadcast, gives it a P2MR prevout to fetch.
+  it('shows no Taproot badge in the features of a P2MR spend', () => {
+    const wallet = `-rpcwallet=${seed.wallet}`;
+    qbitCliJson<{ txid: string, vout: number, address: string, amount: number, spendable: boolean }[]>(wallet, 'listunspent').then((coins) => {
+      const coin = coins.find((candidate) => candidate.spendable && candidate.amount > 1 && candidate.address.startsWith('qbrt1z'));
+      expect(coin, 'a confirmed P2MR coin in the wallet').to.not.equal(undefined);
+      qbitCli(wallet, 'getnewaddress', 'transactions-spec', 'p2mr').then((address) => {
+        const inputs = `[{"txid":"${coin.txid}","vout":${coin.vout}}]`;
+        const outputs = `[{"${address}":${(coin.amount - 0.001).toFixed(8)}}]`;
+        qbitCli('createrawtransaction', inputs, outputs).then((raw) => {
+          qbitCliJson<{ hex: string, complete: boolean }>(wallet, 'signrawtransactionwithwallet', raw).then((signed) => {
+            expect(signed.complete).to.equal(true);
+            cy.visit(`/regtest/tx/preview#tx=${signed.hex}`);
+            showTransactionDetails();
+            rowValues('Previous output type').should('contain.text', 'P2MR');
+            rowValues('Features').should('contain.text', 'RBF').and('not.contain.text', 'Taproot');
+          });
+        });
+      });
     });
   });
 });

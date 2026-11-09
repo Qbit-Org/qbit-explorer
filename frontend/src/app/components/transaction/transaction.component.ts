@@ -953,7 +953,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       this.taprootEnabled = false;
       this.rbfEnabled = false;
     }
-    this.featuresEnabled = this.segwitEnabled || this.taprootEnabled || this.rbfEnabled;
+    // qbit shows no Taproot badge (see TxFeaturesComponent), so Taproot alone never shows the features
+    this.featuresEnabled = this.segwitEnabled || this.rbfEnabled;
   }
 
   checkAccelerationEligibility() {

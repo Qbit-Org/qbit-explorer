@@ -268,33 +268,110 @@ for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 100
   assert(uncommon === null, `qrune 1:0 resolved to ${uncommon?.etching?.spacedName}`);
 }
 
-// qbit's addresses are P2MR, so a transaction's features show no Taproot badge, struck through or not,
-// and no hint to save fees with Taproot. The SegWit and RBF badges show as upstream shows them.
+// @angular/common ships partially compiled, so outside an Angular build it needs the JIT compiler,
+// which also compiles the component templates rendered below
+require('@angular/compiler');
+
+// Components render their own templates in Node, on Angular's server testing platform
 {
+  const fs = require('fs');
+  require('@angular/localize/init');
+  const { Component, NO_ERRORS_SCHEMA, Pipe, provideZonelessChangeDetection } = require('@angular/core');
+  const { CommonModule } = require('@angular/common');
+  const { provideRouter, RouterLink } = require('@angular/router');
+  const { TestBed } = require('@angular/core/testing');
+  const { ServerTestingModule, platformServerTesting } = require('@angular/platform-server/testing');
+  TestBed.initTestEnvironment(ServerTestingModule, platformServerTesting());
+
+  // Renders a copy of componentClass without its constructor's dependency injection: the copy takes its
+  // fields from new componentClass(...args) and its methods from the class
+  const render = (componentClass, templateFile, args, imports, setup) => {
+    class Rendered {
+      constructor() {
+        Object.assign(this, new componentClass(...args));
+      }
+    }
+    for (const name of Object.getOwnPropertyNames(componentClass.prototype).filter((name) => name !== 'constructor')) {
+      Rendered.prototype[name] = componentClass.prototype[name];
+    }
+    const template = fs.readFileSync(path.join(frontendRoot, templateFile), 'utf8');
+    Component({ selector: 'qbit-smoke', template, imports: [CommonModule, ...imports], schemas: [NO_ERRORS_SCHEMA] })(Rendered);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
+    const fixture = TestBed.createComponent(Rendered);
+    setup(fixture.componentInstance);
+    fixture.detectChanges();
+    return fixture.nativeElement;
+  };
+  const { etching, mint } = require('../../backend/src/__tests__/api/test-data/qbit-p2mr-qscriptions.json');
+
+  // qbit's addresses are P2MR, so a transaction's features show no Taproot badge, struck through or not,
+  // and no hint to save fees with Taproot. The RBF badge still shows.
   const { TxFeaturesComponent } = require('../src/app/components/tx-features/tx-features.component.ts');
-  const { etching } = require('../../backend/src/__tests__/api/test-data/qbit-p2mr-qscriptions.json');
-  for (const [name, network, status] of [
-    ['an unconfirmed mainnet transaction', '', { confirmed: false }],
-    ['a confirmed testnet4 transaction', 'testnet4', { confirmed: true, block_height: 10000 }],
-    ['a transaction on the preview page', '', { confirmed: null }],
+  const p2pkhSpend = {
+    ...etching,
+    vin: [{
+      ...etching.vin[0],
+      prevout: { scriptpubkey: `76a914${'11'.repeat(20)}88ac`, scriptpubkey_asm: `OP_DUP OP_HASH160 OP_PUSHBYTES_20 ${'11'.repeat(20)} OP_EQUALVERIFY OP_CHECKSIG`, scriptpubkey_type: 'p2pkh', value: 100000 },
+      scriptsig: `47${'30'.repeat(71)}2102${'11'.repeat(32)}`,
+      scriptsig_asm: `OP_PUSHBYTES_71 ${'30'.repeat(71)} OP_PUSHBYTES_33 02${'11'.repeat(32)}`,
+      witness: undefined,
+      inner_witnessscript_asm: undefined,
+    }],
+  };
+  for (const [name, network, tx] of [
+    ['an unconfirmed mainnet P2MR spend', '', { ...etching, status: { confirmed: false } }],
+    ['a confirmed testnet4 P2MR spend', 'testnet4', { ...etching, status: { confirmed: true, block_height: 10000 } }],
+    ['a P2MR spend on the preview page', '', { ...etching, status: { confirmed: null } }],
+    // upstream says this one could save fees by using Taproot
+    ['an unconfirmed P2PKH spend', '', { ...p2pkhSpend, status: { confirmed: false } }],
   ]) {
-    const features = new TxFeaturesComponent({ network });
-    features.tx = { ...etching, status };
-    features.ngOnChanges();
-    assert(features.taprootEnabled === false, `${name} shows a Taproot badge`);
-    assert(features.segwitEnabled && features.rbfEnabled, `${name} lost its SegWit or RBF badge`);
+    const element = render(TxFeaturesComponent, 'src/app/components/tx-features/tx-features.component.html', [{ network }], [], (features) => {
+      features.tx = tx;
+      features.ngOnChanges();
+    });
+    const badges = Array.from(element.querySelectorAll('.badge')).map((badge) => badge.textContent.trim());
+    assert(!badges.includes('Taproot'), `${name} shows a Taproot badge: ${badges.join(', ')}`);
+    assert(badges.includes('RBF'), `${name} shows no RBF badge: ${badges.join(', ')}`);
+  }
+
+  // A qrune's name links to its etching only when the etching's txid is known
+  const { OrdDataComponent } = require('../src/app/components/ord-data/ord-data.component.ts');
+  const { decipherRunestone } = require('../src/app/shared/ord/rune.utils.ts');
+  const passthrough = (name) => Pipe({ name })(class { transform(value) { return value; } });
+  const ordData = (runestone, runeInfo) => {
+    const element = render(OrdDataComponent, 'src/app/components/ord-data/ord-data.component.html', [],
+      [RouterLink, passthrough('relativeUrl'), passthrough('amountShortener'), passthrough('bytes')], (ord) => {
+        Object.assign(ord, { runestone, runeInfo, type: 'vout' });
+        ord.ngOnChanges({ runestone: {} });
+      });
+    return {
+      text: element.textContent.replace(/\s+/g, ' ').trim(),
+      links: Array.from(element.querySelectorAll('a')).map((link) => link.getAttribute('href')),
+    };
+  };
+  const mintRunestone = decipherRunestone(mint);
+  const etched = decipherRunestone(etching).etching;
+  const transfer = { edicts: [{ id: { toString: () => '163891:2' }, amount: 1n, output: 1 }] };
+  for (const [name, runestone, runeInfo, text, links] of [
+    ['a mint of a qrune whose etching was found', mintRunestone, { '163891:2': { etching: etched, txid: etching.txid } }, 'Mint 1000 ⚛ POST•QUANTUM•GOODS', [`/tx/${etching.txid}`]],
+    ['a mint of a qrune whose etching has no txid', mintRunestone, { '163891:2': { etching: etched } }, 'Mint 1000 ⚛ POST•QUANTUM•GOODS', []],
+    ['a mint of a qrune with a txid but no etching', mintRunestone, { '163891:2': { txid: etching.txid } }, 'Error decoding data', []],
+    ['a transfer of a qrune with a txid but no etching', transfer, { '163891:2': { txid: etching.txid } }, 'Transfer 163891:2', [`/tx/${etching.txid}`]],
+  ]) {
+    const shown = ordData(runestone, runeInfo);
+    assert(shown.text === text && JSON.stringify(shown.links) === JSON.stringify(links), `${name}: ${JSON.stringify(shown)}`);
   }
 }
 
 // HTTP/2 has no status text, so Angular's XHR backend fills in 'OK' and an error printed "400 OK"
 {
-  // @angular/common ships partially compiled, so it needs the JIT compiler outside an Angular build
-  require('@angular/compiler');
   const { HttpRequest, HttpXhrBackend } = require('@angular/common/http');
   const { HttpErrorPipe } = require('../src/app/shared/pipes/http-error-pipe/http-error.pipe.ts');
+  const { httpErrorStatus } = require('../src/app/shared/http-error.utils.ts');
   // mempool.qbit.org's answer to /api/address/bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
   const body = '{"error":"invalid qbit address HRP: expected qb, got bc"}';
-  const errorText = (status, statusText, responseBody = body) => {
+  const httpError = (status, statusText, responseBody = body) => {
     const listeners = {};
     const xhr = {
       DONE: 4, readyState: 1, status: 0, statusText: '', responseText: '', responseURL: '',
@@ -307,18 +384,27 @@ for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 100
         listeners.load();
       },
     };
-    let text;
+    let error;
     new HttpXhrBackend({ build: () => xhr }).handle(new HttpRequest('GET', '/api/address/bc1q'))
-      .subscribe({ error: (e) => text = new HttpErrorPipe().transform(e) });
-    return text;
+      .subscribe({ error: (e) => error = e });
+    return error;
   };
-  const http2 = errorText(400, '');
-  assert(http2 === '400: invalid qbit address HRP: expected qb, got bc', `HTTP/2 error text: ${http2}`);
-  const http1 = errorText(400, 'Bad Request');
-  assert(http1 === '400 Bad Request: invalid qbit address HRP: expected qb, got bc', `HTTP/1.1 error text: ${http1}`);
+  const pipe = new HttpErrorPipe();
+  // The pipe prints the status and the reason, and the address graph and widgets print the status alone
+  const http2 = httpError(400, '');
+  assert(pipe.transform(http2) === '400: invalid qbit address HRP: expected qb, got bc', `HTTP/2 error text: ${pipe.transform(http2)}`);
+  assert(httpErrorStatus(http2) === '400', `HTTP/2 error status: ${httpErrorStatus(http2)}`);
+  const http1 = httpError(400, 'Bad Request');
+  assert(pipe.transform(http1) === '400 Bad Request: invalid qbit address HRP: expected qb, got bc', `HTTP/1.1 error text: ${pipe.transform(http1)}`);
+  assert(httpErrorStatus(http1) === '400 Bad Request', `HTTP/1.1 error status: ${httpErrorStatus(http1)}`);
   // a 200 whose body is not JSON is an error too, and there OK is the right status text
-  const parseError = errorText(200, '', 'not json');
+  const parseError = pipe.transform(httpError(200, '', 'not json'));
   assert(parseError.startsWith('200 OK: SyntaxError'), `parse error text: ${parseError}`);
+  // no error prints nothing, and an error without a status leaves the widgets their 'unknown error'
+  assert(pipe.transform(null) === '' && pipe.transform(undefined) === '', 'a missing error printed text');
+  assert(httpErrorStatus(undefined) === '' && httpErrorStatus({}) === '', 'an error without a status printed one');
+  // what HttpCacheInterceptor throws for a network failure
+  assert(httpErrorStatus({ status: 0, statusText: 'Unknown error' }) === '0 Unknown error', 'network failure status');
 }
 
 console.log('qbit script smoke passed');

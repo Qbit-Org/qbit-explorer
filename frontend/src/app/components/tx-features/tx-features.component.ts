@@ -36,7 +36,9 @@ export class TxFeaturesComponent implements OnChanges {
       return;
     }
     this.segwitEnabled = !this.tx.status.confirmed || isFeatureActive(this.stateService.network, this.tx.status.block_height, 'segwit');
-    // qbit's addresses are P2MR, so it shows no Taproot badge and no hint to save fees with Taproot
+    // qbit's addresses are P2MR, so it shows no Taproot badge and no hint to save fees with Taproot.
+    // The Taproot template, isTaproot and the Taproot gains stay as upstream has them, on purpose,
+    // to keep this component close to upstream.
     this.taprootEnabled = false;
     this.rbfEnabled = !this.tx.status.confirmed || isFeatureActive(this.stateService.network, this.tx.status.block_height, 'rbf');
     this.segwitGains = calcSegwitFeeGains(this.tx);
