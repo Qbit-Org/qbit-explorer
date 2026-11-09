@@ -10,6 +10,7 @@ use napi::bindgen_prelude::Result;
 use napi_derive::napi;
 use thread_transaction::ThreadTransaction;
 use thread_acceleration::ThreadAcceleration;
+use gbt::GbtOptions;
 use tracing::{debug, info, trace};
 use tracing_log::LogTracer;
 use tracing_subscriber::{EnvFilter, FmtSubscriber};
@@ -35,9 +36,7 @@ type ThreadTransactionsMap = HashMap<u32, ThreadTransaction, U32HasherState>;
 #[napi]
 pub struct GbtGenerator {
     thread_transactions: Arc<Mutex<ThreadTransactionsMap>>,
-    max_block_weight: u32,
-    max_blocks: usize,
-    witness_scale_factor: u32,
+    options: GbtOptions,
 }
 
 #[napi::module_init]
@@ -75,15 +74,12 @@ impl GbtGenerator {
     #[napi(constructor)]
     #[allow(clippy::new_without_default)]
     pub fn new(max_block_weight: u32, max_blocks: u32, witness_scale_factor: u32) -> Result<Self> {
-        if !(1..=4).contains(&witness_scale_factor) {
-            return Err(napi::Error::from_reason("witness_scale_factor must be from 1 to 4"));
-        }
+        let options = GbtOptions::new(max_block_weight, max_blocks as usize, witness_scale_factor)
+            .map_err(napi::Error::from_reason)?;
         debug!("Created new GbtGenerator");
         Ok(Self {
             thread_transactions: Arc::new(Mutex::new(u32hashmap_with_capacity(STARTING_CAPACITY))),
-            max_block_weight,
-            max_blocks: max_blocks as usize,
-            witness_scale_factor,
+            options,
         })
     }
 
@@ -102,9 +98,7 @@ impl GbtGenerator {
             Arc::clone(&self.thread_transactions),
             accelerations,
             max_uid as usize,
-            self.max_block_weight,
-            self.max_blocks,
-            self.witness_scale_factor,
+            self.options,
             move |map| {
                 for tx in mempool {
                     map.insert(tx.uid, tx);
@@ -130,9 +124,7 @@ impl GbtGenerator {
             Arc::clone(&self.thread_transactions),
             accelerations,
             max_uid as usize,
-            self.max_block_weight,
-            self.max_blocks,
-            self.witness_scale_factor,
+            self.options,
             move |map| {
                 for tx in new_txs {
                     map.insert(tx.uid, tx);
@@ -175,9 +167,7 @@ async fn run_task<F>(
     thread_transactions: Arc<Mutex<ThreadTransactionsMap>>,
     accelerations: Vec<ThreadAcceleration>,
     max_uid: usize,
-    max_block_weight: u32,
-    max_blocks: usize,
-    witness_scale_factor: u32,
+    options: GbtOptions,
     callback: F,
 ) -> Result<GbtResult>
 where
@@ -195,14 +185,7 @@ where
         callback(&mut map);
 
         info!("Starting gbt algorithm for {} elements...", map.len());
-        let result = gbt::gbt(
-            &mut map,
-            &accelerations,
-            max_uid,
-            max_block_weight,
-            max_blocks as usize,
-            witness_scale_factor,
-        );
+        let result = gbt::gbt(&mut map, &accelerations, max_uid, options);
         info!("Finished gbt algorithm for {} elements...", map.len());
 
         debug!(

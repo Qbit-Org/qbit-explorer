@@ -16,7 +16,7 @@ class MempoolBlocks {
   private mempoolBlockDeltas: MempoolBlockDelta[] = [];
   private txSelectionWorker: Worker | null = null;
   private rustInitialized: boolean = false;
-  private rustGbtGenerator: GbtGenerator = new GbtGenerator(config.MEMPOOL.BLOCK_WEIGHT_UNITS, config.MEMPOOL.MEMPOOL_BLOCKS_AMOUNT, WITNESS_SCALE_FACTOR);
+  private rustGbtGenerator: GbtGenerator = this.createRustGbtGenerator();
 
   private nextUid: number = 1;
   private uidMap: Map<number, string> = new Map(); // map short numerical uids to full txids
@@ -227,10 +227,14 @@ class MempoolBlocks {
     }
   }
 
+  private createRustGbtGenerator(): GbtGenerator {
+    return new GbtGenerator(config.MEMPOOL.BLOCK_WEIGHT_UNITS, config.MEMPOOL.MEMPOOL_BLOCKS_AMOUNT, WITNESS_SCALE_FACTOR);
+  }
+
   /** @asyncSafe */
   private resetRustGbt(): void {
     this.rustInitialized = false;
-    this.rustGbtGenerator = new GbtGenerator(config.MEMPOOL.BLOCK_WEIGHT_UNITS, config.MEMPOOL.MEMPOOL_BLOCKS_AMOUNT, WITNESS_SCALE_FACTOR);
+    this.rustGbtGenerator = this.createRustGbtGenerator();
   }
 
   /** @asyncSafe */
@@ -263,7 +267,7 @@ class MempoolBlocks {
     });
 
     // run the block construction algorithm in a separate thread, and wait for a result
-    const rustGbt = saveResults ? this.rustGbtGenerator : new GbtGenerator(config.MEMPOOL.BLOCK_WEIGHT_UNITS, config.MEMPOOL.MEMPOOL_BLOCKS_AMOUNT, WITNESS_SCALE_FACTOR);
+    const rustGbt = saveResults ? this.rustGbtGenerator : this.createRustGbtGenerator();
     try {
       const { blocks, blockWeights, rates, clusters, overflow } = this.convertNapiResultTxids(
         await rustGbt.make(transactions as RustThreadTransaction[], convertedAccelerations as RustThreadAcceleration[], this.nextUid),
@@ -375,7 +379,8 @@ class MempoolBlocks {
     let feeStatsCalculator: OnlineFeeStatsCalculator | null = null;
     if (hasBlockStack) {
       if (blockWeights && blockWeights[7] !== null) {
-        stackWeight = blockWeights[7];
+        // the Rust builder's block weights include the weight reserved for the coinbase
+        stackWeight = blockWeights[7] - QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT;
       } else {
         stackWeight = blocks[lastBlockIndex].reduce((total, tx) => total + (mempool[tx]?.weight || 0), 0);
       }

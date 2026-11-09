@@ -24,6 +24,8 @@ pub struct AuditTransaction {
     // sigop-adjusted vsize rounded up the the next integer
     pub sigop_adjusted_vsize: u32,
     pub sigops: u32,
+    // the scale factor the vsizes above were computed with, used again for package sizes and rates
+    witness_scale_factor: u32,
     adjusted_fee_per_vsize: f64,
     pub effective_fee_per_vsize: f64,
     pub dependency_rate: f64,
@@ -121,6 +123,7 @@ impl AuditTransaction {
             sigop_adjusted_weight,
             sigop_adjusted_vsize,
             sigops: tx.sigops,
+            witness_scale_factor,
             adjusted_fee_per_vsize: calc_fee_rate(fee, f64::from(sigop_adjusted_vsize)),
             effective_fee_per_vsize,
             dependency_rate: f64::INFINITY,
@@ -149,9 +152,10 @@ impl AuditTransaction {
         self.order
     }
 
+    /// The package's weight as `BlockAssembler::TestPackage` counts it: its vsize times the scale factor.
     #[inline]
-    pub const fn ancestor_sigop_adjusted_vsize(&self) -> u32 {
-        self.ancestor_sigop_adjusted_vsize
+    pub const fn ancestor_package_weight(&self) -> u32 {
+        self.witness_scale_factor * self.ancestor_sigop_adjusted_vsize
     }
 
     #[inline]
@@ -160,14 +164,14 @@ impl AuditTransaction {
     }
 
     #[inline]
-    pub fn cluster_rate(&self, witness_scale_factor: u32) -> f64 {
+    pub fn cluster_rate(&self) -> f64 {
         // Safety: self.ancestor_weight can never be 0.
         // Even if it could, as it approaches 0, the value inside the min() call
         // grows, so if we think of 0 as "grew infinitely" then dependency_rate would be
         // the smaller of the two. If either side is NaN, the other side is returned.
         self.dependency_rate.min(calc_fee_rate(
             self.ancestor_fee,
-            f64::from(self.ancestor_sigop_adjusted_weight) / f64::from(witness_scale_factor),
+            f64::from(self.ancestor_sigop_adjusted_weight) / f64::from(self.witness_scale_factor),
         ))
     }
 

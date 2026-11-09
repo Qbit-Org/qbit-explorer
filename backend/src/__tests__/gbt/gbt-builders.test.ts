@@ -105,16 +105,14 @@ const round = (rate: number): number => Math.round(rate * 1e9) / 1e9;
 
 function summarize(blocks: MempoolBlockWithTransactions[], mempool: Mempool) {
   return {
-    blocks: blocks.map((block, index) => ({
+    blocks: blocks.map(block => ({
       txids: [...block.transactionIds].sort(),
       blockSize: block.blockSize,
       blockVSize: block.blockVSize,
       nTx: block.nTx,
       totalFees: block.totalFees,
-      // The eighth block stacks the rest of the mempool. MempoolBlocks sizes its fee statistics
-      // by the Rust builder's block weight, which counts the 4,000 WU reserved for the coinbase,
-      // but by the transactions' weight for the TypeScript builder.
-      ...(index < 7 ? { medianFee: round(block.medianFee), feeRange: block.feeRange.map(round) } : {}),
+      medianFee: round(block.medianFee),
+      feeRange: block.feeRange.map(round),
     })),
     rates: Object.fromEntries(Object.values(mempool).map(tx => [tx.txid, tx.effectiveFeePerVsize])),
     clusters: Object.fromEntries(Object.values(mempool).map(tx => [
@@ -209,6 +207,18 @@ describe('Rust and TypeScript block template builders', () => {
     expect(rust).toStrictEqual(typescript);
   });
 
+  test('agree that a transaction of 80,000 sigops never fits', async () => {
+    // TestPackage rejects a package that reaches MAX_BLOCK_SIGOPS_COST
+    const mempool = makeMempool([
+      { weight: 1_600_000, sigops: 80_000, fee: 8_000_000 },
+      { fee: 1_000 },
+    ]);
+    const { typescript, rust } = await buildWithBoth(mempool);
+
+    expect(typescript.blocks.map(block => block.txids)).toStrictEqual([[Object.keys(mempool)[1]]]);
+    expect(rust).toStrictEqual(typescript);
+  });
+
   test.each([
     ['a mempool smaller than one block', 150, 7],
     ['a mempool that fills eight blocks', 6_000, 8],
@@ -243,14 +253,24 @@ describe('Rust and TypeScript block template builders', () => {
       expect(Object.values(rust.rates)).toStrictEqual([60_000 / 11_000, 60_000 / 11_000, 60_000 / 11_000, 5]);
     });
 
-    test('only Rust caps a block at 80,000 sigops', async () => {
-      // MAX_BLOCK_SIGOPS_COST, with 400 reserved for the coinbase; the TypeScript builder
-      // checks each package against the limit but never adds up the block's sigops
-      const mempool = makeMempool(Array.from({ length: 5 }, (_, index) => ({ weight: 320_000, sigops: 16_000, fee: 1_000_000 - index })));
+    test('only Rust keeps a block below 80,000 sigops', async () => {
+      // MAX_BLOCK_SIGOPS_COST, with 400 reserved for the coinbase: after four transactions of
+      // 16,000 sigops, one of 15,600 would make exactly 80,000 and one of 15,599 still fits.
+      // The TypeScript builder checks each package against the limit but never adds up the
+      // block's sigops.
+      const mempool = makeMempool([
+        ...Array.from({ length: 4 }, (_, index) => ({ weight: 320_000, sigops: 16_000, fee: 1_000_000 - index })),
+        { weight: 312_000, sigops: 15_600, fee: 900_000 },
+        { weight: 311_980, sigops: 15_599, fee: 800_000 },
+      ]);
+      const txids = Object.keys(mempool);
       const { typescript, rust } = await buildWithBoth(mempool);
 
-      expect(typescript.blocks.map(block => block.nTx)).toStrictEqual([5]);
-      expect(rust.blocks.map(block => block.nTx)).toStrictEqual([4, 1]);
+      expect(typescript.blocks.map(block => block.nTx)).toStrictEqual([6]);
+      expect(rust.blocks.map(block => block.txids)).toStrictEqual([
+        [txids[0], txids[1], txids[2], txids[3], txids[5]].sort(),
+        [txids[4]],
+      ]);
     });
   });
 });

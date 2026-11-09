@@ -20,6 +20,29 @@ const BLOCK_FULL_ENOUGH_WEIGHT_DELTA: u32 = 4_000;
 type AuditPool = Vec<Option<ManuallyDrop<AuditTransaction>>>;
 type ModifiedQueue = PriorityQueue<u32, TxPriority, U32HasherState>;
 
+/// What a projected block may hold, fixed for a `GbtGenerator`'s lifetime.
+#[derive(Clone, Copy, Debug)]
+pub struct GbtOptions {
+    // -blockmaxweight, which includes the reserved weight: qbit's default is MAX_BLOCK_WEIGHT
+    max_block_weight: u32,
+    max_blocks: usize,
+    // turns weight into vsize: 1 on qbit, 4 on Bitcoin
+    witness_scale_factor: u32,
+}
+
+impl GbtOptions {
+    /// # Errors
+    ///
+    /// Rejects a `witness_scale_factor` outside 1 (qbit) to 4 (Bitcoin). Node converts -1 to
+    /// `u32::MAX`, which would overflow the block weight.
+    pub fn new(max_block_weight: u32, max_blocks: usize, witness_scale_factor: u32) -> Result<Self, &'static str> {
+        if !(1..=4).contains(&witness_scale_factor) {
+            return Err("witness_scale_factor must be from 1 to 4");
+        }
+        Ok(Self { max_block_weight, max_blocks, witness_scale_factor })
+    }
+}
+
 #[derive(Debug)]
 struct TxPriority {
     uid: u32,
@@ -52,9 +75,6 @@ impl Ord for TxPriority {
 /// [miner.cpp](https://github.com/bitcoin/bitcoin/blob/master/src/node/miner.cpp).
 /// Ported from mempool backend's
 /// [tx-selection-worker.ts](https://github.com/mempool/mempool/blob/master/backend/src/api/tx-selection-worker.ts).
-///
-/// `max_block_weight` is `-blockmaxweight`, which includes the reserved weight: qbit's default
-/// is `MAX_BLOCK_WEIGHT`. `witness_scale_factor` turns weight into vsize: 1 on qbit, 4 on Bitcoin.
 //
 // TODO: Make gbt smaller to fix these lints.
 #[allow(clippy::too_many_lines)]
@@ -63,10 +83,9 @@ pub fn gbt(
     mempool: &mut ThreadTransactionsMap,
     accelerations: &[ThreadAcceleration],
     max_uid: usize,
-    max_block_weight: u32,
-    max_blocks: usize,
-    witness_scale_factor: u32,
+    options: GbtOptions,
 ) -> GbtResult {
+    let GbtOptions { max_block_weight, max_blocks, witness_scale_factor } = options;
     let mut indexed_accelerations = Vec::with_capacity(max_uid + 1);
     indexed_accelerations.resize(max_uid + 1, None);
     for acceleration in accelerations {
@@ -161,9 +180,8 @@ pub fn gbt(
 
             // BlockAssembler::TestPackage
             if blocks.len() < (max_blocks - 1)
-                && ((block_weight + (witness_scale_factor * next_tx.ancestor_sigop_adjusted_vsize())
-                    >= max_block_weight)
-                    || (block_sigops + next_tx.ancestor_sigops() > BLOCK_SIGOPS))
+                && ((block_weight + next_tx.ancestor_package_weight() >= max_block_weight)
+                    || (block_sigops + next_tx.ancestor_sigops() >= BLOCK_SIGOPS))
             {
                 // hold this package in an overflow list while we check for smaller options
                 overflow.push(next_tx.uid);
@@ -191,7 +209,7 @@ pub fn gbt(
                 });
                 package.push((next_tx.uid, next_tx.order(), next_tx.ancestors.len()));
 
-                let cluster_rate = next_tx.cluster_rate(witness_scale_factor);
+                let cluster_rate = next_tx.cluster_rate();
 
                 for (txid, _, _) in &package {
                     cluster.push(*txid);
@@ -452,7 +470,7 @@ fn update_descendants(
 
 #[cfg(test)]
 mod tests {
-    use super::gbt;
+    use super::{gbt, GbtOptions};
     use crate::{thread_transaction::ThreadTransaction, u32_hasher_types::u32hashmap_with_capacity, GbtResult};
 
     // qbit's MAX_BLOCK_WEIGHT (consensus/consensus.h), which is also its default -blockmaxweight
@@ -477,7 +495,8 @@ mod tests {
         for tx in txs {
             mempool.insert(tx.uid, tx);
         }
-        gbt(&mut mempool, &[], max_uid, QBIT_MAX_BLOCK_WEIGHT, 8, 1)
+        let options = GbtOptions::new(QBIT_MAX_BLOCK_WEIGHT, 8, 1).expect("qbit's options are valid");
+        gbt(&mut mempool, &[], max_uid, options)
     }
 
     fn rate(result: &GbtResult, uid: u32) -> Option<f64> {
@@ -518,12 +537,24 @@ mod tests {
     }
 
     #[test]
-    fn caps_block_sigops_at_80000_including_the_coinbase_reserve() {
-        // MAX_BLOCK_SIGOPS_COST is 80,000 on qbit and 400 is reserved for the coinbase,
-        // so only four transactions of 16,000 sigops fit although their weight would allow five
-        let txs = (1..=5).map(|uid| tx(uid, 1_000_000 - u64::from(uid), 320_000, 16_000, vec![])).collect();
+    fn keeps_block_sigops_below_80000_including_the_coinbase_reserve() {
+        // MAX_BLOCK_SIGOPS_COST is 80,000 and 400 are reserved for the coinbase. After four
+        // transactions of 16,000 sigops, one of 15,600 would make exactly 80,000, which
+        // BlockAssembler::TestPackage rejects, and one of 15,599 still fits.
+        let mut txs: Vec<ThreadTransaction> = (1..=4).map(|uid| tx(uid, 1_000_000 - u64::from(uid), 320_000, 16_000, vec![])).collect();
+        txs.push(tx(5, 900_000, 312_000, 15_600, vec![]));
+        txs.push(tx(6, 800_000, 311_980, 15_599, vec![]));
         let result = run(txs);
-        assert_eq!(result.blocks[0], vec![1, 2, 3, 4]);
+        assert_eq!(result.blocks[0], vec![1, 2, 3, 4, 6]);
         assert_eq!(result.blocks[1], vec![5]);
+    }
+
+    #[test]
+    fn rejects_scale_factors_outside_1_to_4() {
+        assert!(GbtOptions::new(QBIT_MAX_BLOCK_WEIGHT, 8, 1).is_ok());
+        assert!(GbtOptions::new(4_000_000, 8, 4).is_ok());
+        for witness_scale_factor in [0, 5, u32::MAX] {
+            assert!(GbtOptions::new(QBIT_MAX_BLOCK_WEIGHT, 8, witness_scale_factor).is_err());
+        }
     }
 }
