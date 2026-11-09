@@ -37,6 +37,7 @@ pub struct GbtGenerator {
     thread_transactions: Arc<Mutex<ThreadTransactionsMap>>,
     max_block_weight: u32,
     max_blocks: usize,
+    witness_scale_factor: u32,
 }
 
 #[napi::module_init]
@@ -64,16 +65,26 @@ fn init() {
 
 #[napi]
 impl GbtGenerator {
+    /// `max_block_weight` is `-blockmaxweight`, including the reserved weight (qbit's default is
+    /// `MAX_BLOCK_WEIGHT`), and `witness_scale_factor` turns weight into vsize (1 on qbit).
+    ///
+    /// # Errors
+    ///
+    /// Rejects a `witness_scale_factor` outside 1 (qbit) to 4 (Bitcoin). Node converts -1 to
+    /// `u32::MAX`, which would overflow the block weight.
     #[napi(constructor)]
     #[allow(clippy::new_without_default)]
-    #[must_use]
-    pub fn new(max_block_weight: u32, max_blocks: u32) -> Self {
+    pub fn new(max_block_weight: u32, max_blocks: u32, witness_scale_factor: u32) -> Result<Self> {
+        if !(1..=4).contains(&witness_scale_factor) {
+            return Err(napi::Error::from_reason("witness_scale_factor must be from 1 to 4"));
+        }
         debug!("Created new GbtGenerator");
-        Self {
+        Ok(Self {
             thread_transactions: Arc::new(Mutex::new(u32hashmap_with_capacity(STARTING_CAPACITY))),
             max_block_weight,
             max_blocks: max_blocks as usize,
-        }
+            witness_scale_factor,
+        })
     }
 
     /// # Errors
@@ -93,6 +104,7 @@ impl GbtGenerator {
             max_uid as usize,
             self.max_block_weight,
             self.max_blocks,
+            self.witness_scale_factor,
             move |map| {
                 for tx in mempool {
                     map.insert(tx.uid, tx);
@@ -120,6 +132,7 @@ impl GbtGenerator {
             max_uid as usize,
             self.max_block_weight,
             self.max_blocks,
+            self.witness_scale_factor,
             move |map| {
                 for tx in new_txs {
                     map.insert(tx.uid, tx);
@@ -164,6 +177,7 @@ async fn run_task<F>(
     max_uid: usize,
     max_block_weight: u32,
     max_blocks: usize,
+    witness_scale_factor: u32,
     callback: F,
 ) -> Result<GbtResult>
 where
@@ -187,6 +201,7 @@ where
             max_uid,
             max_block_weight,
             max_blocks as usize,
+            witness_scale_factor,
         );
         info!("Finished gbt algorithm for {} elements...", map.len());
 

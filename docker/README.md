@@ -171,10 +171,10 @@ frontend serves that network at `/`.
 | regtest | 18452 | 3002 | `MEMPOOL_NETWORK: "regtest"`, `CORE_RPC_PORT: "18452"` | `MAINNET_ENABLED: "false"`, `REGTEST_ENABLED: "true"`, `ROOT_NETWORK: "regtest"` |
 
 The block weight (2,000,000) and target spacing (60 seconds) defaults already
-match qbit on every network. Leave `MEMPOOL_RUST_GBT` at its default of
-`false`: the Rust block-template builder in `rust/gbt` still applies Bitcoin's
-witness scale factor of 4, which would show projected-block fee rates four
-times too high on qbit.
+match qbit on every network. `MEMPOOL_RUST_GBT` defaults to `false` in the
+container, so the backend projects blocks with its TypeScript builder. Set it
+to `true` to use the faster Rust builder in `rust/gbt`, which the backend
+defaults to outside the container.
 
 ## Configuration reference
 

@@ -208,7 +208,7 @@ const defaults: IConfig = {
     'POOLS_JSON_TREE_URL': '',
     'POOLS_UPDATE_DELAY': 604800, // in seconds, default is one week
     'AUDIT': false,
-    'RUST_GBT': false, // rust/gbt still divides weight by 4; it is not ported to qbit's witness scale factor of 1
+    'RUST_GBT': true,
     'LIMIT_GBT': false,
     'CPFP_INDEXING': false,
     'MAX_BLOCKS_BULK_QUERY': 0,

@@ -25,9 +25,9 @@ post-quantum signatures.
   REST and WebSocket API. It talks to `qbitd` over RPC and keeps its own data
   in MariaDB.
 - [`rust/gbt/`](rust/gbt/): the block-template algorithm in Rust, built as a
-  Node.js addon. It still applies Bitcoin's witness scale factor of 4, so the
-  backend leaves it off (`MEMPOOL.RUST_GBT`) and projects the next blocks from
-  the mempool with its TypeScript implementation.
+  Node.js addon, which projects the next blocks from the mempool with qbit's
+  weights. Setting `MEMPOOL.RUST_GBT` to `false` switches the backend to its
+  slower TypeScript implementation.
 - `qbitd`, the qbit node from [Qbit-Org/qbit](https://github.com/Qbit-Org/qbit).
   Required.
 - [Qbit-Org/qbit-electrs](https://github.com/Qbit-Org/qbit-electrs), an

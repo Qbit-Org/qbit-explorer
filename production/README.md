@@ -27,9 +27,9 @@ network they index all blocks, block summaries, goggles and CPFP data. They
 leave Redis off, so the backend uses its default disk cache: it saves the
 mempool under `MEMPOOL.CACHE_DIR` (`./cache` in `backend/`) and reloads it
 after a restart. They also leave `MEMPOOL.RUST_GBT` off, so the backend builds
-projected blocks with its TypeScript implementation: the Rust builder in
-[`rust/gbt`](../rust/gbt) still applies Bitcoin's witness scale factor of 4
-and would overstate their fee rates fourfold on qbit. Values written as
+projected blocks with its TypeScript implementation. Set it to `true`, the
+backend's default, to use the faster Rust builder in [`rust/gbt`](../rust/gbt).
+Values written as
 `__PLACEHOLDER__` must be replaced with your own credentials. Keep
 `MEMPOOL.OFFICIAL` set to `false`. That flag marks upstream's mempool.space
 instances and adds internal qbitd RPC routes under `/api/v1/internal/`, which

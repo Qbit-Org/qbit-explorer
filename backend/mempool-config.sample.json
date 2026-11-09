@@ -30,7 +30,7 @@
     "POOLS_JSON_TREE_URL": "",
     "POOLS_UPDATE_DELAY": 604800,
     "AUDIT": false,
-    "RUST_GBT": false,
+    "RUST_GBT": true,
     "LIMIT_GBT": false,
     "CPFP_INDEXING": false,
     "DISK_CACHE_BLOCK_INTERVAL": 6,
