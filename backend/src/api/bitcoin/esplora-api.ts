@@ -415,14 +415,8 @@ class FailoverRouter {
   }
 }
 
-// How long to stop asking a host that runs without --address-search, so that
-// typing a search doesn't send it a request per keystroke
-const ADDRESS_SEARCH_RECHECK_MS = 5 * 60 * 1000;
-
 class ElectrsApi implements AbstractBitcoinApi {
   private failoverRouter = new FailoverRouter();
-  // each host that answered "address search disabled", until when to skip it
-  private addressSearchDisabledUntil = new Map<string, number>();
 
   $getRawMempool(): Promise<IEsploraApi.Transaction['txid'][]> {
     return this.failoverRouter.$get<IEsploraApi.Transaction['txid'][]>('/mempool/txids');
@@ -547,17 +541,12 @@ class ElectrsApi implements AbstractBitcoinApi {
 
   /** @asyncUnsafe */
   async $getAddressPrefix(prefix: string): Promise<string[]> {
-    const host = this.failoverRouter.activeHost.host;
-    if ((this.addressSearchDisabledUntil.get(host) ?? 0) > Date.now()) {
-      return [];
-    }
     try {
-      const addresses = await this.failoverRouter.$get<string[]>('/address-prefix/' + prefix);
-      this.addressSearchDisabledUntil.delete(host);
-      return addresses;
+      return await this.failoverRouter.$get<string[]>('/address-prefix/' + prefix);
     } catch (e) {
+      // without --address-search, qbit-electrs has no prefix index and answers
+      // at once, so each search asks again rather than remembering the answer
       if (isAddressSearchDisabledError(e)) {
-        this.addressSearchDisabledUntil.set(host, Date.now() + ADDRESS_SEARCH_RECHECK_MS);
         return [];
       }
       throw e;

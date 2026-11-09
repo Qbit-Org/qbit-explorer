@@ -245,22 +245,15 @@ describe('Esplora API', () => {
     // qbit-electrs's answers, as status, content type and body
     const FOUND: [number, string, string] = [200, 'application/json', JSON.stringify([QBIT_ADDRESS])];
     const DISABLED: [number, string, string] = [400, 'text/plain', 'address search disabled'];
-    // two qbit-electrs hosts, each giving its own answer, and the requests
-    // they got, as "<host> <path>"
+    // a qbit-electrs host's answer, and the requests it got, as "<host> <path>"
     const servers: http.Server[] = [];
     const urls: string[] = [];
     const answers: [number, string, string][] = [];
     const requests: string[] = [];
     let api: EsploraApi;
-    let now: number;
-
-    // point the client at a host, as a failover would
-    const useHost = (i: number): void => {
-      Object.assign(api['failoverRouter'].activeHost, { host: urls[i], socket: false });
-    };
 
     beforeAll(async () => {
-      for (const i of [0, 1]) {
+      for (const i of [0]) {
         const server = http.createServer((req, res) => {
           requests.push(`${i} ${req.url}`);
           res.writeHead(answers[i][0], { 'content-type': answers[i][1] });
@@ -282,10 +275,8 @@ describe('Esplora API', () => {
     beforeEach(() => {
       jest.clearAllMocks();
       requests.length = 0;
-      now = 1_794_000_000_000;
-      jest.spyOn(Date, 'now').mockImplementation(() => now);
       api = new EsploraApi();
-      useHost(0);
+      Object.assign(api['failoverRouter'].activeHost, { host: urls[0], socket: false });
     });
 
     afterEach(() => {
@@ -308,30 +299,13 @@ describe('Esplora API', () => {
       expect(api['failoverRouter'].activeHost.failures).toBe(0);
     });
 
-    test('stops asking that host for 5 minutes', async () => {
+    test('asks again on every search, so a host given its index answers at once', async () => {
       answers[0] = DISABLED;
-      await api.$getAddressPrefix('qb1');
+      await expect(api.$getAddressPrefix('qb1')).resolves.toStrictEqual([]);
 
-      now += 5 * 60 * 1000 - 1;
-      await expect(api.$getAddressPrefix('qb1z')).resolves.toStrictEqual([]);
-      expect(requests).toStrictEqual(['0 /address-prefix/qb1']);
-
-      // then asks again, and keeps asking once the host has its index
-      now += 1;
       answers[0] = FOUND;
-      await expect(api.$getAddressPrefix('qb1zj')).resolves.toStrictEqual([QBIT_ADDRESS]);
-      await expect(api.$getAddressPrefix('qb1zjr')).resolves.toStrictEqual([QBIT_ADDRESS]);
-      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '0 /address-prefix/qb1zj', '0 /address-prefix/qb1zjr']);
-    });
-
-    test('asks another host straight away', async () => {
-      answers[0] = DISABLED;
-      answers[1] = FOUND;
-      await api.$getAddressPrefix('qb1');
-
-      useHost(1);
       await expect(api.$getAddressPrefix('qb1z')).resolves.toStrictEqual([QBIT_ADDRESS]);
-      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '1 /address-prefix/qb1z']);
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '0 /address-prefix/qb1z']);
     });
 
     // electrs answers 400 for its own failures too, so only that reason means no index
