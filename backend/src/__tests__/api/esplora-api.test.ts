@@ -25,6 +25,20 @@ describe('Esplora API', () => {
     });
   });
 
+  test.each([
+    ['the first page of confirmed transactions', (api: EsploraApi) => api.$getAddressChainTransactions('qb1address'), '/address/qb1address/txs/chain'],
+    ['the confirmed transactions after the last one seen', (api: EsploraApi) => api.$getAddressChainTransactions('qb1address', 'last-seen-tx'),
+      '/address/qb1address/txs/chain/last-seen-tx'],
+    ['the unconfirmed transactions', (api: EsploraApi) => api.$getAddressMempoolTransactions('qb1address'), '/address/qb1address/txs/mempool'],
+  ])('should proxy %s of an address to electrs', async (_label, lookup, path) => {
+    const api = new EsploraApi();
+    const transactions = [{ txid: 'tx' }];
+    const get = jest.spyOn(api['failoverRouter'], '$get').mockResolvedValue(transactions);
+
+    await expect(lookup(api)).resolves.toStrictEqual(transactions);
+    expect(get).toHaveBeenCalledWith(path);
+  });
+
   describe('against an electrs HTTP server', () => {
     const RAW_BLOCK = Buffer.from('00e01332ce72108dd402ed0308506600ff', 'hex');
     // Valid JSON numbers: axios' JSON transform would turn these into numbers
