@@ -1,3 +1,5 @@
+import config from '../config';
+import DB from '../database';
 import BlocksRepository, { IncompleteHashrateWindowError } from '../repositories/BlocksRepository';
 import { setupTestDatabase, waitForDatabase, cleanupTestData, insertTestPool, insertTestBlock } from './test-helpers';
 
@@ -167,5 +169,33 @@ describe('BlocksRepository Integration Tests', () => {
       poolId: defaultPoolId,
     });
     await expect(BlocksRepository.$getHashrateWindow(2, 900002)).rejects.toThrow('not consecutive');
+  });
+
+  // qbit has no QBT price feed, so no block is ever linked to a price
+  test('should average block fees and rewards of blocks without a price', async () => {
+    const fiatPrice = config.FIAT_PRICE.ENABLED;
+    // As on qbit mainnet, which keeps upstream's default
+    config.FIAT_PRICE.ENABLED = true;
+    try {
+      for (let height = 900100; height <= 900102; ++height) {
+        await insertTestBlock({
+          height,
+          hash: height.toString(16).padStart(64, '0'),
+          blockTimestamp: new Date((1_700_000_000 + (height - 900100) * 60) * 1000),
+          poolId: defaultPoolId,
+        });
+      }
+      // 210 QBT subsidy plus insertTestBlock's 0.5 QBT of fees
+      await DB.query('UPDATE blocks SET reward = 21050000000 WHERE height BETWEEN 900100 AND 900102');
+
+      const byHeight = (a: { avgHeight: number }, b: { avgHeight: number }): number => a.avgHeight - b.avgHeight;
+      const fees = (await BlocksRepository.$getHistoricalBlockFees(1, null)).sort(byHeight);
+      const rewards = (await BlocksRepository.$getHistoricalBlockRewards(1, null)).sort(byHeight);
+
+      expect(fees).toEqual([900100, 900101, 900102].map(avgHeight => ({ avgHeight, timestamp: expect.any(Number), avgFees: 50000000 })));
+      expect(rewards).toEqual([900100, 900101, 900102].map(avgHeight => ({ avgHeight, timestamp: expect.any(Number), avgRewards: 21050000000 })));
+    } finally {
+      config.FIAT_PRICE.ENABLED = fiatPrice;
+    }
   });
 });

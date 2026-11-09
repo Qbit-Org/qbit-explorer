@@ -1,4 +1,5 @@
-import priceUpdater, { QBIT_PRICE_FEEDS_AVAILABLE } from '../../tasks/price-updater';
+import priceUpdater from '../../tasks/price-updater';
+import { QBIT_PRICE_FEEDS_AVAILABLE } from '../../utils/qbit-price-feeds';
 
 describe('qbit price updater stub', () => {
   it('keeps qbit fiat price feeds disabled', async () => {
