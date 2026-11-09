@@ -8,7 +8,8 @@ import logger from '../../logger';
 import crypto from 'crypto-js';
 import loadingIndicators from '../loading-indicators';
 import memoryCache from '../memory-cache';
-import { AFTER_TXID_NOT_FOUND, isTxNotFoundError } from '../../utils/api';
+import mempool from '../mempool';
+import { AFTER_TXID_NOT_FOUND, isTxNotInMempoolOrChainError } from '../../utils/api';
 
 class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
   private electrumClient: any;
@@ -86,21 +87,8 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
 
     try {
       loadingIndicators.setProgress('address-' + address, 0);
-
-      const transactions: IEsploraApi.Transaction[] = [];
       const history = await this.$getScriptHashHistory(addressInfo.scriptPubKey);
-      history.sort((a, b) => (b.height || 9999999) - (a.height || 9999999));
-
-      const startingIndex = await this.$getHistoryIndexAfter(history, lastSeenTxId);
-      const endIndex = Math.min(startingIndex + 10, history.length);
-
-      for (let i = startingIndex; i < endIndex; i++) {
-        const tx = await this.$getRawTransaction(history[i].tx_hash, false, true);
-        transactions.push(tx);
-        loadingIndicators.setProgress('address-' + address, (i + 1) / endIndex * 100);
-      }
-
-      return transactions;
+      return await this.$getHistoryPage(history, lastSeenTxId, 'address-' + address);
     } catch (e: any) {
       loadingIndicators.setProgress('address-' + address, 100);
       throw new Error(typeof e === 'string' ? e : e && e.message || e);
@@ -154,8 +142,6 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
   async $getScriptHashTransactions(scripthash: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]> {
     try {
       loadingIndicators.setProgress('address-' + scripthash, 0);
-
-      const transactions: IEsploraApi.Transaction[] = [];
       let history = memoryCache.get<IElectrumApi.ScriptHashHistory[]>('Scripthash_getHistory', scripthash);
       if (!history) {
         history = await this.electrumClient.blockchainScripthash_getHistory(scripthash);
@@ -164,18 +150,7 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
       if (!history) {
         throw new Error('failed to get scripthash history');
       }
-      history.sort((a, b) => (b.height || 9999999) - (a.height || 9999999));
-
-      const startingIndex = await this.$getHistoryIndexAfter(history, lastSeenTxId);
-      const endIndex = Math.min(startingIndex + 10, history.length);
-
-      for (let i = startingIndex; i < endIndex; i++) {
-        const tx = await this.$getRawTransaction(history[i].tx_hash, false, true);
-        transactions.push(tx);
-        loadingIndicators.setProgress('address-' + scripthash, (i + 1) / endIndex * 100);
-      }
-
-      return transactions;
+      return await this.$getHistoryPage(history, lastSeenTxId, 'address-' + scripthash);
     } catch (e: any) {
       loadingIndicators.setProgress('address-' + scripthash, 100);
       throw new Error(typeof e === 'string' ? e : e && e.message || e);
@@ -218,9 +193,35 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
   }
 
   /**
+   * Up to 10 transactions of a history, newest first, after lastSeenTxId as esplora pages them.
+   *
+   * @asyncUnsafe
+   */
+  private async $getHistoryPage(history: IElectrumApi.ScriptHashHistory[], lastSeenTxId: string | undefined, progressName: string): Promise<IEsploraApi.Transaction[]> {
+    // Unconfirmed transactions (Electrum heights 0 and -1) are the newest. The txid breaks ties, so
+    // pages cut after a txid hold together whatever order the server lists them in. Sort a copy, as
+    // memoryCache shares the history.
+    const sortHeight = (entry: IElectrumApi.ScriptHashHistory): number => entry.height > 0 ? entry.height : Number.MAX_SAFE_INTEGER;
+    const sorted = [...history].sort((a, b) => (sortHeight(b) - sortHeight(a)) || (a.tx_hash < b.tx_hash ? -1 : a.tx_hash > b.tx_hash ? 1 : 0));
+
+    const startingIndex = await this.$getHistoryIndexAfter(sorted, lastSeenTxId);
+    const endIndex = Math.min(startingIndex + 10, sorted.length);
+    const transactions: IEsploraApi.Transaction[] = [];
+    for (let i = startingIndex; i < endIndex; i++) {
+      transactions.push(await this.$getRawTransaction(sorted[i].tx_hash, false, true));
+      loadingIndicators.setProgress(progressName, (i + 1) / endIndex * 100);
+    }
+    if (startingIndex >= endIndex) {
+      // the loop takes any other page to 100, which clears the indicator
+      loadingIndicators.setProgress(progressName, 100);
+    }
+    return transactions;
+  }
+
+  /**
    * Where a page of a newest-first history starts after lastSeenTxId, matching esplora: past the
    * end for a transaction that is not in the history, and Error(AFTER_TXID_NOT_FOUND), a 422, for
-   * one the node does not know either, such as one that left the mempool.
+   * one the node does not have either, such as one that left the mempool.
    *
    * @asyncUnsafe
    */
@@ -232,13 +233,18 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
     if (pos !== -1) {
       return pos + 1;
     }
-    try {
-      await this.$getRawTransaction(lastSeenTxId, true);
-    } catch (e) {
-      if (isTxNotFoundError(e)) {
-        throw new Error(AFTER_TXID_NOT_FOUND);
+    if (!mempool.getMempool()[lastSeenTxId]) {
+      try {
+        // the hex is enough to tell the transaction exists
+        await this.bitcoindClient.getRawTransaction(lastSeenTxId, false);
+      } catch (e) {
+        // only a definite answer: with txindex disabled or still building, Core cannot rule a
+        // confirmed transaction out, so that error stays a 500
+        if (isTxNotInMempoolOrChainError(e)) {
+          throw new Error(AFTER_TXID_NOT_FOUND);
+        }
+        throw e;
       }
-      throw e;
     }
     return history.length;
   }

@@ -27,6 +27,13 @@ export function isTxNotFoundError(e: unknown): boolean {
   return (e as { response?: { status?: number } })?.response?.status === 404;
 }
 
+// Whether Core has ruled a transaction out. Of the "No such mempool" answers above, only the one for a synced
+// txindex does: the other two only say the transaction is not in the mempool, while txindex is disabled or
+// still building.
+export function isTxNotInMempoolOrChainError(e: unknown): boolean {
+  return e instanceof Error && e.message.startsWith('No such mempool or blockchain transaction');
+}
+
 // A block lookup fails as "not found" as Core RPC error -5 ("Block not found") in "none"/"electrum"
 // modes, and as electrs's HTTP 404 in esplora mode. Both must map to HTTP 404.
 export function isBlockNotFoundError(e: unknown): boolean {
