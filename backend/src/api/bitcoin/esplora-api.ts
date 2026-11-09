@@ -379,10 +379,17 @@ class FailoverRouter {
     ).then((response) => { host.failures = Math.max(0, host.failures - 1); return response.data; })
       .catch((e) => {
         let fallbackHost = this.fallbackHost;
-        if (e?.response?.status !== 404) {
-          logger.warn(`esplora request failed ${e?.response?.status} ${host.host}${path}`);
+        const status = e?.response?.status;
+        if (status !== 404) {
+          logger.warn(`esplora request failed ${status} ${host.host}${path}`);
           logger.warn(e instanceof Error ? e.message : e);
-          fallbackHost = this.addFailure(host);
+          // the host answered, so a client error such as an invalid address
+          // is the request's fault: counting it would let repeated bad
+          // requests fail a healthy host over. A timeout or rate limit is not.
+          const clientError = status >= 400 && status < 500 && status !== 408 && status !== 429;
+          if (!clientError) {
+            fallbackHost = this.addFailure(host);
+          }
         }
         if (retry && e?.code === 'ECONNREFUSED' && this.multihost) {
           // Retry immediately

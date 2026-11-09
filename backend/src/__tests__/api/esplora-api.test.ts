@@ -97,4 +97,66 @@ describe('Esplora API', () => {
       expect(getAddressLookupError(error)).toEqual({ status: 400, reason: INVALID_ADDRESS_REASON });
     });
   });
+
+  describe('failover between electrs hosts', () => {
+    const BITCOIN_ADDRESS = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
+    let server: http.Server;
+    let status: number;
+    let api: EsploraApi;
+    let router: any;
+    let fallback: any;
+
+    beforeAll(async () => {
+      server = http.createServer((req, res) => {
+        res.writeHead(status, { 'content-type': 'text/plain' });
+        res.end(status === 400 ? 'invalid qbit address HRP: expected qb, got bc' : 'unavailable');
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    });
+
+    afterAll(async () => {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    });
+
+    // the configured host answers every request with `status`, and a fallback
+    // host, which these tests never reach, is configured
+    beforeEach(() => {
+      api = new EsploraApi();
+      router = api['failoverRouter'];
+      Object.assign(router.activeHost, {
+        host: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+        socket: false,
+      });
+      fallback = { host: 'http://127.0.0.1:1', rtts: [], rtt: 0, failures: 0, checked: true, publicDomain: 'https://fallback.invalid', hashes: { lastUpdated: 0 } };
+      router.hosts.push(fallback);
+      router.multihost = true;
+      router.fallbackHost = fallback;
+    });
+
+    test('keeps a host that answers invalid addresses with a 400', async () => {
+      status = 400;
+      const host = router.activeHost;
+
+      for (let i = 0; i < 10; i++) {
+        await expect(api.$getAddress(BITCOIN_ADDRESS)).rejects.toMatchObject({ response: { status: 400 } });
+      }
+
+      expect(router.activeHost).toBe(host);
+      expect(host.failures).toBe(0);
+      expect(host.unreachable).toBeFalsy();
+    });
+
+    test.each([500, 408, 429])('fails a host over after repeated %d answers', async (code) => {
+      status = code;
+      const host = router.activeHost;
+
+      for (let i = 0; i < 6; i++) {
+        await expect(api.$getAddress(BITCOIN_ADDRESS)).rejects.toMatchObject({ response: { status: code } });
+      }
+
+      expect(router.activeHost).toBe(fallback);
+      expect(host.unreachable).toBe(true);
+    });
+  });
 });
