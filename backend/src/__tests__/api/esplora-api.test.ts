@@ -1,6 +1,7 @@
 import http from 'http';
 import { AddressInfo } from 'net';
 import EsploraApi from '../../api/bitcoin/esplora-api';
+import logger from '../../logger';
 import { getAddressLookupError, isTxNotFoundError } from '../../utils/api';
 
 describe('Esplora API', () => {
@@ -32,11 +33,22 @@ describe('Esplora API', () => {
     const LEADING_ZERO_HEX = '0200000001000000';
     const BITCOIN_ADDRESS = 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh';
     const INVALID_ADDRESS_REASON = 'invalid qbit address HRP: expected qb, got bc';
+    // P2MR output of mainnet block 161370
+    const QBIT_ADDRESS = 'qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h';
     let server: http.Server;
     let api: EsploraApi;
+    const requests: string[] = [];
+    // What the server answers to /address-prefix/: status, content type, body
+    let addressPrefixAnswer: [number, string, string];
 
     beforeAll(async () => {
       server = http.createServer((req, res) => {
+        requests.push(req.url || '');
+        if (req.url?.startsWith('/address-prefix/')) {
+          res.writeHead(addressPrefixAnswer[0], { 'content-type': addressPrefixAnswer[1] });
+          res.end(addressPrefixAnswer[2]);
+          return;
+        }
         if (req.url === `/address/${BITCOIN_ADDRESS}`) {
           res.writeHead(400, { 'content-type': 'text/plain' });
           res.end(INVALID_ADDRESS_REASON);
@@ -95,6 +107,46 @@ describe('Esplora API', () => {
       const error = await api.$getAddress(BITCOIN_ADDRESS).catch((e) => e);
       expect(error?.response?.status).toBe(400);
       expect(getAddressLookupError(error)).toEqual({ status: 400, reason: INVALID_ADDRESS_REASON });
+    });
+
+    describe('address prefix search', () => {
+      beforeEach(() => {
+        requests.length = 0;
+        api['failoverRouter'].activeHost.failures = 0;
+        jest.mocked(logger.warn).mockClear();
+      });
+
+      test('returns the addresses qbit-electrs finds when it runs with --address-search', async () => {
+        addressPrefixAnswer = [200, 'application/json', JSON.stringify([QBIT_ADDRESS])];
+
+        await expect(api.$getAddressPrefix('qb1zjrt')).resolves.toStrictEqual([QBIT_ADDRESS]);
+        expect(requests).toStrictEqual(['/address-prefix/qb1zjrt']);
+      });
+
+      test('returns no addresses, and counts no host failure, when qbit-electrs runs without --address-search', async () => {
+        addressPrefixAnswer = [400, 'text/plain', 'address search disabled'];
+
+        await expect(api.$getAddressPrefix('qb1zjrt')).resolves.toStrictEqual([]);
+        expect(logger.warn).not.toHaveBeenCalled();
+        expect(api['failoverRouter'].activeHost.failures).toBe(0);
+      });
+
+      // electrs answers 400 for its own failures too, so only that reason means no index
+      test.each([
+        [400, 'Database error'],
+        [503, 'Service Unavailable'],
+      ])('fails, and logs the failed request, when qbit-electrs answers %d %s', async (status, reason) => {
+        addressPrefixAnswer = [status, 'text/plain', reason];
+
+        const error = await api.$getAddressPrefix('qb1zjrt').catch((e) => e);
+        expect(error?.response?.status).toBe(status);
+        expect(logger.warn).toHaveBeenCalledWith(`esplora request failed ${status} ${api['failoverRouter'].activeHost.host}/address-prefix/qb1zjrt`);
+      });
+
+      test.each(['..', 'qb1/../../blocks/tip/height', 'Qbit Pool'])('returns no addresses for %p without asking qbit-electrs', async (prefix) => {
+        await expect(api.$getAddressPrefix(prefix)).resolves.toStrictEqual([]);
+        expect(requests).toStrictEqual([]);
+      });
     });
   });
 });

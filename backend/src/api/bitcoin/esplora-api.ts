@@ -360,7 +360,10 @@ class FailoverRouter {
     }
   }
 
-  private async $query<T>(method: 'get'| 'post', path, data: any, responseType = 'json', host = this.activeHost, retry: boolean = true): Promise<T> {
+  // isExpectedError picks out errors that a healthy host answers with, as it
+  // answers 404: they reach the caller without being logged or counted as
+  // failures of the host
+  private async $query<T>(method: 'get'| 'post', path, data: any, responseType = 'json', host = this.activeHost, retry: boolean = true, isExpectedError?: (e: unknown) => boolean): Promise<T> {
     let axiosConfig;
     let url;
     if (host.socket) {
@@ -379,27 +382,39 @@ class FailoverRouter {
     ).then((response) => { host.failures = Math.max(0, host.failures - 1); return response.data; })
       .catch((e) => {
         let fallbackHost = this.fallbackHost;
-        if (e?.response?.status !== 404) {
+        if (e?.response?.status !== 404 && !isExpectedError?.(e)) {
           logger.warn(`esplora request failed ${e?.response?.status} ${host.host}${path}`);
           logger.warn(e instanceof Error ? e.message : e);
           fallbackHost = this.addFailure(host);
         }
         if (retry && e?.code === 'ECONNREFUSED' && this.multihost) {
           // Retry immediately
-          return this.$query(method, path, data, responseType, fallbackHost, false);
+          return this.$query(method, path, data, responseType, fallbackHost, false, isExpectedError);
         } else {
           throw e;
         }
       });
   }
 
-  public async $get<T>(path, responseType = 'json', params: any = null): Promise<T> {
-    return this.$query<T>('get', path, params ? { params } : null, responseType);
+  public async $get<T>(path, responseType = 'json', params: any = null, isExpectedError?: (e: unknown) => boolean): Promise<T> {
+    return this.$query<T>('get', path, params ? { params } : null, responseType, this.activeHost, true, isExpectedError);
   }
 
   public async $post<T>(path, data: any, responseType = 'json'): Promise<T> {
     return this.$query<T>('post', path, data, responseType);
   }
+}
+
+// Address characters, up to the length the address routes accept: nothing
+// else can begin an address, and the prefix stays one path segment
+const ADDRESS_PREFIX_REGEX = /^[a-z0-9]{1,120}$/i;
+
+// qbit-electrs searches address prefixes only when it runs with
+// --address-search, and otherwise answers 400 "address search disabled"
+// (src/rest.rs): there are then no suggestions, and the host is healthy
+function isAddressSearchDisabled(e: unknown): boolean {
+  const response = (e as { response?: { status?: number, data?: unknown } })?.response;
+  return response?.status === 400 && response.data === 'address search disabled';
 }
 
 class ElectrsApi implements AbstractBitcoinApi {
@@ -518,8 +533,19 @@ class ElectrsApi implements AbstractBitcoinApi {
     throw new Error('Method getScriptHashUtxos not implemented.');
   }
 
-  $getAddressPrefix(prefix: string): string[] {
-    throw new Error('Method not implemented.');
+  /** @asyncUnsafe */
+  async $getAddressPrefix(prefix: string): Promise<string[]> {
+    if (!ADDRESS_PREFIX_REGEX.test(prefix)) {
+      return [];
+    }
+    try {
+      return await this.failoverRouter.$get<string[]>('/address-prefix/' + prefix, 'json', null, isAddressSearchDisabled);
+    } catch (e) {
+      if (isAddressSearchDisabled(e)) {
+        return [];
+      }
+      throw e;
+    }
   }
 
   $sendRawTransaction(rawTransaction: string): Promise<string> {
