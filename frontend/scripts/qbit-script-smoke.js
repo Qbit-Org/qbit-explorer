@@ -163,8 +163,19 @@ const witnessOutput = (version, value = 100000) => ({
 // control blocks for a single leaf: tapscript is leaf version 0xc0 with a 32-byte internal key,
 // and a P2MR v1 leaf is the control byte 0xc0 with bit 0 set
 const tapscriptControlBlock = `c0${'11'.repeat(32)}`;
-const otherLeafControlBlock = `c2${'11'.repeat(32)}`;
 const p2mrControlBlock = 'c1';
+// leaf version 0xc2, which taproot and P2MR both reserve for upgrades
+const otherLeafControlBlock = `c2${'11'.repeat(32)}`;
+const otherP2mrLeafControlBlock = 'c3';
+// a bare 1-of-1 multisig output, which counts 20 sigops
+const multisigOutput = {
+  scriptpubkey: `5121${'02' + '11'.repeat(32)}51ae`,
+  scriptpubkey_asm: `OP_PUSHNUM_1 OP_PUSHBYTES_33 02${'11'.repeat(32)} OP_PUSHNUM_1 OP_CHECKMULTISIG`,
+  scriptpubkey_type: 'multisig',
+  value: 1000,
+};
+// a transaction whose sigop cost is not reported, as for a decoded raw transaction
+const withoutSigops = (tx) => ({ ...tx, sigops: undefined });
 // a single-key P2MR spend: a PQC signature with its sighash byte, then <pubkey> OP_CHECKSIGPQC
 const p2mrLeafScript = `20${'11'.repeat(32)}b3`;
 const bytes = (length) => '00'.repeat(length);
@@ -227,6 +238,7 @@ const standardnessCases = [
   ['outputs to undefined witness v1 and v2 programs at the 121 bit dust threshold', false, () => standardnessTx({ vout: [witnessOutput(1, 121), witnessOutput(2, 121)] })],
   ['a v3 transaction of 50,000 vB', false, () => ({ ...standardnessTx({ version: 3 }), weight: 50000 })],
   ['a v3 transaction whose sigops adjust its vsize to 50,000 vB', false, () => ({ ...standardnessTx({ version: 3 }), sigops: 2500 })],
+  ['a v3 transaction with unreported sigops whose outputs count 2,500', false, () => withoutSigops(standardnessTx({ version: 3, vout: Array(125).fill(multisigOutput) }))],
   ['a v3 transaction that spends 13 single-key P2MR inputs', false, () => standardnessTx({ version: 3, vin: singleKeyP2mrSpends(13) })],
   ['a v2 transaction that spends 14 single-key P2MR inputs', false, () => standardnessTx({ vin: singleKeyP2mrSpends(14) })],
   ['a P2MR leaf script argument of 16 KiB', false, () => standardnessTx({ vin: [p2mrSpend(bytes(16384), p2mrLeafScript, p2mrControlBlock)] })],
@@ -237,6 +249,7 @@ const standardnessCases = [
   ...[...Array(14)].map((_, i) => [`an output to reserved witness v${i + 3}`, true, () => standardnessTx({ vout: [p2mrOutput(99000), witnessOutput(i + 3)] })]),
   ['a v3 transaction over 50,000 vB', true, () => ({ ...standardnessTx({ version: 3 }), weight: 50001 })],
   ['a v3 transaction whose sigops adjust its vsize over 50,000 vB', true, () => ({ ...standardnessTx({ version: 3 }), sigops: 2501 })],
+  ['a v3 transaction with unreported sigops whose outputs count 2,520', true, () => withoutSigops(standardnessTx({ version: 3, vout: Array(126).fill(multisigOutput) }))],
   ['a v3 transaction that spends 14 single-key P2MR inputs', true, () => standardnessTx({ version: 3, vin: singleKeyP2mrSpends(14) })],
   ['a P2MR spend with an annex', true, () => standardnessTx({ vin: [p2mrSpend(bytes(3681), p2mrLeafScript, p2mrControlBlock, '50')] })],
   ['a P2MR spend without a leaf script', true, () => standardnessTx({ vin: [p2mrSpend(p2mrControlBlock)] })],
@@ -245,8 +258,10 @@ const standardnessCases = [
   ['P2MR leaf script arguments over 128 KiB in total', true, () => standardnessTx({ vin: [p2mrSpend(...Array(8).fill(bytes(16384)), bytes(1), p2mrLeafScript, p2mrControlBlock)] })],
   ['a tapscript argument over 80 bytes', true, () => standardnessTx({ vin: [p2trSpend(bytes(81), '51', tapscriptControlBlock)] })],
   ['a taproot script path spend with an empty control block', true, () => standardnessTx({ vin: [p2trSpend(bytes(1), '51', '')] })],
-  ['a non-standard input after a taproot spend of another leaf version', true, () => standardnessTx({ vin: [p2trSpend(bytes(81), '51', otherLeafControlBlock), standardnessInput(witnessOutput(1))] })],
-  ['a non-standard output after a taproot spend of another leaf version', true, () => standardnessTx({ vin: [p2trSpend(bytes(81), '51', otherLeafControlBlock)], vout: [p2mrOutput(99000), nonStandardOutput] })],
+  ['a taproot script path spend of another leaf version', true, () => standardnessTx({ vin: [p2trSpend(bytes(1), '51', otherLeafControlBlock)] })],
+  ['a P2MR spend of another leaf version', true, () => standardnessTx({ vin: [p2mrSpend(bytes(3681), p2mrLeafScript, otherP2mrLeafControlBlock)] })],
+  ['a non-standard input after a tapscript spend', true, () => standardnessTx({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock), standardnessInput(witnessOutput(1))] })],
+  ['a non-standard output after a tapscript spend', true, () => standardnessTx({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock)], vout: [p2mrOutput(99000), nonStandardOutput] })],
 ];
 
 // the thresholds qbit v1.0.0 pins in src/test/transaction_tests.cpp: every output but P2MR is priced
@@ -313,6 +328,10 @@ for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 100
   assert(mint.vout[1].scriptpubkey_type === 'v2_p2mr', 'mint output 1 is not P2MR');
   assert(!isNonStandard(withPayment(2855), mint.status.block_height, ''), 'P2MR payment at the dust threshold flagged as non-standard');
   assert(isNonStandard(withPayment(2854), mint.status.block_height, ''), 'P2MR payment below the dust threshold not flagged as non-standard');
+  // a P2MR spend of a leaf version reserved for upgrades
+  const [mintSignature, mintLeafScript] = mint.vin[0].witness;
+  const withReservedLeaf = { ...mint, vin: [{ ...mint.vin[0], witness: [mintSignature, mintLeafScript, 'c3'] }] };
+  assert(isNonStandard(withReservedLeaf, mint.status.block_height, ''), 'P2MR spend of a reserved leaf version not flagged as non-standard');
 
   const leafScript = witnessToP2TRScript(etching.vin[0].witness);
   assert(leafScript === etching.vin[0].witness[1], 'P2MR leaf script is not the second-to-last witness item');

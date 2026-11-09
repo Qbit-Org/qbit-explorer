@@ -36,7 +36,7 @@ const DEFAULT_PERMIT_BAREMULTISIG = true;
 const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
 const TRUC_VERSION = 3;
 const TRUC_MAX_VSIZE = 50_000; // qbit policy: sigop-adjusted vsize of any v3 transaction
-const TAPROOT_LEAF_MASK = 0xfe;
+// the only leaf versions qbit relays: BIP 342 tapscript, and P2MR v1, which qbit defines separately
 const TAPROOT_LEAF_TAPSCRIPT = 0xc0;
 const P2MR_LEAF_VERSION = 0xc0;
 
@@ -293,8 +293,18 @@ export function p2mrScriptArgs(witness: string[]): string[] {
   if (!witness?.length) {
     return [];
   }
-  const hasAnnex = witness.length > 1 && witness[witness.length - 1].startsWith('50');
-  return witness.slice(0, Math.max(0, witness.length - (hasAnnex ? 3 : 2)));
+  return witness.slice(0, Math.max(0, witness.length - (hasAnnex(witness) ? 3 : 2)));
+}
+
+// In a taproot or P2MR witness, a last item that starts with 0x50, after at least one other, is an annex
+function hasAnnex(witness: string[]): boolean {
+  return witness.length > 1 && witness[witness.length - 1].startsWith('50');
+}
+
+// The leaf version of a taproot or P2MR script path spend: the first byte of its control block,
+// without bit 0, which taproot uses for parity and P2MR always sets
+function leafVersion(controlBlock: string): number {
+  return parseInt(controlBlock.slice(0, 2), 16) & 0xfe;
 }
 
 export function extractSchnorrSignatures(witnesses: string[]): SigInfo[] {
@@ -549,9 +559,14 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
     return true;
   }
 
+  // sigop cost, as esplora reports it, or counted here when it is missing. Counting needs prevouts
+  // for the sigops of the outputs being spent, so without them the count is a lower bound, and the
+  // sigop limits below can miss a transaction but never flag one wrongly.
+  const sigopCost = tx.sigops ?? countSigops(tx);
+
   // TRUC-violation: a v3 transaction's sigop-adjusted vsize must be within TRUC_MAX_VSIZE
   // (qbit also caps a v3 child of an unconfirmed v3 parent at 45,500 vB, which needs the mempool to check)
-  if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(tx.sigops || 0)) > TRUC_MAX_VSIZE) {
+  if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(sigopCost)) > TRUC_MAX_VSIZE) {
     return true;
   }
 
@@ -561,7 +576,7 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
   }
 
   // bad-txns-too-many-sigops
-  if (tx.sigops && tx.sigops > MAX_STANDARD_TX_SIGOPS_COST) {
+  if (sigopCost > MAX_STANDARD_TX_SIGOPS_COST) {
     return true;
   }
 
@@ -610,36 +625,35 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
       }
       if (taprootInfo.scriptPath) {
         // script path spend
-        // control block is required
-        if (!taprootInfo.controlBlock.length) {
+        // control block is required, and qbit's standard script flags reject every leaf version
+        // but 0xc0 (aka Tapscript, see BIP 342), as reserved for upgrades
+        if (!taprootInfo.controlBlock.length || taprootInfo.scriptPath.leafVersion !== TAPROOT_LEAF_TAPSCRIPT) {
           return true;
         }
-        // with leaf version 0xc0 (aka Tapscript, see BIP 342), the remaining witness items (except for the script)
-        // must be within the MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE limit
-        if (taprootInfo.scriptPath.leafVersion === TAPROOT_LEAF_TAPSCRIPT
-          && taprootInfo.stack.some(item => item.length / 2 > MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE)) {
+        // remaining witness items (except for the script) must be within MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE limit
+        if (taprootInfo.stack.some(item => item.length / 2 > MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE)) {
           return true;
         }
       }
     }
     if (['v2_p2mr', 'witness_v2_p2mr'].includes(vin.prevout?.scriptpubkey_type || '') && vin.witness?.length) {
       // P2MR has no key path, so it needs a leaf script and a control block; annex is non-standard
-      if (vin.witness.length < 2 || vin.witness[vin.witness.length - 1].startsWith('50')) {
+      if (vin.witness.length < 2 || hasAnnex(vin.witness)) {
         return true;
       }
       const controlBlock = vin.witness[vin.witness.length - 1];
-      if (!controlBlock.length) {
+      // control block is required, and qbit's standard script flags reject every P2MR leaf version
+      // but 0xc0, as reserved for upgrades
+      if (!controlBlock.length || leafVersion(controlBlock) !== P2MR_LEAF_VERSION) {
         return true;
       }
-      // with leaf version 0xc0, the remaining witness items (except for the script) must be within the
-      // MAX_STANDARD_P2MR_STACK_ITEM_SIZE limit, and together within MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES
-      if ((parseInt(controlBlock.slice(0, 2), 16) & TAPROOT_LEAF_MASK) === P2MR_LEAF_VERSION) {
-        let stackBytes = 0;
-        for (const item of vin.witness.slice(0, -2)) {
-          stackBytes += item.length / 2;
-          if (item.length / 2 > MAX_STANDARD_P2MR_STACK_ITEM_SIZE || stackBytes > MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES) {
-            return true;
-          }
+      // leaf script arguments must be within the MAX_STANDARD_P2MR_STACK_ITEM_SIZE limit, and together
+      // within MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES
+      let stackBytes = 0;
+      for (const item of p2mrScriptArgs(vin.witness)) {
+        stackBytes += item.length / 2;
+        if (item.length / 2 > MAX_STANDARD_P2MR_STACK_ITEM_SIZE || stackBytes > MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES) {
+          return true;
         }
       }
     }
@@ -963,7 +977,7 @@ export function getTransactionFlags(tx: Transaction, cpfpInfo?: CpfpInfo, replac
           flags |= TransactionFlags.inscription;
         }
         // and P2MR spends can carry an annex, as taproot spends can
-        if (vin.witness?.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50')) {
+        if (vin.witness?.length && hasAnnex(vin.witness)) {
           flags |= TransactionFlags.annex;
         }
       } break;

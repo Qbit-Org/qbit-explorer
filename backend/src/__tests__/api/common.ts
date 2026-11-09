@@ -209,8 +209,18 @@ describe('Common', () => {
     // a single-key P2MR spend: a PQC signature with its sighash byte, then <pubkey> OP_CHECKSIGPQC
     const p2mrLeafScript = `20${'11'.repeat(32)}b3`;
     const singleKeyP2mrSpends = (inputs: number): IEsploraApi.Vin[] => Array.from({ length: inputs }, () => p2mrSpend(bytes(3_681), p2mrLeafScript, p2mrControlBlock));
-    // another taproot leaf version, which has no stack item limit
+    // leaf version 0xc2, which taproot and P2MR both reserve for upgrades
     const otherLeafControlBlock = `c2${'11'.repeat(32)}`;
+    const otherP2mrLeafControlBlock = 'c3';
+    // a bare 1-of-1 multisig output, which counts 20 sigops
+    const multisigOutput: IEsploraApi.Vout = {
+      scriptpubkey: `5121${'02' + '11'.repeat(32)}51ae`,
+      scriptpubkey_asm: `OP_PUSHNUM_1 OP_PUSHBYTES_33 02${'11'.repeat(32)} OP_PUSHNUM_1 OP_CHECKMULTISIG`,
+      scriptpubkey_type: 'multisig',
+      value: 1_000,
+    };
+    // a transaction whose sigop cost is not reported, as for a confirmed transaction from a non-esplora backend
+    const withoutSigops = (tx: TransactionExtended): TransactionExtended => ({ ...tx, sigops: undefined });
 
     const standardCases: [string, () => TransactionExtended][] = [
       ['a v3 (TRUC) transaction', () => qbitTransaction({ version: 3 })],
@@ -224,6 +234,7 @@ describe('Common', () => {
       ['outputs to undefined witness v1 and v2 programs at the 121 bit dust threshold', () => qbitTransaction({ vout: [witnessOutput(1, 121), witnessOutput(2, 121)] })],
       ['a v3 transaction of 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), weight: 50_000 })],
       ['a v3 transaction whose sigops adjust its vsize to 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), sigops: 2_500 })],
+      ['a v3 transaction with unreported sigops whose outputs count 2,500', () => withoutSigops(qbitTransaction({ version: 3, vout: Array(125).fill(multisigOutput) }))],
       ['a v3 transaction that spends 13 single-key P2MR inputs', () => qbitTransaction({ version: 3, vin: singleKeyP2mrSpends(13) })],
       ['a v2 transaction that spends 14 single-key P2MR inputs', () => qbitTransaction({ vin: singleKeyP2mrSpends(14) })],
       ['a P2MR leaf script argument of 16 KiB', () => qbitTransaction({ vin: [p2mrSpend(bytes(16_384), p2mrLeafScript, p2mrControlBlock)] })],
@@ -243,6 +254,7 @@ describe('Common', () => {
       ...[...Array(14)].map((_, i): [string, () => TransactionExtended] => [`an output to reserved witness v${i + 3}`, () => qbitTransaction({ vout: [p2mrOutput(99_000), witnessOutput(i + 3)] })]),
       ['a v3 transaction over 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), weight: 50_001 })],
       ['a v3 transaction whose sigops adjust its vsize over 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), sigops: 2_501 })],
+      ['a v3 transaction with unreported sigops whose outputs count 2,520', () => withoutSigops(qbitTransaction({ version: 3, vout: Array(126).fill(multisigOutput) }))],
       ['a v3 transaction that spends 14 single-key P2MR inputs', () => qbitTransaction({ version: 3, vin: singleKeyP2mrSpends(14) })],
       ['a P2MR spend with an annex', () => qbitTransaction({ vin: [p2mrSpend(bytes(3_681), p2mrLeafScript, p2mrControlBlock, '50')] })],
       ['a P2MR spend without a leaf script', () => qbitTransaction({ vin: [p2mrSpend(p2mrControlBlock)] })],
@@ -251,8 +263,10 @@ describe('Common', () => {
       ['P2MR leaf script arguments over 128 KiB in total', () => qbitTransaction({ vin: [p2mrSpend(...Array(8).fill(bytes(16_384)), bytes(1), p2mrLeafScript, p2mrControlBlock)] })],
       ['a tapscript argument over 80 bytes', () => qbitTransaction({ vin: [p2trSpend(bytes(81), '51', tapscriptControlBlock)] })],
       ['a taproot script path spend with an empty control block', () => qbitTransaction({ vin: [p2trSpend(bytes(1), '51', '')] })],
-      ['a non-standard input after a taproot spend of another leaf version', () => qbitTransaction({ vin: [p2trSpend(bytes(81), '51', otherLeafControlBlock), input(witnessOutput(1))] })],
-      ['a non-standard output after a taproot spend of another leaf version', () => qbitTransaction({ vin: [p2trSpend(bytes(81), '51', otherLeafControlBlock)], vout: [p2mrOutput(99_000), nonStandardOutput] })],
+      ['a taproot script path spend of another leaf version', () => qbitTransaction({ vin: [p2trSpend(bytes(1), '51', otherLeafControlBlock)] })],
+      ['a P2MR spend of another leaf version', () => qbitTransaction({ vin: [p2mrSpend(bytes(3_681), p2mrLeafScript, otherP2mrLeafControlBlock)] })],
+      ['a non-standard input after a tapscript spend', () => qbitTransaction({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock), input(witnessOutput(1))] })],
+      ['a non-standard output after a tapscript spend', () => qbitTransaction({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock)], vout: [p2mrOutput(99_000), nonStandardOutput] })],
     ];
 
     const originalNetwork = config.MEMPOOL.NETWORK;
@@ -322,6 +336,12 @@ describe('Common', () => {
         expect(flags & TransactionFlags.annex).toBe(TransactionFlags.annex);
         expect(flags & TransactionFlags.nonstandard).toBe(TransactionFlags.nonstandard);
         expect(BigInt(Common.getTransactionFlags(mint, mint.status.block_height)) & TransactionFlags.annex).toBe(0n);
+      });
+
+      test('flags a P2MR spend of a leaf version reserved for upgrades', () => {
+        const [signature, leafScript] = mint.vin[0].witness;
+
+        expect(Common.isNonStandard(withWitness(mint, [signature, leafScript, 'c3']), mint.status.block_height)).toBe(true);
       });
 
       test('flags P2MR leaf script arguments over the stack item limit', () => {

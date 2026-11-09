@@ -26,19 +26,20 @@ const MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600;
 const MAX_STANDARD_SCRIPTSIG_SIZE = 1650;
 const MAX_SCRIPT_SIZE = 10_000;
 const DUST_RELAY_TX_FEE_SATS_PER_KVB = 750; // qbit policy: 0.75 sat/vB
+const PQC_SIG_SIZE = 3_680; // qbit bounded SLH-DSA signature bytes
 // qbit policy: with no witness discount, the dust threshold prices every output but P2MR with the
 // 148-byte legacy spend, and P2MR with a single-key spend: outpoint, empty scriptsig and sequence,
-// then a 3-item witness of a 3,681-byte PQC signature with its sighash byte, the 34-byte
+// then a 3-item witness of a PQC signature with its sighash byte, the 34-byte
 // <pubkey> OP_CHECKSIGPQC leaf script and the 1-byte control block, each with its length
 const DUST_SPEND_SIZE = 148;
-const P2MR_DUST_SPEND_SIZE = 41 + 1 + (3 + 3_681) + (1 + 34) + (1 + 1); // 3,763 bytes
+const P2MR_DUST_SPEND_SIZE = 41 + 1 + (3 + PQC_SIG_SIZE + 1) + (1 + 34) + (1 + 1); // 3,763 bytes
 const MAX_OP_RETURN_RELAY = 200_000; // qbit policy: -datacarriersize default, shared by all OP_RETURN outputs
 const MAX_DUST_OUTPUTS_PER_TX = 1; // qbit policy: ephemeral dust allows one dust output
 const DEFAULT_PERMIT_BAREMULTISIG = true;
 const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
 const TRUC_VERSION = 3;
 const TRUC_MAX_VSIZE = 50_000; // qbit policy: sigop-adjusted vsize of any v3 transaction
-const TAPROOT_LEAF_MASK = 0xfe;
+// the only leaf versions qbit relays: BIP 342 tapscript, and P2MR v1, which qbit defines separately
 const TAPROOT_LEAF_TAPSCRIPT = 0xc0;
 const P2MR_LEAF_VERSION = 0xc0;
 
@@ -223,9 +224,14 @@ export class Common {
       return true;
     }
 
+    // sigop cost, as esplora reports it, or counted here when it is missing. Counting needs prevouts
+    // for the sigops of the outputs being spent, so without them the count is a lower bound, and the
+    // sigop limits below can miss a transaction but never flag one wrongly.
+    const sigopCost = tx.sigops ?? transactionUtils.countSigops(tx);
+
     // TRUC-violation: a v3 transaction's sigop-adjusted vsize must be within TRUC_MAX_VSIZE
     // (qbit also caps a v3 child of an unconfirmed v3 parent at 45,500 vB, which needs the mempool to check)
-    if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(tx.sigops || 0)) > TRUC_MAX_VSIZE) {
+    if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(sigopCost)) > TRUC_MAX_VSIZE) {
       return true;
     }
 
@@ -235,7 +241,7 @@ export class Common {
     }
 
     // bad-txns-too-many-sigops
-    if (tx.sigops && tx.sigops > MAX_STANDARD_TX_SIGOPS_COST) {
+    if (sigopCost > MAX_STANDARD_TX_SIGOPS_COST) {
       return true;
     }
 
@@ -277,44 +283,42 @@ export class Common {
       }
       // bad-witness-nonstandard
       if (vin.prevout?.scriptpubkey_type === 'v1_p2tr' && vin.witness?.length) {
-        const hasAnnex = vin.witness.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50');
         // annex is non-standard
-        if (hasAnnex) {
+        if (Common.hasAnnex(vin.witness)) {
           return true;
         }
         if (vin.witness.length > 1) {
           // script path spend
           const controlBlock = vin.witness[vin.witness.length - 1];
-          // control block is required
-          if (!controlBlock.length) {
+          // control block is required, and qbit's standard script flags reject every leaf version
+          // but 0xc0 (aka Tapscript, see BIP 342), as reserved for upgrades
+          if (!controlBlock.length || Common.leafVersion(controlBlock) !== TAPROOT_LEAF_TAPSCRIPT) {
             return true;
           }
-          // with leaf version 0xc0 (aka Tapscript, see BIP 342), the remaining witness items (except for the script)
-          // must be within the MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE limit
-          if ((parseInt(controlBlock.slice(0, 2), 16) & TAPROOT_LEAF_MASK) === TAPROOT_LEAF_TAPSCRIPT
-            && vin.witness.slice(0, -2).some(item => item.length / 2 > MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE)) {
+          // remaining witness items (except for the script) must be within MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE limit
+          if (vin.witness.slice(0, -2).some(item => item.length / 2 > MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE)) {
             return true;
           }
         }
       }
       if (['v2_p2mr', 'witness_v2_p2mr'].includes(vin.prevout?.scriptpubkey_type || '') && vin.witness?.length) {
         // P2MR has no key path, so it needs a leaf script and a control block; annex is non-standard
-        if (vin.witness.length < 2 || vin.witness[vin.witness.length - 1].startsWith('50')) {
+        if (vin.witness.length < 2 || Common.hasAnnex(vin.witness)) {
           return true;
         }
         const controlBlock = vin.witness[vin.witness.length - 1];
-        if (!controlBlock.length) {
+        // control block is required, and qbit's standard script flags reject every P2MR leaf version
+        // but 0xc0, as reserved for upgrades
+        if (!controlBlock.length || Common.leafVersion(controlBlock) !== P2MR_LEAF_VERSION) {
           return true;
         }
-        // with leaf version 0xc0, the remaining witness items (except for the script) must be within the
-        // MAX_STANDARD_P2MR_STACK_ITEM_SIZE limit, and together within MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES
-        if ((parseInt(controlBlock.slice(0, 2), 16) & TAPROOT_LEAF_MASK) === P2MR_LEAF_VERSION) {
-          let stackBytes = 0;
-          for (const item of vin.witness.slice(0, -2)) {
-            stackBytes += item.length / 2;
-            if (item.length / 2 > MAX_STANDARD_P2MR_STACK_ITEM_SIZE || stackBytes > MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES) {
-              return true;
-            }
+        // remaining witness items (except for the script) must be within the MAX_STANDARD_P2MR_STACK_ITEM_SIZE
+        // limit, and together within MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES
+        let stackBytes = 0;
+        for (const item of vin.witness.slice(0, -2)) {
+          stackBytes += item.length / 2;
+          if (item.length / 2 > MAX_STANDARD_P2MR_STACK_ITEM_SIZE || stackBytes > MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES) {
+            return true;
           }
         }
       }
@@ -419,6 +423,17 @@ export class Common {
       };
     }
     return false;
+  }
+
+  // In a taproot or P2MR witness, a last item that starts with 0x50, after at least one other, is an annex
+  static hasAnnex(witness: string[]): boolean {
+    return witness.length > 1 && witness[witness.length - 1].startsWith('50');
+  }
+
+  // The leaf version of a taproot or P2MR script path spend: the first byte of its control block,
+  // without bit 0, which taproot uses for parity and P2MR always sets
+  static leafVersion(controlBlock: string): number {
+    return parseInt(controlBlock.slice(0, 2), 16) & 0xfe;
   }
 
   // Individual versioned standardness rules
@@ -744,8 +759,7 @@ export class Common {
             if (vin.witness?.length) {
               flags = Common.isInscription(vin, flags);
               // and P2MR spends can carry an annex, as taproot spends can
-              const hasAnnex = vin.witness.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50');
-              if (hasAnnex) {
+              if (Common.hasAnnex(vin.witness)) {
                 flags |= TransactionFlags.annex;
               }
             }
@@ -755,8 +769,7 @@ export class Common {
             flags |= TransactionFlags.p2tr;
             if (vin.witness?.length) {
               flags = Common.isInscription(vin, flags);
-              const hasAnnex = vin.witness.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50');
-              if (hasAnnex) {
+              if (Common.hasAnnex(vin.witness)) {
                 flags |= TransactionFlags.annex;
               }
             }
