@@ -9,6 +9,7 @@ import { Common } from '../common';
 import { SubmitPackageResult, TestMempoolAcceptResult } from './bitcoin-api.interface';
 import os from 'os';
 import { bitcoinCoreApi } from './bitcoin-api-factory';
+import { isEsploraRequestError } from '../../utils/api';
 interface FailoverHost {
   host: string,
   rtts: number[],
@@ -239,12 +240,20 @@ class FailoverRouter {
     logger.warn(`Switching esplora host to ${this.activeHost.host}`);
   }
 
+  // the host that failed is not always the active one: it can be the fallback
+  // a refused request was retried on, or a host replaced while the request
+  // was in flight
   private addFailure(host: FailoverHost): FailoverHost {
     host.failures++;
     if (host.failures > 5 && this.multihost) {
-      logger.warn(`🚨🚨🚨 Too many esplora failures on ${this.activeHost.host}, falling back to next best alternative 🚨🚨🚨`);
-      this.activeHost.unreachable = true;
-      this.electHost();
+      logger.warn(`🚨🚨🚨 Too many esplora failures on ${host.host}, falling back to next best alternative 🚨🚨🚨`);
+      host.unreachable = true;
+      if (host === this.activeHost) {
+        this.electHost();
+      } else {
+        host.failures = 0;
+        this.updateFallback();
+      }
       return this.activeHost;
     } else {
       return this.fallbackHost;
@@ -379,17 +388,14 @@ class FailoverRouter {
     ).then((response) => { host.failures = Math.max(0, host.failures - 1); return response.data; })
       .catch((e) => {
         let fallbackHost = this.fallbackHost;
-        const status = e?.response?.status;
-        if (status !== 404) {
-          logger.warn(`esplora request failed ${status} ${host.host}${path}`);
+        if (!isEsploraRequestError(e)) {
+          logger.warn(`esplora request failed ${e?.response?.status} ${host.host}${path}`);
           logger.warn(e instanceof Error ? e.message : e);
-          // the host answered, so a client error such as an invalid address
-          // is the request's fault: counting it would let repeated bad
-          // requests fail a healthy host over. A timeout or rate limit is not.
-          const clientError = status >= 400 && status < 500 && status !== 408 && status !== 429;
-          if (!clientError) {
-            fallbackHost = this.addFailure(host);
-          }
+          fallbackHost = this.addFailure(host);
+        } else {
+          // the request's own fault, such as an unknown txid or an invalid
+          // address, which says nothing about the host
+          logger.debug(`esplora request rejected ${e?.response?.status} ${host.host}${path}`);
         }
         if (retry && e?.code === 'ECONNREFUSED' && this.multihost) {
           // Retry immediately

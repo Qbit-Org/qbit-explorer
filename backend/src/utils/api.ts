@@ -46,8 +46,8 @@ export function isBlockNotFoundError(e: unknown): boolean {
 // nearly every failure, including its own database and node errors, so only these are the request's fault:
 // - 400 "invalid qbit ...", "qbit address ..." or "qbit P2MR address ..." (qbit_address::Error): the address
 //   does not parse. Other "qbit ..." errors are electrs's own, such as a block it cannot decode.
-// - 400 "Too many ..." (TooManyUtxos): more unspent outputs than electrs is configured to serve, which maps
-//   to the 413 the electrum backend's "too long" gets.
+// - 400 "Too many ..." (TooManyUtxos, TooManyTxs): more unspent outputs or history than electrs is configured
+//   to serve, which maps to the 413 the electrum backend's "too long" gets.
 // - 422 "after_txid not found": the transaction left the mempool, and the address page reloads on it.
 //
 // Returns the status and reason to answer with, or undefined for any other error.
@@ -57,7 +57,7 @@ export function getAddressLookupError(e: unknown): { status: number, reason: str
   }
   const response = (e as { response?: { status?: number, data?: unknown } })?.response;
   const reason = typeof response?.data === 'string' ? response.data : '';
-  if (response?.status === 422) {
+  if (response?.status === 422 && reason === 'after_txid not found') {
     return { status: 422, reason };
   }
   if (response?.status === 400 && /^(invalid qbit |qbit (P2MR )?address )/.test(reason)) {
@@ -67,4 +67,11 @@ export function getAddressLookupError(e: unknown): { status: number, reason: str
     return { status: 413, reason };
   }
   return undefined;
+}
+
+// Whether an esplora request failed because of the request: electrs has no such object (404), or rejected
+// the request in a way getAddressLookupError recognizes. Anything else is the host's failure, including
+// electrs's other 400s and any answer from a proxy or allowlist in front of it.
+export function isEsploraRequestError(e: unknown): boolean {
+  return (e as { response?: { status?: number } })?.response?.status === 404 || getAddressLookupError(e) !== undefined;
 }
