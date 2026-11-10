@@ -97,8 +97,10 @@ signs upstream's contributor license agreement. qbit-explorer has no CLA (see
 tree. If a pick conflicts on one of those files, resolve the conflict with
 `git rm`. Before you push, check that `git ls-files contributors` prints
 nothing, and remove anything it lists in another commit. CI's Repository checks
-job fails a pull request that still has them. Pull requests are squash-merged,
-so files removed in a later commit never reach `main`.
+job fails a pull request that still has them. A maintainer squashes a pull
+request into one commit before merging it, so files removed in a later commit
+never reach `main`. Nothing enforces the squash, so don't merge such a pull
+request as it is.
 
 ## License
 
