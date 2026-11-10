@@ -42,6 +42,7 @@ import bitcoinSecondClient from './api/bitcoin/bitcoin-second-client';
 import aboutRoutes from './api/about.routes';
 import mempoolBlocks from './api/mempool-blocks';
 import stratumApi from './api/services/stratum';
+import { rpcCookieProblems } from './api/bitcoin/rpc-cookie';
 
 class Server {
   private wss: WebSocket.Server | undefined;
@@ -66,7 +67,7 @@ class Server {
     }
 
     if (cluster.isPrimary) {
-      logger.notice(`Mempool Server (Master) is running on port ${config.MEMPOOL.HTTP_PORT} (${backendInfo.getShortCommitHash()})`);
+      logger.notice(`Mempool Server (Master) is running on ${config.MEMPOOL.HTTP_HOST ? config.MEMPOOL.HTTP_HOST + ' ' : ''}port ${config.MEMPOOL.HTTP_PORT} (${backendInfo.getShortCommitHash()})`);
 
       const numCPUs = config.MEMPOOL.SPAWN_CLUSTER_PROCS;
       for (let i = 0; i < numCPUs; i++) {
@@ -109,6 +110,12 @@ class Server {
       console.error(`unhandledRejection:`, reason, promise);
       this.forceExit('unhandledRejection', 1);
     });
+
+    // with COOKIE set, RPC calls never fall back to a password, so say up
+    // front when the cookie can't be read
+    for (const problem of rpcCookieProblems(config)) {
+      logger.err(problem);
+    }
 
     if (config.MEMPOOL.BACKEND === 'esplora') {
       bitcoinApi.startHealthChecks();
@@ -196,11 +203,12 @@ class Server {
       void this.$runLightningBackend();
     }
 
-    this.server.listen(config.MEMPOOL.HTTP_PORT, () => {
+    // without a host, Node listens on every interface
+    this.server.listen(config.MEMPOOL.HTTP_PORT, config.MEMPOOL.HTTP_HOST || undefined, () => {
       if (worker) {
         logger.info(`Mempool Server worker #${process.pid} started`);
       } else {
-        logger.notice(`Mempool Server is running on port ${config.MEMPOOL.HTTP_PORT}`);
+        logger.notice(`Mempool Server is running on ${config.MEMPOOL.HTTP_HOST ? config.MEMPOOL.HTTP_HOST + ' ' : ''}port ${config.MEMPOOL.HTTP_PORT}`);
       }
     });
     // nginx (1.29.7+) keeps idle upstream connections for 60s; outlast that so it never

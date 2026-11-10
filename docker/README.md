@@ -88,8 +88,9 @@ Configure `qbit.conf`:
 ```ini
 server=1
 txindex=1
-rpcuser=mempool
-rpcpassword=mempool
+# the RPC cookie, in a directory of its own for the backend container to mount
+rpccookiefile=/var/lib/qbit/rpc/.cookie
+rpccookieperms=group
 
 # qbitd accepts RPC only on localhost unless both rpcbind and rpcallowip are
 # set. Bind to the address the containers use (CORE_RPC_HOST below) and allow
@@ -100,10 +101,23 @@ rpcallowip=127.0.0.1
 rpcallowip=172.16.0.0/12
 ```
 
-Set the RPC address and credentials for the `api` service in
+With no `rpcpassword` set, qbitd writes an RPC cookie each time it starts. The
+backend authenticates with it, so no RPC password goes into
+`docker-compose.yml`. qbitd doesn't create the cookie's directory, so create it
+for the user qbitd runs as, here the `qbit` user of qbit's systemd unit:
+
+```bash
+sudo install -d -o qbit -g qbit -m 0750 /var/lib/qbit/rpc
+```
+
+Set the RPC address and the cookie for the `api` service in
 `docker-compose.yml`. `CORE_RPC_HOST` must be an address of the Docker host that
 the containers can reach. The `172.27.0.1` in the file is a placeholder; the
-host's `docker0` address, usually `172.17.0.1`, is a common choice.
+host's `docker0` address, usually `172.17.0.1`, is a common choice. Mount the
+cookie's directory read-only, not the cookie itself: qbitd replaces the file at
+every start, and a file mount would keep showing the old one. The container
+runs as UID 1000, so unless qbitd does too, add the GID of the group that owns
+the cookie (`getent group qbit`) with `group_add`:
 
 ```yaml
   api:
@@ -111,9 +125,23 @@ host's `docker0` address, usually `172.17.0.1`, is a common choice.
       MEMPOOL_BACKEND: "none"
       CORE_RPC_HOST: "172.17.0.1"
       CORE_RPC_PORT: "8352"
-      CORE_RPC_USERNAME: "mempool"
-      CORE_RPC_PASSWORD: "mempool"
+      CORE_RPC_COOKIE: "true"
+      CORE_RPC_COOKIE_PATH: "/qbit-rpc/.cookie"
+    group_add:
+      - "999" # the qbit group's GID
+    volumes:
+      - ./data:/backend/cache
+      - /var/lib/qbit/rpc:/qbit-rpc:ro
 ```
+
+Set both cookie variables. The image leaves `CORE_RPC_COOKIE_PATH` empty, so
+with `CORE_RPC_COOKIE` alone the backend has no cookie to read: it logs an error
+at startup, and RPC calls fail. It doesn't fall back to `CORE_RPC_USERNAME` and
+`CORE_RPC_PASSWORD`. To use a password, as the sample `docker-compose.yml`
+does, add an `rpcauth` line to `qbit.conf` (qbit's
+[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
+prints one) and set `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD` instead of the
+cookie variables.
 
 Once qbitd is running and synced, start the stack from `docker/`:
 
@@ -127,8 +155,15 @@ The explorer listens on port 80 of the host, at http://localhost.
 
 [qbit-electrs](https://github.com/Qbit-Org/qbit-electrs) serves an
 Esplora-compatible REST API, on port 3000 by default for mainnet. It must
-listen (`--http-addr`) on an address the containers can reach. Point the
-backend at it:
+listen (`--http-addr`) on an address the containers can reach. With the
+`qbit.conf` above it uses the same cookie: start it with
+`--daemon-dir /var/lib/qbit/rpc` and `--jsonrpc-import`, so that it reads
+`.cookie` from that directory and fetches blocks over RPC. Run it as a user in
+the `qbit` group, so that it can read the cookie. qbit-electrs uses an
+explicit `--daemon-dir` as given on every chain, and adds the chain's
+subdirectory, such as `testnet4/`, only to its default. Its `--cookie` option
+takes the credentials themselves, which `ps` shows and which go stale when
+qbitd restarts, so don't use it here. Point the backend at it:
 
 ```yaml
   api:

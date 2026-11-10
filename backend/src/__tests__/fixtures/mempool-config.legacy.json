@@ -1,0 +1,6 @@
+{
+  "MEMPOOL": {
+    "NETWORK": "testnet4",
+    "HTTP_PORT": 18990
+  }
+}

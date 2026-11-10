@@ -62,6 +62,11 @@ export class SeoService {
   }
 
   setEnterpriseTitle(title: string, override: boolean = false) {
+    // a branding object without a title keeps the default one, instead of
+    // titling every page "undefined"
+    if (!title) {
+      return;
+    }
     if (override) {
       this.baseTitle = title;
     } else {

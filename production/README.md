@@ -44,12 +44,15 @@ the reference nginx configuration would expose.
 | regtest | 18460 | 18452 | `qbitregtest` | 3002 | `mempool_regtest` |
 
 The REST ports are qbit-electrs defaults. On every network the backend listens
-on 8999, where the reference nginx configuration sends API requests. Keep RPC,
-REST and MariaDB on localhost. The backend has no bind-address setting: it
-listens on port 8999 on every interface, even when `MEMPOOL.UNIX_SOCKET_PATH`
-is also set. Block port 8999 in the host firewall and let only nginx reach it.
-Only nginx and, if you want to serve peers, the qbitd P2P port should accept
-outside connections.
+on `127.0.0.1` port 8999, where the reference nginx configuration sends API
+requests: the templates set `MEMPOOL.HTTP_HOST` to `127.0.0.1`. That setting
+takes an IP address, such as `127.0.0.1` or `::1`, not a host name, and applies
+to that TCP port only. `MEMPOOL.UNIX_SOCKET_PATH`, if set, opens a separate
+listener on that socket, next to the TCP port. Without `HTTP_HOST`, or with
+`""`, the backend listens on port 8999 on every interface, so block the port in
+the host firewall and let only nginx reach it. Keep RPC, REST and MariaDB on
+localhost too. Only nginx and, if you want to serve peers, the qbitd P2P port
+should accept outside connections.
 
 ## Requirements
 
@@ -82,7 +85,6 @@ which is the default. Add the following to `qbit.conf`:
 ```ini
 server=1
 txindex=1
-rpcauth=mempool:<salt>$<hash>
 rpccookiefile=/var/lib/qbit/.cookie
 rpccookieperms=group
 
@@ -91,11 +93,8 @@ rpccookieperms=group
 #chain=regtest
 ```
 
-Generate the `rpcauth` line for the backend with qbit's
-[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py),
-which needs only Python 3: `python3 rpcauth.py mempool`. It prints the line and
-the password, and qbitd stores only the hash. Leave
-`rpcpassword` unset, so that qbitd also writes an RPC cookie for qbit-electrs.
+Leave `rpcpassword` unset, so that qbitd writes an RPC cookie. The backend and
+qbit-electrs both authenticate with it, so no RPC password is stored anywhere.
 The two `rpccookie` settings put that cookie at a fixed path, whichever chain
 the host runs, and let the `qbit` group read it. By default it would sit in the
 chain's subdirectory, such as `testnet4/`, which qbitd creates owner-only. RPC
@@ -104,7 +103,7 @@ binds to localhost by default and uses the qbit port for the selected chain.
 Run `qbit-cli` with `-conf=/etc/qbit/qbit.conf`, as root or as a member of the
 `qbit` group, so that it uses the same chain and cookie. Group members also
 need to read `qbit.conf`, so give it to the `qbit` user and group, as qbit's init
-guide suggests. The settings above hold no password, only the `rpcauth` hash:
+guide suggests. The settings above hold no password:
 
 ```sh
 sudo chown qbit:qbit /etc/qbit/qbit.conf
@@ -179,16 +178,50 @@ cp ../production/mempool-config.mainnet.json mempool-config.json
 chmod 600 mempool-config.json
 ```
 
-In `mempool-config.json`, replace `__QBIT_RPC_USER__` and `__QBIT_RPC_PASS__`
-with the `rpcauth` user name and password, and replace the `__MEMPOOL_*_USER__`
-and `__MEMPOOL_*_PASS__` placeholders with the MariaDB user and password. The
-file holds both passwords, so keep it readable only by the user that runs the
+In `mempool-config.json`, replace the `__MEMPOOL_*_USER__` and
+`__MEMPOOL_*_PASS__` placeholders with the MariaDB user and password. The file
+holds that password, so keep it readable only by the user that runs the
 backend. Clone, build and start the backend as that same user, because it
 writes into its own checkout while it runs: its disk cache to `backend/cache`, a
 PID file to `backend/dist` unless `DATABASE.PID_DIR` is set, and any
 `MEMPOOL.EXTERNAL_ASSETS` downloads to `backend/`. The backend reads
-`backend/mempool-config.json`, or the file named by `MEMPOOL_CONFIG_FILE` (an
-absolute path) when that variable is set. Start it with:
+`backend/mempool-config.json`, or the file named by `MEMPOOL_CONFIG_FILE` when
+that variable is set. A relative `MEMPOOL_CONFIG_FILE` is resolved against the
+directory the backend starts in, which is `backend/` for the npm scripts below.
+Earlier versions resolved it against `backend/dist/`. If no file exists at the
+new location but one does there, the backend reads that one and logs a
+deprecation warning.
+
+The backend authenticates to qbitd with the RPC cookie at
+`/var/lib/qbit/.cookie` (`CORE_RPC.COOKIE` and `CORE_RPC.COOKIE_PATH`), so add
+its user to the `qbit` group, as for qbit-electrs, and log in again for that to
+take effect:
+
+```sh
+sudo usermod -aG qbit <backend user>
+```
+
+qbitd writes a new cookie each time it starts. When qbitd turns a call away
+because it carries the old cookie, the backend reads the file again and sends
+the call once more with the new one, so a qbitd restart needs no backend
+restart.
+
+With `CORE_RPC.COOKIE` true, the backend never falls back to
+`CORE_RPC.USERNAME` and `CORE_RPC.PASSWORD`. If it can't read the cookie, it
+logs an error at startup that names the path and the fix, and RPC calls fail
+until it can.
+
+**Upgrading from the earlier templates:** they authenticated with an `rpcauth`
+user name and password, filled in through the `__QBIT_RPC_USER__` and
+`__QBIT_RPC_PASS__` placeholders. The templates no longer have those
+placeholders, so tooling that fills them in now does nothing. Either add the
+backend's user to the `qbit` group as above, or keep the password: set
+`CORE_RPC.COOKIE` to `false`, set `CORE_RPC.USERNAME` and `CORE_RPC.PASSWORD`,
+and keep the `rpcauth` line in `qbit.conf`. qbit's
+[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
+generates that line.
+
+Start the backend with:
 
 ```sh
 npm run start-production
@@ -261,14 +294,12 @@ The frontend can also load a customization file at build time. Set
   `difficulty`, `goggles`, `incoming`, `replacements`, `blocks`,
   `transactions`, and `balance`, `address` and `addressTransactions`, which take
   `props.address`.
-- `enterprise` and `branding`: upstream's white-label mode. In this fork it
-  hides the network selector on every page. Everything else waits until a
-  visitor opens a transaction, tracker or preview page, and lasts until the next
-  full page load. At that point it sets the page title from `branding`, shows
-  the logo on the preview and tracker pages, sets `ACCELERATOR`,
-  `TESTNET_ENABLED`, `SIGNET_ENABLED`, `TESTNET4_ENABLED` and `REGTEST_ENABLED`
-  to `false`, and clears `MAINNET_EXPLORER_URL` and `TESTNET4_EXPLORER_URL`. It
-  does this even when one of those networks is the instance's own
-  `ROOT_NETWORK`, so set `enterprise` only on a mainnet instance. With
-  `enterprise` set to `<name>`, the build uses `src/index.mempool.<name>.html`,
-  which you must add.
+- `enterprise` and `branding`: upstream's white-label mode. It applies when the
+  frontend starts, whichever page a visitor opens first: it hides the network
+  selector, sets the page title from `branding.title`, shows the logo on the
+  preview and tracker pages, sets `ACCELERATOR`, `TESTNET_ENABLED`,
+  `SIGNET_ENABLED`, `TESTNET4_ENABLED` and `REGTEST_ENABLED` to `false`, and
+  clears `MAINNET_EXPLORER_URL` and `TESTNET4_EXPLORER_URL`. It does this even
+  when one of those networks is the instance's own `ROOT_NETWORK`, so set
+  `enterprise` only on a mainnet instance. With `enterprise` set to `<name>`,
+  the build uses `src/index.mempool.<name>.html`, which you must add.

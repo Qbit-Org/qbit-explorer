@@ -1,5 +1,45 @@
+import { existsSync } from 'fs';
+import { isIP } from 'net';
+import path from 'path';
+
+// A relative MEMPOOL_CONFIG_FILE is resolved against the working directory.
+// Earlier versions passed it straight to require(), which resolves ./ and ../
+// against this file's directory, dist/: keep reading such a file when the
+// working directory has none, with a warning. The logger can't warn here,
+// because it reads this config.
+function configFilePath(configFile: string): string {
+  const fromWorkingDirectory = path.resolve(configFile);
+  // require() reads an absolute path as before, extensions included
+  if (path.isAbsolute(configFile)) {
+    return fromWorkingDirectory;
+  }
+  let legacy: string | undefined;
+  try {
+    legacy = require.resolve(configFile);
+  } catch (e) {
+    legacy = undefined;
+  }
+  if (existsSync(fromWorkingDirectory)) {
+    if (legacy && legacy !== fromWorkingDirectory) {
+      // eslint-disable-next-line no-console
+      console.warn(`MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory: reading `
+        + `${fromWorkingDirectory}, not ${legacy}, which earlier versions read. Set MEMPOOL_CONFIG_FILE to an `
+        + 'absolute path to choose.');
+    }
+    return fromWorkingDirectory;
+  }
+  if (!legacy) {
+    return fromWorkingDirectory;
+  }
+  // eslint-disable-next-line no-console
+  console.warn(`MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory, and ${fromWorkingDirectory} `
+    + `doesn't exist. Reading ${legacy} instead, where earlier versions found it. Set MEMPOOL_CONFIG_FILE to that `
+    + 'absolute path: this fallback will be removed.');
+  return legacy;
+}
+
 const configFromFile = require(
-    process.env.MEMPOOL_CONFIG_FILE ? process.env.MEMPOOL_CONFIG_FILE : '../mempool-config.json'
+    process.env.MEMPOOL_CONFIG_FILE ? configFilePath(process.env.MEMPOOL_CONFIG_FILE) : '../mempool-config.json'
 );
 
 export const QBIT_NETWORKS = ['mainnet', 'testnet', 'testnet4', 'signet', 'regtest'] as const;
@@ -12,6 +52,7 @@ interface IConfig {
     NETWORK: QbitNetwork;
     BACKEND: 'esplora' | 'electrum' | 'none';
     HTTP_PORT: number;
+    HTTP_HOST: string;
     UNIX_SOCKET_PATH: string;
     SPAWN_CLUSTER_PROCS: number;
     API_URL_PREFIX: string;
@@ -182,6 +223,7 @@ const defaults: IConfig = {
     'NETWORK': 'mainnet',
     'BACKEND': 'none',
     'HTTP_PORT': 8999,
+    'HTTP_HOST': '', // '' = listen on every interface
     'UNIX_SOCKET_PATH': '',
     'SPAWN_CLUSTER_PROCS': 0,
     'API_URL_PREFIX': '/api/v1/',
@@ -372,6 +414,10 @@ class Config implements IConfig {
     const configs = this.merge(configFromFile, defaults);
     if (!QBIT_NETWORKS.includes(configs.MEMPOOL.NETWORK)) {
       throw new Error(`Unsupported MEMPOOL.NETWORK "${configs.MEMPOOL.NETWORK}". Supported qbit networks: ${QBIT_NETWORKS.join(', ')}`);
+    }
+    const httpHost: unknown = configs.MEMPOOL.HTTP_HOST;
+    if (typeof httpHost !== 'string' || (httpHost !== '' && !isIP(httpHost))) {
+      throw new Error(`Invalid MEMPOOL.HTTP_HOST ${JSON.stringify(httpHost)}: set an IP address such as 127.0.0.1 or ::1, or "" to listen on every interface`);
     }
     this.MEMPOOL = configs.MEMPOOL;
     this.ESPLORA = configs.ESPLORA;
