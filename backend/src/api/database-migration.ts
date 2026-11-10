@@ -7,7 +7,7 @@ import cpfpRepository from '../repositories/CpfpRepository';
 import { RowDataPacket } from 'mysql2';
 
 class DatabaseMigration {
-  private static currentVersion = 112;
+  private static currentVersion = 113;
   private queryTimeout = 3600_000;
   private statisticsAddedIndexed = false;
   private uniqueLogs: string[] = [];
@@ -286,9 +286,6 @@ class DatabaseMigration {
     }
 
     if (databaseSchemaVersion < 26 && isBitcoin === true) {
-      if (config.LIGHTNING.ENABLED) {
-        this.uniqueLog(logger.notice, `'lightning_stats' table has been truncated.`);
-      }
       await this.$executeQuery(`TRUNCATE lightning_stats`);
       await this.$executeQuery('ALTER TABLE `lightning_stats` ADD tor_nodes int(11) NOT NULL DEFAULT "0"');
       await this.$executeQuery('ALTER TABLE `lightning_stats` ADD clearnet_nodes int(11) NOT NULL DEFAULT "0"');
@@ -307,9 +304,6 @@ class DatabaseMigration {
     }
 
     if (databaseSchemaVersion < 28 && isBitcoin === true) {
-      if (config.LIGHTNING.ENABLED) {
-        this.uniqueLog(logger.notice, `'lightning_stats' and 'node_stats' tables have been truncated.`);
-      }
       await this.$executeQuery(`TRUNCATE lightning_stats`);
       await this.$executeQuery(`TRUNCATE node_stats`);
       await this.$executeQuery(`ALTER TABLE lightning_stats MODIFY added DATE`);
@@ -372,9 +366,6 @@ class DatabaseMigration {
     }
 
     if (databaseSchemaVersion < 38 && isBitcoin == true) {
-      if (config.LIGHTNING.ENABLED) {
-        this.uniqueLog(logger.notice, `'lightning_stats' and 'node_stats' tables have been truncated.`);
-      }
       await this.$executeQuery(`TRUNCATE lightning_stats`);
       await this.$executeQuery(`TRUNCATE node_stats`);
       await this.$executeQuery('ALTER TABLE `lightning_stats` CHANGE `added` `added` timestamp NULL');
@@ -1345,6 +1336,27 @@ class DatabaseMigration {
       await this.$executeQuery(`DELETE FROM hashrates WHERE type = 'weekly'`);
       this.uniqueLog(logger.notice, `weekly pool rows have been deleted from 'hashrates' for lane-aware re-indexing.`);
       await this.updateToSchemaVersion(112);
+    }
+
+    // The Lightning backend has been removed, and nothing reads its tables.
+    // This takes the next qbit number: upstream has since given 107 and up to
+    // other migrations, so one picked from upstream needs a number after
+    // qbit's latest. Each drop is a no-op once its table is gone, and
+    // nodes_records goes before nodes, which its foreign key references.
+    if (databaseSchemaVersion < 113) {
+      const droppedTables: string[] = [];
+      for (const table of ['nodes_records', 'nodes_sockets', 'nodes', 'node_stats', 'channels', 'lightning_stats', 'geo_names']) {
+        if (await this.$checkIfTableExists(table)) {
+          droppedTables.push(table);
+        }
+        await this.$executeQuery(`DROP TABLE IF EXISTS \`${table}\``);
+      }
+      // Report only an existing database's tables: on a fresh install, the
+      // migrations above created them moments ago
+      if (databaseSchemaVersion > 0 && droppedTables.length > 0) {
+        this.uniqueLog(logger.notice, `Lightning tables have been dropped: ${droppedTables.join(', ')}.`);
+      }
+      await this.updateToSchemaVersion(113);
     }
   }
 

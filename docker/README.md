@@ -45,10 +45,8 @@ docker buildx build --load \
 
 Run `docker/init.sh` from the repository root. It copies `docker/backend`,
 `docker/frontend`, `nginx.conf` and `nginx-mempool.conf` into the build
-contexts (the copies are git-ignored), and downloads the GeoLite2 databases
-from [mempool/geoip-data](https://github.com/mempool/geoip-data) at a pinned
-commit. The frontend image build also needs network access: it downloads
-mining pool logos from
+contexts (the copies are git-ignored). The frontend image build needs
+network access: it downloads mining pool logos from
 [mempool/mining-pool-logos](https://github.com/mempool/mining-pool-logos),
 which include the logos for the AuxPoW parent pools the explorer recognises.
 
@@ -224,8 +222,8 @@ defaults to outside the container.
   unset or empty variable takes the image default shown here. The built-in
   defaults in `backend/src/config.ts` apply only to keys missing from that file,
   so the image defaults are the ones that take effect. Some differ from the
-  built-in defaults, for example `MEMPOOL_BACKEND`, `ESPLORA_REQUEST_TIMEOUT`,
-  `SYSLOG_ENABLED` and `MAXMIND_ENABLED`.
+  built-in defaults, for example `MEMPOOL_BACKEND`, `ESPLORA_REQUEST_TIMEOUT`
+  and `SYSLOG_ENABLED`.
 - **Frontend:** `docker/frontend/entrypoint.sh` writes `FRONTEND_HTTP_PORT` and
   the backend address into the nginx configuration, then renders the browser
   configuration (`config.js`) from the variables below. `MAINNET_EXPLORER_URL`
@@ -370,15 +368,6 @@ defaults to outside the container.
 | `SOCKS5PROXY_USERNAME` | `SOCKS5PROXY.USERNAME` | (empty) |
 | `SOCKS5PROXY_PASSWORD` | `SOCKS5PROXY.PASSWORD` | (empty) |
 
-**MAXMIND** (GeoIP; the image bundles the GeoLite2 databases)
-
-| Variable | `mempool-config.json` key | Image default |
-| --- | --- | --- |
-| `MAXMIND_ENABLED` | `MAXMIND.ENABLED` | `true` |
-| `MAXMIND_GEOLITE2_CITY` | `MAXMIND.GEOLITE2_CITY` | `/backend/GeoIP/GeoLite2-City.mmdb` |
-| `MAXMIND_GEOLITE2_ASN` | `MAXMIND.GEOLITE2_ASN` | `/backend/GeoIP/GeoLite2-ASN.mmdb` |
-| `MAXMIND_GEOIP2_ISP` | `MAXMIND.GEOIP2_ISP` | (empty) |
-
 **REDIS**
 
 | Variable | `mempool-config.json` key | Image default |
@@ -396,10 +385,9 @@ defaults to outside the container.
 | `FIAT_PRICE_API_KEY` | `FIAT_PRICE.API_KEY` | (empty) |
 
 `start.sh` also reads upstream mempool settings that qbit doesn't use:
-Lightning (`LIGHTNING_*`, `LND_*`, `CLIGHTNING_SOCKET`), mempool.space services
-and replication (`MEMPOOL_SERVICES_*`, `REPLICATION_*`,
-`EXTERNAL_DATA_SERVER_*`) and Stratum job tracking (`STRATUM_*`). Their
-defaults disable them, so leave them unset.
+mempool.space services and replication (`MEMPOOL_SERVICES_*`,
+`REPLICATION_*`, `EXTERNAL_DATA_SERVER_*`) and Stratum job tracking
+(`STRATUM_*`). Their defaults disable them, so leave them unset.
 
 ### Frontend (`web`)
 
