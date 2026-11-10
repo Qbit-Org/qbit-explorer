@@ -1,9 +1,15 @@
+import * as bitcoinjs from 'bitcoinjs-lib';
+import { Request } from 'express';
 import { Common } from '../../api/common';
 import { IEsploraApi } from '../../api/bitcoin/esplora-api.interface';
 import config, { QbitNetwork } from '../../config';
 import { MempoolTransactionExtended, TransactionExtended, TransactionFlags } from '../../mempool.interfaces';
 import transactionUtils from '../../api/transaction-utils';
-import { getVarIntLength } from '../../utils/bitcoin-script';
+import { getTransactionWeight } from '../../utils/weight-units';
+import {
+  asmVectors, bytes, dustThresholdVectors, input, p2trOutput, qbitHeights, qbitTransaction, realTransactionVectors, serializeTransaction,
+  StandardnessVector, standardnessVectors, VectorTransaction, weightVectors, witnessSize,
+} from '../fixtures/qbit-standardness-vectors';
 
 const randomTransactions = require('./test-data/transactions-random.json');
 const replacedTransactions = require('./test-data/transactions-replaced.json');
@@ -14,7 +20,6 @@ const qbitStandardTransactions = require('./test-data/qbit-standard-txs.json');
 describe('Common', () => {
   describe('qbit dust policy', () => {
     const p2wpkhScript = '00140000000000000000000000000000000000000000';
-    const p2pkhScript = '76a914000000000000000000000000000000000000000088ac';
 
     function transactionWithOutput(value: number): TransactionExtended {
       return {
@@ -56,22 +61,8 @@ describe('Common', () => {
       } as TransactionExtended;
     }
 
-    // the thresholds qbit v1.0.0 pins in src/test/transaction_tests.cpp: every output but P2MR is priced
-    // with the 148-byte legacy spend, as qbit has no witness discount, and the fee is rounded up
-    test.each([
-      ['compressed P2PK', `21${'02'.repeat(33)}ac`, 144],
-      ['uncompressed P2PK', `41${'04'.repeat(65)}ac`, 168],
-      ['P2PKH', p2pkhScript, 137],
-      ['P2SH', `a914${'00'.repeat(20)}87`, 135],
-      ['P2WPKH', p2wpkhScript, 135],
-      ['P2WSH', `0020${'00'.repeat(32)}`, 144],
-      ['P2TR', `5120${'00'.repeat(32)}`, 144],
-      ['P2MR', `5220${'00'.repeat(32)}`, 2855],
-      ['an unknown witness v1 program', '51020000', 121],
-      ['an unknown witness v2 program', '52020000', 121],
-      ['an anchor', '51024e73', 121],
-      ['an OP_RETURN', `6a14${'00'.repeat(20)}`, 0],
-    ])('calculates the qbit dust threshold of %s', (_name, scriptpubkey, threshold) => {
+    // shared with the frontend smoke
+    test.each(dustThresholdVectors)('calculates the qbit dust threshold of %s', (_name, scriptpubkey, threshold) => {
       expect(Common.getDustThreshold(scriptpubkey)).toBe(threshold);
     });
 
@@ -84,207 +75,26 @@ describe('Common', () => {
   });
 
   describe('qbit standardness policy', () => {
-    // qbit enforces these rules from genesis, far below Bitcoin's activation heights
-    const qbitHeights: [QbitNetwork, number | undefined][] = [
-      ['mainnet', 158_366],
-      ['mainnet', undefined],
-      ['testnet4', 10_000],
-      ['regtest', 101],
-    ];
-    const p2mrOutput = (value: number): IEsploraApi.Vout => ({
-      scriptpubkey: `5220${'11'.repeat(32)}`,
-      scriptpubkey_asm: `OP_PUSHNUM_2 OP_PUSHBYTES_32 ${'11'.repeat(32)}`,
-      scriptpubkey_type: 'v2_p2mr',
-      value,
-    });
-    const anchorOutput = (value: number): IEsploraApi.Vout => ({
-      scriptpubkey: '51024e73',
-      scriptpubkey_asm: 'OP_PUSHNUM_1 OP_PUSHBYTES_2 4e73',
-      scriptpubkey_type: 'anchor',
-      value,
-    });
-    const p2pkOutput: IEsploraApi.Vout = {
-      scriptpubkey: `2102${'11'.repeat(32)}ac`,
-      scriptpubkey_asm: `OP_PUSHBYTES_33 02${'11'.repeat(32)} OP_CHECKSIG`,
-      scriptpubkey_type: 'p2pk',
-      value: 100_000,
-    };
-    const nonStandardOutput: IEsploraApi.Vout = {
-      scriptpubkey: 'ff',
-      scriptpubkey_asm: 'OP_INVALIDOPCODE',
-      scriptpubkey_type: 'nonstandard',
-      value: 100_000,
-    };
-
-    // OP_RETURN followed by a single push of dataBytes bytes
-    function opReturnOutput(dataBytes: number): IEsploraApi.Vout {
-      const data = 'ab'.repeat(dataBytes);
-      let push = dataBytes.toString(16).padStart(2, '0');
-      if (dataBytes > 0xff) {
-        push = `4d${(dataBytes & 0xff).toString(16).padStart(2, '0')}${(dataBytes >> 8).toString(16).padStart(2, '0')}`;
-      } else if (dataBytes > 75) {
-        push = `4c${push}`;
-      }
-      return { scriptpubkey: `6a${push}${data}`, scriptpubkey_asm: `OP_RETURN ${data}`, scriptpubkey_type: 'op_return', value: 0 };
-    }
-
-    const p2trOutput: IEsploraApi.Vout = {
-      scriptpubkey: `5120${'11'.repeat(32)}`,
-      scriptpubkey_asm: `OP_PUSHNUM_1 OP_PUSHBYTES_32 ${'11'.repeat(32)}`,
-      scriptpubkey_type: 'v1_p2tr',
-      value: 100_000,
-    };
-    // a 2-byte witness program, which no witness version defines
-    const witnessOutput = (version: number, value = 100_000): IEsploraApi.Vout => ({
-      scriptpubkey: `${(0x50 + version).toString(16)}020000`,
-      scriptpubkey_asm: `OP_PUSHNUM_${version} OP_PUSHBYTES_2 0000`,
-      scriptpubkey_type: 'unknown',
-      value,
-    });
-    // control blocks for a single leaf: tapscript is leaf version 0xc0 with a 32-byte internal key,
-    // and a P2MR v1 leaf is the control byte 0xc0 with bit 0 set
-    const tapscriptControlBlock = `c0${'11'.repeat(32)}`;
-    const p2mrControlBlock = 'c1';
-    const p2mrSpend = (...witness: string[]): IEsploraApi.Vin => input(p2mrOutput(100_000), '', '', witness);
-    const p2trSpend = (...witness: string[]): IEsploraApi.Vin => input(p2trOutput, '', '', witness);
-    const bytes = (length: number): string => '00'.repeat(length);
-
-    function input(prevout: IEsploraApi.Vout, scriptsig = '', scriptsig_asm = '', witness: string[] = []): IEsploraApi.Vin {
-      return {
-        txid: '22'.repeat(32),
-        vout: 0,
-        prevout,
-        scriptsig,
-        scriptsig_asm,
-        inner_redeemscript_asm: '',
-        inner_witnessscript_asm: '',
-        witness,
-        is_coinbase: false,
-        sequence: 0xfffffffd,
-      };
-    }
-
-    function witnessSize(witness: string[]): number {
-      return getVarIntLength(witness.length) + witness.reduce((size, item) => size + getVarIntLength(item.length / 2) + item.length / 2, 0);
-    }
-
-    function qbitTransaction({
-      version = 2,
-      fee = 1000,
-      vin = [input(p2mrOutput(100_000))],
-      vout = [p2mrOutput(99_000)],
-    }: { version?: number, fee?: number, vin?: IEsploraApi.Vin[], vout?: IEsploraApi.Vout[] } = {}): TransactionExtended {
-      // qbit has no witness discount, so weight is the serialized size, with the witness marker and flag
-      // and each input's witness when any input has one
-      const witnesses = vin.filter(txin => txin.witness.length);
-      const weight = 10
-        + vin.reduce((size, txin) => size + 41 + txin.scriptsig.length / 2, 0)
-        + vout.reduce((size, txout) => size + 9 + txout.scriptpubkey.length / 2, 0)
-        + (witnesses.length ? 2 + witnesses.reduce((size, txin) => size + witnessSize(txin.witness), 0) : 0);
-      return {
-        txid: 'qbit-standardness',
-        version,
-        locktime: 0,
-        size: weight,
-        weight,
-        fee,
-        vsize: weight,
-        feePerVsize: fee / weight,
-        effectiveFeePerVsize: fee / weight,
-        sigops: 0,
-        status: { confirmed: false },
-        vin,
-        vout,
-      } as TransactionExtended;
-    }
-
-    // each P2PK prevout carries one legacy sigop that the BIP54 limit counts at spend time
-    function legacySigopsTransaction(inputs: number): TransactionExtended {
-      const signature = '30'.repeat(71);
-      return qbitTransaction({
-        vin: Array.from({ length: inputs }, () => input(p2pkOutput, `47${signature}`, `OP_PUSHBYTES_71 ${signature}`)),
-      });
-    }
-
-    // a single-key P2MR spend: a PQC signature with its sighash byte, then <pubkey> OP_CHECKSIGPQC
-    const p2mrLeafScript = `20${'11'.repeat(32)}b3`;
-    const singleKeyP2mrSpends = (inputs: number): IEsploraApi.Vin[] => Array.from({ length: inputs }, () => p2mrSpend(bytes(3_681), p2mrLeafScript, p2mrControlBlock));
-    // leaf version 0xc2, which taproot and P2MR both reserve for upgrades
-    const otherLeafControlBlock = `c2${'11'.repeat(32)}`;
-    const otherP2mrLeafControlBlock = 'c3';
-    // a bare 1-of-1 multisig output, which counts 20 sigops
-    const multisigOutput: IEsploraApi.Vout = {
-      scriptpubkey: `5121${'02' + '11'.repeat(32)}51ae`,
-      scriptpubkey_asm: `OP_PUSHNUM_1 OP_PUSHBYTES_33 02${'11'.repeat(32)} OP_PUSHNUM_1 OP_CHECKMULTISIG`,
-      scriptpubkey_type: 'multisig',
-      value: 1_000,
-    };
-    // a transaction whose sigop cost is not reported, as for a confirmed transaction from a non-esplora backend
-    const withoutSigops = (tx: TransactionExtended): TransactionExtended => ({ ...tx, sigops: undefined });
-
-    const standardCases: [string, () => TransactionExtended][] = [
-      ['a v3 (TRUC) transaction', () => qbitTransaction({ version: 3 })],
-      ['an anchor spend', () => qbitTransaction({ vin: [input(anchorOutput(0)), input(p2mrOutput(100_000))] })],
-      ['an OP_RETURN above 83 bytes', () => qbitTransaction({ vout: [opReturnOutput(160), p2mrOutput(99_000)] })],
-      ['multiple OP_RETURN outputs', () => qbitTransaction({ vout: [opReturnOutput(20), opReturnOutput(20), p2mrOutput(99_000)] })],
-      ['OP_RETURN outputs that fill the 200,000 byte budget', () => qbitTransaction({ vout: [...Array(4)].map(() => opReturnOutput(49_996)) })],
-      ['ephemeral dust in a zero-fee transaction', () => qbitTransaction({ version: 3, fee: 0, vout: [anchorOutput(0), p2mrOutput(100_000)] })],
-      ['2,500 legacy sigops', () => legacySigopsTransaction(2_500)],
-      ['a P2MR output at the 2,855 bit dust threshold', () => qbitTransaction({ vout: [p2mrOutput(2_855)] })],
-      ['outputs to undefined witness v1 and v2 programs at the 121 bit dust threshold', () => qbitTransaction({ vout: [witnessOutput(1, 121), witnessOutput(2, 121)] })],
-      ['a v3 transaction of 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), weight: 50_000 })],
-      ['a v3 transaction whose sigops adjust its vsize to 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), sigops: 2_500 })],
-      ['a v3 transaction with unreported sigops whose outputs count 2,500', () => withoutSigops(qbitTransaction({ version: 3, vout: Array(125).fill(multisigOutput) }))],
-      ['a v3 transaction that spends 13 single-key P2MR inputs', () => qbitTransaction({ version: 3, vin: singleKeyP2mrSpends(13) })],
-      ['a v2 transaction that spends 14 single-key P2MR inputs', () => qbitTransaction({ vin: singleKeyP2mrSpends(14) })],
-      ['a P2MR leaf script argument of 16 KiB', () => qbitTransaction({ vin: [p2mrSpend(bytes(16_384), p2mrLeafScript, p2mrControlBlock)] })],
-      ['P2MR leaf script arguments of 128 KiB in total', () => qbitTransaction({ vin: [p2mrSpend(...Array(8).fill(bytes(16_384)), p2mrLeafScript, p2mrControlBlock)] })],
-      ['a tapscript argument of 80 bytes', () => qbitTransaction({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock)] })],
-    ];
-
-    const nonStandardCases: [string, () => TransactionExtended][] = [
-      ['a v4 transaction', () => qbitTransaction({ version: 4 })],
-      ['OP_RETURN outputs over the 200,000 byte budget', () => qbitTransaction({ vout: [...[...Array(3)].map(() => opReturnOutput(49_996)), opReturnOutput(49_997)] })],
-      ['dust in a fee-paying transaction', () => qbitTransaction({ version: 3, vout: [anchorOutput(0), p2mrOutput(99_000)] })],
-      ['two dust outputs in a zero-fee transaction', () => qbitTransaction({ version: 3, fee: 0, vout: [anchorOutput(0), p2mrOutput(1), p2mrOutput(99_999)] })],
-      ['ephemeral dust followed by a non-standard output', () => qbitTransaction({ version: 3, fee: 0, vout: [anchorOutput(0), nonStandardOutput] })],
-      ['2,501 legacy sigops', () => legacySigopsTransaction(2_501)],
-      ['a P2MR output below the 2,855 bit dust threshold', () => qbitTransaction({ vout: [p2mrOutput(2_854)] })],
-      ['an output to an undefined witness v1 program below the 121 bit dust threshold', () => qbitTransaction({ vout: [witnessOutput(1, 120), p2mrOutput(99_000)] })],
-      ...[...Array(14)].map((_, i): [string, () => TransactionExtended] => [`an output to reserved witness v${i + 3}`, () => qbitTransaction({ vout: [p2mrOutput(99_000), witnessOutput(i + 3)] })]),
-      ['a v3 transaction over 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), weight: 50_001 })],
-      ['a v3 transaction whose sigops adjust its vsize over 50,000 vB', () => ({ ...qbitTransaction({ version: 3 }), sigops: 2_501 })],
-      ['a v3 transaction with unreported sigops whose outputs count 2,520', () => withoutSigops(qbitTransaction({ version: 3, vout: Array(126).fill(multisigOutput) }))],
-      ['a v3 transaction that spends 14 single-key P2MR inputs', () => qbitTransaction({ version: 3, vin: singleKeyP2mrSpends(14) })],
-      ['a P2MR spend with an annex', () => qbitTransaction({ vin: [p2mrSpend(bytes(3_681), p2mrLeafScript, p2mrControlBlock, '50')] })],
-      ['a P2MR spend without a leaf script', () => qbitTransaction({ vin: [p2mrSpend(p2mrControlBlock)] })],
-      ['a P2MR spend with an empty control block', () => qbitTransaction({ vin: [p2mrSpend(bytes(3_681), p2mrLeafScript, '')] })],
-      ['a P2MR leaf script argument over 16 KiB', () => qbitTransaction({ vin: [p2mrSpend(bytes(16_385), p2mrLeafScript, p2mrControlBlock)] })],
-      ['P2MR leaf script arguments over 128 KiB in total', () => qbitTransaction({ vin: [p2mrSpend(...Array(8).fill(bytes(16_384)), bytes(1), p2mrLeafScript, p2mrControlBlock)] })],
-      ['a tapscript argument over 80 bytes', () => qbitTransaction({ vin: [p2trSpend(bytes(81), '51', tapscriptControlBlock)] })],
-      ['a taproot script path spend with an empty control block', () => qbitTransaction({ vin: [p2trSpend(bytes(1), '51', '')] })],
-      ['a taproot script path spend of another leaf version', () => qbitTransaction({ vin: [p2trSpend(bytes(1), '51', otherLeafControlBlock)] })],
-      ['a P2MR spend of another leaf version', () => qbitTransaction({ vin: [p2mrSpend(bytes(3_681), p2mrLeafScript, otherP2mrLeafControlBlock)] })],
-      ['a non-standard input after a tapscript spend', () => qbitTransaction({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock), input(witnessOutput(1))] })],
-      ['a non-standard output after a tapscript spend', () => qbitTransaction({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock)], vout: [p2mrOutput(99_000), nonStandardOutput] })],
-    ];
-
     const originalNetwork = config.MEMPOOL.NETWORK;
     afterEach(() => {
       config.MEMPOOL.NETWORK = originalNetwork;
     });
 
+    const asTransaction = (tx: VectorTransaction): TransactionExtended => tx as unknown as TransactionExtended;
+    const named = (vectors: StandardnessVector[]): [string, StandardnessVector][] => vectors.map(vector => [vector.name, vector]);
+
+    // the vectors the frontend smoke runs too (src/__tests__/fixtures/qbit-standardness-vectors.ts)
     describe.each(qbitHeights)('on %s at height %p', (network, height) => {
       beforeEach(() => {
-        config.MEMPOOL.NETWORK = network;
+        config.MEMPOOL.NETWORK = network as QbitNetwork;
       });
 
-      test.each(standardCases)('treats %s as standard', (_name, buildTransaction) => {
-        expect(Common.isNonStandard(buildTransaction(), height)).toBe(false);
+      test.each(named(standardnessVectors.filter(vector => !vector.nonStandard)))('treats %s as standard', (_name, vector) => {
+        expect(Common.isNonStandard(asTransaction(vector.tx()), height)).toBe(false);
       });
 
-      test.each(nonStandardCases)('flags %s as non-standard', (_name, buildTransaction) => {
-        expect(Common.isNonStandard(buildTransaction(), height)).toBe(true);
+      test.each(named(standardnessVectors.filter(vector => vector.nonStandard)))('flags %s as non-standard', (_name, vector) => {
+        expect(Common.isNonStandard(asTransaction(vector.tx()), height)).toBe(true);
       });
     });
 
@@ -526,6 +336,103 @@ describe('Common', () => {
     test('renders opcode 0xb3 as OP_CHECKSIGPQC', () => {
       expect(transactionUtils.convertScriptSigAsm('b3')).toBe('OP_CHECKSIGPQC');
       expect(transactionUtils.convertScriptSigAsm('b3ac')).toBe('OP_CHECKSIGPQC OP_CHECKSIG');
+    });
+
+    // shared with the frontend smoke
+    test.each(asmVectors)('renders %s as qbitd and qbit-electrs do', (_name, script, asm) => {
+      expect(transactionUtils.convertScriptSigAsm(script)).toBe(asm);
+    });
+
+    test.each(realTransactionVectors)('reads the leaf scripts of %s %s as qbit-electrs printed them', (file, key) => {
+      const tx: TransactionExtended = require(`./test-data/${file}`)[key];
+      for (const vin of tx.vin) {
+        const decoded = { ...vin, inner_witnessscript_asm: undefined } as unknown as IEsploraApi.Vin;
+        transactionUtils.addInnerScriptsToVin(decoded);
+        expect(decoded.inner_witnessscript_asm).toBe(vin.inner_witnessscript_asm);
+      }
+    });
+  });
+
+  describe('qbit transaction weight', () => {
+    const push = (hex: string): string => Common.getTransactionFromRequest({ body: hex } as Request, false);
+    const qbitWeight = (hex: string): number => {
+      const tx = bitcoinjs.Transaction.fromHex(hex);
+      return getTransactionWeight(tx.byteLength(false), tx.byteLength());
+    };
+    const { MAX_PUSH_TX_SIZE_WEIGHT, ALLOW_UNREACHABLE } = config.MEMPOOL;
+    beforeEach(() => {
+      config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT = 400_000;
+      // the etching's leaf script holds an OP_FALSE OP_IF envelope
+      config.MEMPOOL.ALLOW_UNREACHABLE = true;
+    });
+    afterEach(() => {
+      Object.assign(config.MEMPOOL, { MAX_PUSH_TX_SIZE_WEIGHT, ALLOW_UNREACHABLE });
+    });
+
+    test('pushes a transaction up to MAX_PUSH_TX_SIZE_WEIGHT of qbit weight, not Bitcoin weight', () => {
+      // the etching is 4,431 bytes, its qbit weight, and 4,842 Bitcoin weight units
+      const hex = serializeTransaction(require('./test-data/qbit-p2mr-qscriptions.json').etching);
+      expect(bitcoinjs.Transaction.fromHex(hex).weight()).toBe(4_842);
+      config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT = 4_431;
+      expect(push(hex)).toBe(hex);
+      config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT = 4_430;
+      expect(() => push(hex)).toThrow('Transaction too large (max 4430 weight units)');
+    });
+
+    // shared with the frontend smoke
+    test.each(weightVectors)('weighs %s as qbitd does, and pushes it only within MAX_PUSH_TX_SIZE_WEIGHT', (_name, buildHex, weight) => {
+      const hex = buildHex();
+      expect(qbitWeight(hex)).toBe(weight);
+      if (weight <= config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT) {
+        expect(push(hex)).toBe(hex);
+      } else {
+        expect(() => push(hex)).toThrow(`Transaction too large (max ${config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT} weight units)`);
+      }
+    });
+
+    test.each(realTransactionVectors)('weighs %s %s as qbit-electrs reported it, and pushes it', (file, key) => {
+      const tx: TransactionExtended = require(`./test-data/${file}`)[key];
+      const hex = serializeTransaction(tx);
+      expect(qbitWeight(hex)).toBe(tx.weight);
+      expect(push(hex)).toBe(hex);
+    });
+  });
+
+  describe('unreachable leaf scripts in pushed transactions', () => {
+    const push = (hex: string): string => Common.getTransactionFromRequest({ body: hex } as Request, false);
+    const pushError = (hex: string): unknown => {
+      try {
+        push(hex);
+      } catch (e) {
+        return e;
+      }
+    };
+    const { etching, mint } = require('./test-data/qbit-p2mr-qscriptions.json');
+    const { MAX_PUSH_TX_SIZE_WEIGHT, ALLOW_UNREACHABLE } = config.MEMPOOL;
+    beforeEach(() => {
+      config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT = 400_000;
+    });
+    afterEach(() => {
+      Object.assign(config.MEMPOOL, { MAX_PUSH_TX_SIZE_WEIGHT, ALLOW_UNREACHABLE });
+    });
+
+    test('refuses a P2MR spend whose leaf script holds OP_FALSE OP_IF, unless ALLOW_UNREACHABLE', () => {
+      // P2MR control bytes always set bit 0: the etching's is c1, for leaf version 0xc0
+      expect(etching.vin[0].witness[2]).toBe('c1');
+      const hex = serializeTransaction(etching);
+      config.MEMPOOL.ALLOW_UNREACHABLE = false;
+      expect(pushError(hex)).toMatchObject({ code: -5, message: 'Unreachable taproot scripts not allowed' });
+      // the mint's leaf script holds no envelope
+      expect(push(serializeTransaction(mint))).toBe(serializeTransaction(mint));
+      config.MEMPOOL.ALLOW_UNREACHABLE = true;
+      expect(push(hex)).toBe(hex);
+    });
+
+    test.each(['c0', 'c1'])('refuses a taproot spend with control byte %s, of either parity, whose script holds OP_FALSE OP_IF', (controlByte) => {
+      // OP_FALSE OP_IF 'ord' OP_ENDIF OP_TRUE
+      const tx = qbitTransaction({ vin: [input(p2trOutput, '', '', [bytes(64), '0063036f72646851', `${controlByte}${'11'.repeat(32)}`])] });
+      config.MEMPOOL.ALLOW_UNREACHABLE = false;
+      expect(pushError(serializeTransaction(tx))).toMatchObject({ code: -5 });
     });
   });
 

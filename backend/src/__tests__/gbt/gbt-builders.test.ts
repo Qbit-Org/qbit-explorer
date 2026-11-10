@@ -24,9 +24,10 @@ jest.mock('worker_threads', () => {
 });
 
 import mempoolBlocks from '../../api/mempool-blocks';
+import { Common } from '../../api/common';
 import transactionUtils from '../../api/transaction-utils';
 import { IEsploraApi } from '../../api/bitcoin/esplora-api.interface';
-import { MempoolBlockWithTransactions, MempoolTransactionExtended } from '../../mempool.interfaces';
+import { MempoolBlockWithTransactions, MempoolTransactionExtended, TransactionFlags } from '../../mempool.interfaces';
 
 // P2MR spends from qbit mainnet: vsize equals weight and they have no sigops
 const qbitStandardTransactions = require('../api/test-data/qbit-standard-txs.json');
@@ -151,6 +152,26 @@ describe('Rust and TypeScript block template builders', () => {
       expect(Object.values(result.rates)).toStrictEqual(Array(30).fill(1));
     }
     expect(rust).toStrictEqual(typescript);
+  });
+
+  test('flag each projected transaction on its own, and cache no flag that depends on its parent', async () => {
+    // transaction 3 copies the v3 template and spends transaction 0 at 45,501 vB, over qbit's limit for a
+    // v3 child of an unconfirmed transaction. qbitd checks that before a transaction enters its mempool,
+    // so the explorer checks it only on /tx/preview, and projected blocks don't depend on the parent.
+    const mempool = makeMempool(Array.from({ length: 4 }, (_, index): TxSpec => (index === 3 ? { fee: 100_000, weight: 45_501, parents: [0] } : { fee: 10_000 })));
+    const txids = Object.keys(mempool);
+    const nonStandard = (blocks: MempoolBlockWithTransactions[]): string[] => blocks.flatMap(block => block.transactions)
+      .filter(tx => BigInt(tx.flags || 0) & TransactionFlags.nonstandard).map(tx => tx.txid);
+
+    const typescriptMempool: Mempool = JSON.parse(JSON.stringify(mempool));
+    const typescriptBlocks = await mempoolBlocks.$makeBlockTemplates(txids, typescriptMempool, undefined, true, false);
+    (mempoolBlocks as any).resetRustGbt();
+    const rustBlocks = await mempoolBlocks.$rustMakeBlockTemplates(txids, JSON.parse(JSON.stringify(mempool)), undefined, true, false);
+
+    expect(nonStandard(typescriptBlocks)).toStrictEqual([]);
+    expect(nonStandard(rustBlocks)).toStrictEqual([]);
+    // a block summary reuses the flags cached on the mempool transaction, as when it is mined after its parent
+    expect(BigInt(Common.classifyTransaction(typescriptMempool[txids[3]], 170_000).flags) & TransactionFlags.nonstandard).toBe(0n);
   });
 
   test('agree on CPFP packages', async () => {
