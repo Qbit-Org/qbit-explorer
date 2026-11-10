@@ -1,13 +1,14 @@
 import { ChangeDetectionStrategy, Component, Inject, Input, LOCALE_ID, NgZone, OnInit } from '@angular/core';
 import { EChartsOption } from '@app/graphs/echarts';
 import { Observable } from 'rxjs';
-import { map, share, startWith, switchMap, tap } from 'rxjs/operators';
+import { filter, map, share, startWith, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '@app/services/api.service';
 import { SeoService } from '@app/services/seo.service';
 import { formatNumber } from '@angular/common';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { download, formatterXAxis, formatterXAxisLabel, formatterXAxisTimeCategory } from '@app/shared/graphs.utils';
 import { StorageService } from '@app/services/storage.service';
+import { MiningService } from '@app/services/mining.service';
 import { ActivatedRoute, Router } from '@angular/router';
 import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pipe';
 import { StateService } from '@app/services/state.service';
@@ -34,6 +35,7 @@ export class BlockHealthGraphComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['24h', '3d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', 'all'];
 
   chartOptions: EChartsOption = {};
   chartInitOptions = {
@@ -52,6 +54,7 @@ export class BlockHealthGraphComponent implements OnInit {
     private apiService: ApiService,
     private formBuilder: UntypedFormBuilder,
     private storageService: StorageService,
+    private miningService: MiningService,
     private zone: NgZone,
     private route: ActivatedRoute,
     public stateService: StateService,
@@ -85,6 +88,8 @@ export class BlockHealthGraphComponent implements OnInit {
           this.isLoading = true;
           return this.apiService.getHistoricalBlocksHealth$(timespan)
             .pipe(
+              filter((response) => !this.miningService.switchToShownRange(
+                this.radioGroupForm.controls.dateSpan, this.rangeButtons, parseInt(response.headers.get('x-total-count'), 10))),
               tap((response) => {
                 this.prepareChartOptions(response.body);
                 this.isLoading = false;

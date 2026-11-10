@@ -93,7 +93,7 @@ describe('GET block/:hash/txid/:index', () => {
   test('rejects a malformed block hash as the other block routes do', async () => {
     const res = await get('xyz', '0');
 
-    expect(res.status).toBe(501);
+    expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'Invalid block hash' });
     expect(mockedApi.$getTxIdsForBlock).not.toHaveBeenCalled();
   });

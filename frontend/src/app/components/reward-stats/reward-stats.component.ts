@@ -4,6 +4,9 @@ import { map, switchMap, tap } from 'rxjs/operators';
 import { ApiService } from '@app/services/api.service';
 import { StateService } from '@app/services/state.service';
 
+// a day of qbit's 60-second blocks, as upstream's window is a day of Bitcoin's
+const REWARD_STATS_BLOCK_COUNT = 1440;
+
 @Component({
   selector: 'app-reward-stats',
   templateUrl: './reward-stats.component.html',
@@ -21,7 +24,7 @@ export class RewardStatsComponent implements OnInit {
     this.$rewardStats = concat(
       // We fetch the latest reward stats when the page load and
       // wait for the API response before listening to websocket blocks
-      this.apiService.getRewardStats$()
+      this.apiService.getRewardStats$(REWARD_STATS_BLOCK_COUNT)
         .pipe(
           tap((stats) => {
             this.lastBlockHeight = stats.endBlock;
@@ -36,16 +39,18 @@ export class RewardStatsComponent implements OnInit {
               return []; // Return an empty stream so the last pipe is not executed
             }
             this.lastBlockHeight = maxHeight;
-            return this.apiService.getRewardStats$();
+            return this.apiService.getRewardStats$(REWARD_STATS_BLOCK_COUNT);
           })
         )
       )
       .pipe(
         map((stats) => {
+          // the blocks the stats cover: fewer than the window while fewer are indexed
+          const blockCount = Math.min(REWARD_STATS_BLOCK_COUNT, stats.endBlock - stats.startBlock + 1);
           return {
             totalReward: stats.totalReward,
             feePerTx: stats.totalFee / stats.totalTx,
-            feePerBlock: stats.totalFee / 144,
+            feePerBlock: stats.totalFee / blockCount,
           };
         })
       );

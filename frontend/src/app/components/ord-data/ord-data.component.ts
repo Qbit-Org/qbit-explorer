@@ -30,9 +30,9 @@ export class OrdDataComponent implements OnChanges {
     if (changes.runestone && this.runestone) {
       if (this.runestone.mint && this.runeInfo[this.runestone.mint.toString()]) {
         const mint = this.runestone.mint.toString();
-        const terms = this.runeInfo[mint].etching.terms;
+        const terms = this.runeInfo[mint].etching?.terms;
         const amount = terms?.amount;
-        const divisibility = this.runeInfo[mint].etching.divisibility;
+        const divisibility = this.runeInfo[mint].etching?.divisibility;
         if (amount) {
           this.minted = this.getAmount(amount, divisibility);
         }

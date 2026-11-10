@@ -122,8 +122,8 @@ function makeBlockTemplates(mempool: Map<number, CompactThreadTransaction>)
     }
 
     if (nextTx && !nextTx?.used) {
-      // Check if the package fits into this block
-      if (blocks.length >= 7 || ((blockWeight + nextTx.ancestorWeight < config.MEMPOOL.BLOCK_WEIGHT_UNITS) && (blockSigops + nextTx.ancestorSigops <= 80000))) {
+      // Check if the package fits into this block (qbitd rejects a package that reaches 80,000 sigops)
+      if (blocks.length >= 7 || ((blockWeight + nextTx.ancestorWeight < config.MEMPOOL.BLOCK_WEIGHT_UNITS) && (blockSigops + nextTx.ancestorSigops < 80000))) {
         const ancestors: AuditTransaction[] = Array.from(nextTx.ancestorMap.values());
         // sort ancestors by dependency graph (equivalent to sorting by ascending ancestor count)
         const sortedTxSet = [...ancestors.sort((a, b) => { return (a.ancestorMap.size || 0) - (b.ancestorMap.size || 0); }), nextTx];
