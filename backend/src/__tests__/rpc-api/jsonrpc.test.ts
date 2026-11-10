@@ -78,6 +78,27 @@ describe('JsonRPC cookie authentication', () => {
     expect(node.ran).toStrictEqual(['getblockcount', 'sendrawtransaction', 'getblockcount']);
   });
 
+  test('retries every call that was in flight when qbitd restarted', async () => {
+    fs.writeFileSync(cookieFile, '__cookie__:first');
+    node = await startNode(() => fs.readFileSync(cookieFile, 'utf8'));
+    const rpc = client({ cookie: cookieFile });
+
+    await expect(rpc.call('getblockcount', [])).resolves.toBe('getblockcount');
+    // qbitd restarted: all three calls go out with the old cookie and are
+    // turned away, and the first to see its 401 caches the new cookie
+    fs.writeFileSync(cookieFile, '__cookie__:second');
+    await expect(Promise.all([
+      rpc.call('getblockhash', [1]),
+      rpc.call('getblockhash', [2]),
+      rpc.call('getblockhash', [3]),
+    ])).resolves.toStrictEqual(['getblockhash', 'getblockhash', 'getblockhash']);
+
+    expect(node.auth.filter((auth) => auth === '__cookie__:first')).toHaveLength(4);
+    expect(node.auth.filter((auth) => auth === '__cookie__:second')).toHaveLength(3);
+    // each call ran once
+    expect(node.ran).toStrictEqual(['getblockcount', 'getblockhash', 'getblockhash', 'getblockhash']);
+  });
+
   test('retries only once, and not at all when the cookie file is unchanged', async () => {
     fs.writeFileSync(cookieFile, '__cookie__:first');
     node = await startNode(() => '__cookie__:other');

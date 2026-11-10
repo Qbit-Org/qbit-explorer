@@ -272,7 +272,8 @@ describe('Mempool Backend Config', () => {
       process.chdir(dir);
       // config.ts used to pass the value straight to require(), which reads a
       // bare name as a package and a ./ path as relative to dist/ (or src/)
-      for (const configFile of ['operator.json', './operator.json', file]) {
+      // an absolute path without its extension, as require() allows
+      for (const configFile of ['operator.json', './operator.json', file, file.replace(/\.json$/, '')]) {
         jest.isolateModules(() => {
           process.env.MEMPOOL_CONFIG_FILE = configFile;
           const config = jest.requireActual('../config').default;
@@ -321,14 +322,19 @@ describe('Mempool Backend Config', () => {
           + 'versions found it. Set MEMPOOL_CONFIG_FILE to that absolute path: this fallback will be removed.'
       ]]);
 
-      // a file at the working-directory path comes first, without a warning
+      // a file at the working-directory path comes first, with a warning that
+      // names the file earlier versions read
       warn.mockClear();
       fs.mkdirSync(path.join(dir, '__tests__', 'fixtures'), { recursive: true });
       fs.writeFileSync(path.join(dir, configFile), JSON.stringify({ MEMPOOL: { NETWORK: 'regtest' } }));
       jest.isolateModules(() => {
         expect(jest.requireActual('../config').default.MEMPOOL.NETWORK).toBe('regtest');
       });
-      expect(warn).not.toHaveBeenCalled();
+      expect(warn.mock.calls).toStrictEqual([[
+        `MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory: reading `
+          + `${path.join(process.cwd(), configFile)}, not ${legacyFile}, which earlier versions read. Set `
+          + 'MEMPOOL_CONFIG_FILE to an absolute path to choose.'
+      ]]);
     } finally {
       warn.mockRestore();
       process.chdir(cwd);

@@ -132,8 +132,12 @@ JsonRPC.prototype.send = function (method, params, retryWithNewCookie): Promise<
             response.statusCode === 401 /* Unauthorized */ &&
             typeof this.opts.cookie === 'string'
           ) {
-            const rejectedCookie = this.cachedCookie;
-            this.cachedCookie = undefined;
+            // compare with the cookie this call sent: a call that was in
+            // flight with it too may already have cached the new one
+            const rejectedCookie = (requestOptions as { auth?: string }).auth;
+            if (this.cachedCookie === rejectedCookie) {
+              this.cachedCookie = undefined;
+            }
             // qbitd writes a new cookie each time it starts, and turns a call
             // with the old one away before running it, so a retry can't run
             // the call twice

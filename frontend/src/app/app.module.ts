@@ -73,7 +73,7 @@ const providers = [
         // with customize.enterprise set, create it at startup, before any page
         // reads them. Other builds leave it to the pages that inject it.
         provideAppInitializer(() => {
-          if (window?.['__env']?.customize?.enterprise) {
+          if (inject(StateService).env.customize?.enterprise) {
             inject(EnterpriseService);
           }
         }),

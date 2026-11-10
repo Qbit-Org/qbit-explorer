@@ -67,7 +67,7 @@ class Server {
     }
 
     if (cluster.isPrimary) {
-      logger.notice(`Mempool Server (Master) is running on port ${config.MEMPOOL.HTTP_PORT} (${backendInfo.getShortCommitHash()})`);
+      logger.notice(`Mempool Server (Master) is running on ${config.MEMPOOL.HTTP_HOST ? config.MEMPOOL.HTTP_HOST + ' ' : ''}port ${config.MEMPOOL.HTTP_PORT} (${backendInfo.getShortCommitHash()})`);
 
       const numCPUs = config.MEMPOOL.SPAWN_CLUSTER_PROCS;
       for (let i = 0; i < numCPUs; i++) {

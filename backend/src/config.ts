@@ -9,13 +9,26 @@ import path from 'path';
 // because it reads this config.
 function configFilePath(configFile: string): string {
   const fromWorkingDirectory = path.resolve(configFile);
-  if (existsSync(fromWorkingDirectory)) {
+  // require() reads an absolute path as before, extensions included
+  if (path.isAbsolute(configFile)) {
     return fromWorkingDirectory;
   }
-  let legacy: string;
+  let legacy: string | undefined;
   try {
     legacy = require.resolve(configFile);
   } catch (e) {
+    legacy = undefined;
+  }
+  if (existsSync(fromWorkingDirectory)) {
+    if (legacy && legacy !== fromWorkingDirectory) {
+      // eslint-disable-next-line no-console
+      console.warn(`MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory: reading `
+        + `${fromWorkingDirectory}, not ${legacy}, which earlier versions read. Set MEMPOOL_CONFIG_FILE to an `
+        + 'absolute path to choose.');
+    }
+    return fromWorkingDirectory;
+  }
+  if (!legacy) {
     return fromWorkingDirectory;
   }
   // eslint-disable-next-line no-console
