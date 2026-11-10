@@ -158,7 +158,8 @@ Esplora-compatible REST API, on port 3000 by default for mainnet. It must
 listen (`--http-addr`) on an address the containers can reach. With the
 `qbit.conf` above it uses the same cookie: start it with
 `--daemon-dir /var/lib/qbit/rpc` and `--jsonrpc-import`, so that it reads
-`.cookie` from that directory and fetches blocks over RPC. qbit-electrs uses an
+`.cookie` from that directory and fetches blocks over RPC. Run it as a user in
+the `qbit` group, so that it can read the cookie. qbit-electrs uses an
 explicit `--daemon-dir` as given on every chain, and adds the chain's
 subdirectory, such as `testnet4/`, only to its default. Its `--cookie` option
 takes the credentials themselves, which `ps` shows and which go stale when
