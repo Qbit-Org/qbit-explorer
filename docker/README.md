@@ -141,6 +141,10 @@ backend at it:
 API) and `electrum` (an Electrum protocol server). qbit deployments normally use
 `none` or `esplora`.
 
+With `esplora`, search suggests addresses only when qbit-electrs runs with
+`--address-search`, with an index rebuilt from an empty `--db-dir` if it was
+built without the flag.
+
 qbit-electrs also serves the Electrum protocol, over plain TCP, on port 50001
 for mainnet, 40001 for testnet4 and 60401 for regtest. It listens on localhost
 unless `--electrum-rpc-addr` says otherwise. The image's Electrum defaults
@@ -171,10 +175,10 @@ frontend serves that network at `/`.
 | regtest | 18452 | 3002 | `MEMPOOL_NETWORK: "regtest"`, `CORE_RPC_PORT: "18452"` | `MAINNET_ENABLED: "false"`, `REGTEST_ENABLED: "true"`, `ROOT_NETWORK: "regtest"` |
 
 The block weight (2,000,000) and target spacing (60 seconds) defaults already
-match qbit on every network. Leave `MEMPOOL_RUST_GBT` at its default of
-`false`: the Rust block-template builder in `rust/gbt` still applies Bitcoin's
-witness scale factor of 4, which would show projected-block fee rates four
-times too high on qbit.
+match qbit on every network. `MEMPOOL_RUST_GBT` defaults to `false` in the
+container, so the backend projects blocks with its TypeScript builder. Set it
+to `true` to use the faster Rust builder in `rust/gbt`, which the backend
+defaults to outside the container.
 
 ## Configuration reference
 

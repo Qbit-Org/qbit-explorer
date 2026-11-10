@@ -93,10 +93,6 @@ class Server {
   async startServer(worker = false): Promise<void> {
     logger.notice(`Starting Mempool Server${worker ? ' (worker)' : ''}... (${backendInfo.getShortCommitHash()})`);
 
-    if (config.MEMPOOL.RUST_GBT) {
-      logger.warn(`MEMPOOL.RUST_GBT is enabled, but rust/gbt does not support qbit's weight units (witness scale factor 1): projected-block fee rates will be wrong, about four times too high. Set MEMPOOL.RUST_GBT to false.`);
-    }
-
     // Register cleanup listeners for exit events
     ['SIGHUP', 'SIGINT', 'SIGTERM', 'SIGUSR1', 'SIGUSR2'].forEach(event => {
       process.on(event, () => { this.forceExit(event); });

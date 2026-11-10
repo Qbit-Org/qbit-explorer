@@ -8,6 +8,10 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+/// Default for `-bytespersigop` (`DEFAULT_BYTES_PER_SIGOP` in policy/policy.h):
+/// `GetVirtualTransactionSize` charges this many weight units per unit of sigop cost.
+const BYTES_PER_SIGOP: u32 = 20;
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug)]
 pub struct AuditTransaction {
@@ -20,6 +24,8 @@ pub struct AuditTransaction {
     // sigop-adjusted vsize rounded up the the next integer
     pub sigop_adjusted_vsize: u32,
     pub sigops: u32,
+    // the scale factor the vsizes above were computed with, used again for package sizes and rates
+    witness_scale_factor: u32,
     adjusted_fee_per_vsize: f64,
     pub effective_fee_per_vsize: f64,
     pub dependency_rate: f64,
@@ -93,18 +99,19 @@ fn calc_fee_rate(fee: u64, vsize: f64) -> f64 {
 }
 
 impl AuditTransaction {
-    pub fn from_thread_transaction(tx: &ThreadTransaction, maybe_acceleration: Option<Option<&ThreadAcceleration>>) -> Self {
+    pub fn from_thread_transaction(tx: &ThreadTransaction, maybe_acceleration: Option<Option<&ThreadAcceleration>>, witness_scale_factor: u32) -> Self {
         let fee_delta = match maybe_acceleration {
             Some(Some(acceleration)) => acceleration.delta,
             _ => 0.0
         };
         let fee = (tx.fee as u64) + (fee_delta as u64);
+        // GetVirtualTransactionSize: max(weight, sigop cost * bytes per sigop) / witness scale factor,
         // rounded up to the nearest integer
-        let is_adjusted = tx.weight < (tx.sigops * 20);
-        let sigop_adjusted_vsize = ((tx.weight + 3) / 4).max(tx.sigops * 5);
-        let sigop_adjusted_weight = tx.weight.max(tx.sigops * 20);
+        let is_adjusted = tx.weight < (tx.sigops * BYTES_PER_SIGOP);
+        let sigop_adjusted_weight = tx.weight.max(tx.sigops * BYTES_PER_SIGOP);
+        let sigop_adjusted_vsize = sigop_adjusted_weight.div_ceil(witness_scale_factor);
         let effective_fee_per_vsize = if is_adjusted || fee_delta > 0.0 {
-            calc_fee_rate(fee, f64::from(sigop_adjusted_weight) / 4.0)
+            calc_fee_rate(fee, f64::from(sigop_adjusted_weight) / f64::from(witness_scale_factor))
         } else {
             tx.effective_fee_per_vsize
         };
@@ -116,6 +123,7 @@ impl AuditTransaction {
             sigop_adjusted_weight,
             sigop_adjusted_vsize,
             sigops: tx.sigops,
+            witness_scale_factor,
             adjusted_fee_per_vsize: calc_fee_rate(fee, f64::from(sigop_adjusted_vsize)),
             effective_fee_per_vsize,
             dependency_rate: f64::INFINITY,
@@ -144,9 +152,10 @@ impl AuditTransaction {
         self.order
     }
 
+    /// The package's weight as `BlockAssembler::TestPackage` counts it: its vsize times the scale factor.
     #[inline]
-    pub const fn ancestor_sigop_adjusted_vsize(&self) -> u32 {
-        self.ancestor_sigop_adjusted_vsize
+    pub const fn ancestor_package_weight(&self) -> u32 {
+        self.witness_scale_factor * self.ancestor_sigop_adjusted_vsize
     }
 
     #[inline]
@@ -162,7 +171,7 @@ impl AuditTransaction {
         // the smaller of the two. If either side is NaN, the other side is returned.
         self.dependency_rate.min(calc_fee_rate(
             self.ancestor_fee,
-            f64::from(self.ancestor_sigop_adjusted_weight) / 4.0,
+            f64::from(self.ancestor_sigop_adjusted_weight) / f64::from(self.witness_scale_factor),
         ))
     }
 
@@ -221,5 +230,39 @@ impl AuditTransaction {
             self.calc_new_score();
         }
         old_score
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AuditTransaction;
+    use crate::ThreadTransaction;
+
+    fn tx(fee: f64, weight: u32, sigops: u32) -> ThreadTransaction {
+        ThreadTransaction { uid: 1, order: 1, fee, weight, sigops, effective_fee_per_vsize: 0.0, inputs: vec![] }
+    }
+
+    #[test]
+    fn qbit_vsize_equals_weight() {
+        // a P2MR spend from the qbit fixtures: no sigops, 3,878 WU
+        let atx = AuditTransaction::from_thread_transaction(&tx(7_758.0, 3_878, 0), None, 1);
+        assert_eq!(atx.sigop_adjusted_weight, 3_878);
+        assert_eq!(atx.sigop_adjusted_vsize, 3_878);
+    }
+
+    #[test]
+    fn qbit_charges_20_wu_per_sigop() {
+        // GetVirtualTransactionSize: max(weight, sigop cost * 20) / WITNESS_SCALE_FACTOR (1)
+        let atx = AuditTransaction::from_thread_transaction(&tx(2_000.0, 1_000, 100), None, 1);
+        assert_eq!(atx.sigop_adjusted_weight, 2_000);
+        assert_eq!(atx.sigop_adjusted_vsize, 2_000);
+        assert_eq!(atx.effective_fee_per_vsize, 1.0);
+    }
+
+    #[test]
+    fn bitcoin_vsize_rounds_up() {
+        // with Bitcoin's scale factor of 4 the result is upstream's ceil(weight / 4).max(sigops * 5)
+        assert_eq!(AuditTransaction::from_thread_transaction(&tx(1.0, 3_878, 0), None, 4).sigop_adjusted_vsize, 970);
+        assert_eq!(AuditTransaction::from_thread_transaction(&tx(1.0, 1_000, 100), None, 4).sigop_adjusted_vsize, 500);
     }
 }

@@ -9,6 +9,7 @@ import { Common } from '../common';
 import { SubmitPackageResult, TestMempoolAcceptResult } from './bitcoin-api.interface';
 import os from 'os';
 import { bitcoinCoreApi } from './bitcoin-api-factory';
+import { isAddressSearchDisabledError, isEsploraRequestError } from '../../utils/api';
 interface FailoverHost {
   host: string,
   rtts: number[],
@@ -239,12 +240,20 @@ class FailoverRouter {
     logger.warn(`Switching esplora host to ${this.activeHost.host}`);
   }
 
+  // the host that failed is not always the active one: it can be the fallback
+  // a refused request was retried on, or a host replaced while the request
+  // was in flight
   private addFailure(host: FailoverHost): FailoverHost {
     host.failures++;
     if (host.failures > 5 && this.multihost) {
-      logger.warn(`🚨🚨🚨 Too many esplora failures on ${this.activeHost.host}, falling back to next best alternative 🚨🚨🚨`);
-      this.activeHost.unreachable = true;
-      this.electHost();
+      logger.warn(`🚨🚨🚨 Too many esplora failures on ${host.host}, falling back to next best alternative 🚨🚨🚨`);
+      host.unreachable = true;
+      if (host === this.activeHost) {
+        this.electHost();
+      } else {
+        host.failures = 0;
+        this.updateFallback();
+      }
       return this.activeHost;
     } else {
       return this.fallbackHost;
@@ -379,10 +388,14 @@ class FailoverRouter {
     ).then((response) => { host.failures = Math.max(0, host.failures - 1); return response.data; })
       .catch((e) => {
         let fallbackHost = this.fallbackHost;
-        if (e?.response?.status !== 404) {
+        if (!isEsploraRequestError(e)) {
           logger.warn(`esplora request failed ${e?.response?.status} ${host.host}${path}`);
           logger.warn(e instanceof Error ? e.message : e);
           fallbackHost = this.addFailure(host);
+        } else {
+          // the request's own fault, such as an unknown txid or an invalid
+          // address, which says nothing about the host
+          logger.debug(`esplora request rejected ${e?.response?.status} ${host.host}${path}`);
         }
         if (retry && e?.code === 'ECONNREFUSED' && this.multihost) {
           // Retry immediately
@@ -526,8 +539,18 @@ class ElectrsApi implements AbstractBitcoinApi {
     throw new Error('Method getScriptHashUtxos not implemented.');
   }
 
-  $getAddressPrefix(prefix: string): string[] {
-    throw new Error('Method not implemented.');
+  /** @asyncUnsafe */
+  async $getAddressPrefix(prefix: string): Promise<string[]> {
+    try {
+      return await this.failoverRouter.$get<string[]>('/address-prefix/' + prefix);
+    } catch (e) {
+      // without --address-search, qbit-electrs has no prefix index and answers
+      // at once, so each search asks again rather than remembering the answer
+      if (isAddressSearchDisabledError(e)) {
+        return [];
+      }
+      throw e;
+    }
   }
 
   $sendRawTransaction(rawTransaction: string): Promise<string> {

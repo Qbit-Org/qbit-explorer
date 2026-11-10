@@ -13,7 +13,9 @@ const vectorBuffer: Buffer = fs.readFileSync(path.join(__dirname, './', './test-
 
 describe('Rust GBT', () => {
   test('should produce the same template as getBlockTemplate from Bitcoin Core', async () => {
-    const rustGbt = new GbtGenerator(4_000_000, 8);
+    // a Bitcoin vector: the Core release that made it defaulted -blockmaxweight to
+    // MAX_BLOCK_WEIGHT - 4000, and Bitcoin's witness scale factor is 4
+    const rustGbt = new GbtGenerator(3_996_000, 8, 4);
     const { mempool, maxUid } = mempoolFromArrayBuffer(vectorBuffer.buffer);
     const result = await rustGbt.make(mempool, [], maxUid);
 
@@ -24,6 +26,15 @@ describe('Rust GBT', () => {
 
     expect(blocks[0].length).toEqual(baseline.length);
     expect(blocks[0]).toEqual(template);
+  });
+
+  test('should only accept a witness scale factor from 1 to 4', () => {
+    expect(() => new GbtGenerator(2_000_000, 8, 1)).not.toThrow();
+    expect(() => new GbtGenerator(4_000_000, 8, 4)).not.toThrow();
+    // Node converts NaN to 0 and -1 to 2^32 - 1
+    for (const witnessScaleFactor of [0, NaN, -1, 5]) {
+      expect(() => new GbtGenerator(2_000_000, 8, witnessScaleFactor)).toThrow('witness_scale_factor must be from 1 to 4');
+    }
   });
 });
 

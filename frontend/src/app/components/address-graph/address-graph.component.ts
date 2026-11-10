@@ -10,6 +10,7 @@ import { RelativeUrlPipe } from '@app/shared/pipes/relative-url/relative-url.pip
 import { StateService } from '@app/services/state.service';
 import { PriceService } from '@app/services/price.service';
 import { FiatCurrencyPipe } from '@app/shared/pipes/fiat-currency.pipe';
+import { httpErrorStatus } from '@app/shared/http-error.utils';
 
 const periodSeconds = {
   '1d': (60 * 60 * 24),
@@ -104,7 +105,7 @@ export class AddressGraphComponent implements OnChanges, OnDestroy {
           ? this.electrsApiService.getScriptHashSummary$((this.address.length === 66 ? '21' : '41') + this.address + 'ac')
           : this.electrsApiService.getAddressSummary$(this.address)).pipe(
           catchError(e => {
-            this.error = `Failed to fetch address balance history: ${e?.status || ''} ${e?.statusText || 'unknown error'}`;
+            this.error = `Failed to fetch address balance history: ${httpErrorStatus(e) || 'unknown error'}`;
             return of(null);
           }),
         )),

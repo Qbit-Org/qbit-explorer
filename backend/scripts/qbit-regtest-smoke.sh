@@ -316,10 +316,34 @@ check_backend() {
     require_json "backend fees recommended" "$FETCH_OUT"
   fi
 
+  # Search suggestions: a list, empty in esplora mode, since the harness runs
+  # qbit-electrs without --address-search
+  if fetch "backend address-prefix" "$API_URL/address-prefix/qbrt1"; then
+    if node -e "process.exit(Array.isArray(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))) ? 0 : 1)" "$FETCH_OUT" >/dev/null 2>&1; then
+      ok "backend address-prefix list"
+    else
+      fail "backend address-prefix did not answer a JSON list"
+    fi
+  fi
+
   if fetch "backend mining hashrate" "$API_URL/mining/hashrate/1w"; then
     require_json "backend mining hashrate" "$FETCH_OUT"
     validate_hashrate_response "$FETCH_OUT" "$height"
   fi
+
+  # The fee and reward graphs; qbit has no price feed, so no block has a price
+  local history field
+  for history in fees:avgFees rewards:avgRewards; do
+    field="${history#*:}"
+    history="${history%%:*}"
+    if fetch "backend mining block $history" "$API_URL/mining/blocks/$history/1w"; then
+      if [[ -n "$(json_number_field "$FETCH_OUT" "0.$field")" ]]; then
+        ok "backend mining block $history include the indexed blocks"
+      else
+        fail "backend mining block $history are empty"
+      fi
+    fi
+  done
 }
 
 check_esplora() {
