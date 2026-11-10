@@ -83,9 +83,18 @@ export function getAddressLookupError(e: unknown): { status: number, reason: str
   return undefined;
 }
 
-// Whether an esplora request failed because of the request: electrs has no such object (404), or rejected
-// the request in a way getAddressLookupError recognizes. Anything else is the host's failure, including
-// electrs's other 400s and any answer from a proxy or allowlist in front of it.
+// qbit-electrs answers an address prefix search with 400 "address search disabled" unless it runs with
+// --address-search (src/rest.rs): it has no prefix index, so there are no suggestions to give.
+export function isAddressSearchDisabledError(e: unknown): boolean {
+  const response = (e as { response?: { status?: number, data?: unknown } })?.response;
+  return response?.status === 400 && typeof response.data === 'string' &&
+    response.data.trim().toLowerCase().includes('address search disabled');
+}
+
+// Whether an esplora request failed because of the request: electrs has no such object (404), rejected
+// the request in a way getAddressLookupError recognizes, or has no address prefix index. Anything else is
+// the host's failure, including electrs's other 400s and any answer from a proxy or allowlist in front of it.
 export function isEsploraRequestError(e: unknown): boolean {
-  return (e as { response?: { status?: number } })?.response?.status === 404 || getAddressLookupError(e) !== undefined;
+  return (e as { response?: { status?: number } })?.response?.status === 404 || getAddressLookupError(e) !== undefined ||
+    isAddressSearchDisabledError(e);
 }

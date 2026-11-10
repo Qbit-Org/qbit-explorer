@@ -29,6 +29,23 @@ const ADDRESS_REGEX = /^[a-z0-9]{2,120}$/i;
 const SCRIPT_HASH_REGEX = /^([a-f0-9]{2})+$/i;
 const RAW_HEX_REGEX = /^(?:[a-f0-9]{2})+$/i;
 
+// How qbit's bech32 addresses begin: qb on mainnet, tq on testnet4, qbrt on regtest
+const BECH32_STARTS = ['qb1', 'tq1', 'qbrt1'];
+
+// qbit-electrs and qbitd give bech32 addresses in lowercase, but one may also
+// be written all in uppercase. So lowercase a prefix that begins like a qbit
+// bech32 address and has no lowercase letter. Any other prefix stays as typed,
+// since base58 is case-sensitive. (A mainnet base58 P2PKH address starts with
+// Q, so an all-uppercase QB1 could begin one too. Such an address still
+// matches once the prefix has a lowercase letter.)
+function lowercaseBech32Prefix(prefix: string): string {
+  const lowercase = prefix.toLowerCase();
+  if (prefix === prefix.toUpperCase() && BECH32_STARTS.some((start) => lowercase.startsWith(start))) {
+    return lowercase;
+  }
+  return prefix;
+}
+
 class BitcoinRoutes {
   public initRoutes(app: Application) {
     app
@@ -882,8 +899,14 @@ class BitcoinRoutes {
   }
 
   private async getAddressPrefix(req: Request, res: Response) {
+    // search asks for suggestions for whatever is typed, pool names included,
+    // and nothing but address characters can begin an address
+    if (!ADDRESS_REGEX.test(req.params.prefix)) {
+      res.send([]);
+      return;
+    }
     try {
-      const addressPrefix = await bitcoinApi.$getAddressPrefix(req.params.prefix);
+      const addressPrefix = await bitcoinApi.$getAddressPrefix(lowercaseBech32Prefix(req.params.prefix));
       res.send(addressPrefix);
     } catch (e) {
       handleError(req, res, 500, 'Failed to get address prefix');

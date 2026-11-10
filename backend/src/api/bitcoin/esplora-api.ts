@@ -9,7 +9,7 @@ import { Common } from '../common';
 import { SubmitPackageResult, TestMempoolAcceptResult } from './bitcoin-api.interface';
 import os from 'os';
 import { bitcoinCoreApi } from './bitcoin-api-factory';
-import { isEsploraRequestError } from '../../utils/api';
+import { isAddressSearchDisabledError, isEsploraRequestError } from '../../utils/api';
 interface FailoverHost {
   host: string,
   rtts: number[],
@@ -539,8 +539,18 @@ class ElectrsApi implements AbstractBitcoinApi {
     throw new Error('Method getScriptHashUtxos not implemented.');
   }
 
-  $getAddressPrefix(prefix: string): string[] {
-    throw new Error('Method not implemented.');
+  /** @asyncUnsafe */
+  async $getAddressPrefix(prefix: string): Promise<string[]> {
+    try {
+      return await this.failoverRouter.$get<string[]>('/address-prefix/' + prefix);
+    } catch (e) {
+      // without --address-search, qbit-electrs has no prefix index and answers
+      // at once, so each search asks again rather than remembering the answer
+      if (isAddressSearchDisabledError(e)) {
+        return [];
+      }
+      throw e;
+    }
   }
 
   $sendRawTransaction(rawTransaction: string): Promise<string> {

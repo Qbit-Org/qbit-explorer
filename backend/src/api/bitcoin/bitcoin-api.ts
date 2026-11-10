@@ -188,7 +188,7 @@ class BitcoinApi implements AbstractBitcoinApi {
     return this.bitcoindClient.getRawMemPool();
   }
 
-  $getAddressPrefix(prefix: string): string[] {
+  async $getAddressPrefix(prefix: string): Promise<string[]> {
     const found: { [address: string]: string } = {};
     const mp = mempool.getMempool();
     for (const tx in mp) {

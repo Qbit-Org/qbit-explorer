@@ -238,4 +238,87 @@ describe('Esplora API', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(`Too many esplora failures on ${fallbackUrl},`));
     });
   });
+
+  describe('address prefix search', () => {
+    // P2MR output of mainnet block 161370
+    const QBIT_ADDRESS = 'qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h';
+    // qbit-electrs's answers, as status, content type and body
+    const FOUND: [number, string, string] = [200, 'application/json', JSON.stringify([QBIT_ADDRESS])];
+    const DISABLED: [number, string, string] = [400, 'text/plain', 'address search disabled'];
+    // a qbit-electrs host's answer, and the requests it got, as "<host> <path>"
+    const servers: http.Server[] = [];
+    const urls: string[] = [];
+    const answers: [number, string, string][] = [];
+    const requests: string[] = [];
+    let api: EsploraApi;
+
+    beforeAll(async () => {
+      for (const i of [0]) {
+        const server = http.createServer((req, res) => {
+          requests.push(`${i} ${req.url}`);
+          res.writeHead(answers[i][0], { 'content-type': answers[i][1] });
+          res.end(answers[i][2]);
+        });
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        servers.push(server);
+        urls.push(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+      }
+    });
+
+    afterAll(async () => {
+      for (const server of servers) {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      requests.length = 0;
+      api = new EsploraApi();
+      Object.assign(api['failoverRouter'].activeHost, { host: urls[0], socket: false });
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    test('returns the addresses a host running with --address-search finds', async () => {
+      answers[0] = FOUND;
+
+      await expect(api.$getAddressPrefix('qb1zjrt')).resolves.toStrictEqual([QBIT_ADDRESS]);
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1zjrt']);
+    });
+
+    test('returns no addresses from a host without --address-search, without a warning or a counted failure', async () => {
+      answers[0] = DISABLED;
+
+      await expect(api.$getAddressPrefix('qb1zjrt')).resolves.toStrictEqual([]);
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(`esplora request rejected 400 ${urls[0]}/address-prefix/qb1zjrt`);
+      expect(api['failoverRouter'].activeHost.failures).toBe(0);
+    });
+
+    test('asks again on every search, so a host given its index answers at once', async () => {
+      answers[0] = DISABLED;
+      await expect(api.$getAddressPrefix('qb1')).resolves.toStrictEqual([]);
+
+      answers[0] = FOUND;
+      await expect(api.$getAddressPrefix('qb1z')).resolves.toStrictEqual([QBIT_ADDRESS]);
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '0 /address-prefix/qb1z']);
+    });
+
+    // electrs answers 400 for its own failures too, so only that reason means no index
+    test.each([
+      [400, 'Corruption: block checksum mismatch'],
+      [503, 'Service Unavailable'],
+    ])('fails on a %d %p, logging it, and asks again next time', async (status, reason) => {
+      answers[0] = [status, 'text/plain', reason];
+
+      await expect(api.$getAddressPrefix('qb1')).rejects.toMatchObject({ response: { status } });
+      expect(logger.warn).toHaveBeenCalledWith(`esplora request failed ${status} ${urls[0]}/address-prefix/qb1`);
+      await expect(api.$getAddressPrefix('qb1')).rejects.toMatchObject({ response: { status } });
+      expect(requests).toStrictEqual(['0 /address-prefix/qb1', '0 /address-prefix/qb1']);
+    });
+  });
 });
