@@ -7,6 +7,8 @@ export interface WebsocketResponse {
   backend?: 'esplora' | 'electrum' | 'none';
   block?: BlockExtended;
   blocks?: BlockExtended[];
+  // `blocks` follows a reorg, so its tip can be below the page's
+  reorg?: boolean;
   conversions?: Record<string, number>;
   txConfirmed?: string;
   historicalDate?: string;
