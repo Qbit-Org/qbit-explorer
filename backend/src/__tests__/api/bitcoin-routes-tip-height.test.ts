@@ -6,6 +6,7 @@ jest.mock('../../api/bitcoin/bitcoin-api-factory', () => ({
   __esModule: true,
   default: {},
   bitcoinCoreApi: {
+    $getBlockHashTip: jest.fn(),
     $getBlockHeightTip: jest.fn(),
     $getBlockHash: jest.fn(),
     $getBlock: jest.fn(),
@@ -43,6 +44,7 @@ describe('GET blocks/tip/height', () => {
     const state = blocks as unknown as { initialSyncComplete: boolean, currentBlockHeight: number };
     state.initialSyncComplete = false;
     state.currentBlockHeight = 0;
+    coreApi.$getBlockHashTip.mockReset();
     coreApi.$getBlockHeightTip.mockReset();
     coreApi.$getBlockHash.mockReset();
     coreApi.$getBlock.mockReset();
@@ -70,7 +72,8 @@ describe('GET blocks/tip/height', () => {
   // A $updateBlocks run that finds the backend's cached blocks already at the
   // node's tip, so it only refreshes the difficulty anchors.
   const mockCaughtUpWithNode = (height: number): void => {
-    blocks.setBlocks([{ height } as BlockExtended]);
+    blocks.setBlocks([{ height, id: '00'.repeat(32) } as BlockExtended]);
+    coreApi.$getBlockHashTip.mockResolvedValue('00'.repeat(32));
     coreApi.$getBlockHeightTip.mockResolvedValue(height);
     coreApi.$getBlockHash.mockResolvedValue('00'.repeat(32));
     coreApi.$getBlock.mockResolvedValue({ height, timestamp: 0, bits: 0 } as IEsploraApi.Block);
@@ -88,7 +91,8 @@ describe('GET blocks/tip/height', () => {
 
     // a run that stops short of the tip: the cached blocks end one block
     // below it, and the node stops answering while that block is fetched
-    blocks.setBlocks([{ height: 158366 } as BlockExtended]);
+    blocks.setBlocks([{ height: 158366, id: '11'.repeat(32) } as BlockExtended]);
+    coreApi.$getBlockHashTip.mockResolvedValue('22'.repeat(32));
     coreApi.$getBlockHeightTip.mockResolvedValue(158367);
     coreApi.$getBlockHash.mockRejectedValue(new Error('RPC unavailable'));
     await expect(blocks.$updateBlocks()).rejects.toThrow('RPC unavailable');
@@ -107,7 +111,7 @@ describe('GET blocks/tip/height', () => {
     mockCaughtUpWithNode(158367);
     await blocks.$updateBlocks();
 
-    coreApi.$getBlockHeightTip.mockRejectedValue(new Error('RPC unavailable'));
+    coreApi.$getBlockHashTip.mockRejectedValue(new Error('RPC unavailable'));
     await expect(blocks.$updateBlocks()).rejects.toThrow('RPC unavailable');
 
     await expectTip(158367);
