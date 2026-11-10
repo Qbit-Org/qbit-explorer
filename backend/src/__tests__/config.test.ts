@@ -177,6 +177,19 @@ describe('Mempool Backend Config', () => {
     }
   });
 
+  test('should give the Docker image the same block indexing default as config.ts', () => {
+    jest.isolateModules(() => {
+      jest.mock('../../mempool-config.json', () => ({}), { virtual: true });
+
+      const config = jest.requireActual('../config').default;
+      // start.sh writes its own default into mempool-config.json, which
+      // overrides config.ts's default in the image
+      const startSh = fs.readFileSync(`${__dirname}/../../../docker/backend/start.sh`, 'utf-8');
+
+      expect(startSh).toContain(`__MEMPOOL_INDEXING_BLOCKS_AMOUNT__=\${MEMPOOL_INDEXING_BLOCKS_AMOUNT:=${config.MEMPOOL.INDEXING_BLOCKS_AMOUNT}}`);
+    });
+  });
+
   test('should override the default values with the passed values', () => {
     jest.isolateModules(() => {
       const fixture = JSON.parse(fs.readFileSync(`${__dirname}/../__fixtures__/mempool-config.template.json`, 'utf8'));
@@ -185,12 +198,7 @@ describe('Mempool Backend Config', () => {
 
       const config = jest.requireActual('../config').default;
 
-      // docker/backend/start.sh doesn't map MEMPOOL.HTTP_HOST yet, so the
-      // fixture, which lists the keys of the Docker template, leaves it out.
-      // TODO: compare with fixture.MEMPOOL again once start.sh maps
-      // MEMPOOL_HTTP_HOST, in the patcher-coordinated follow-up to #22, which
-      // also adds HTTP_HOST to the fixture and the Docker template
-      expect(config.MEMPOOL).toStrictEqual({ ...fixture.MEMPOOL, HTTP_HOST: '' });
+      expect(config.MEMPOOL).toStrictEqual(fixture.MEMPOOL);
 
       expect(config.ELECTRUM).toStrictEqual(fixture.ELECTRUM);
 

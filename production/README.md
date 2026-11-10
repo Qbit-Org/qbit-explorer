@@ -274,6 +274,14 @@ tokens) over HTTPS. If the host cannot reach qbit.org, the frontend keeps the
 copy bundled at build time. With `QBIT_SITE_CHROME` set to `false` (see below),
 the frontend doesn't use this location, and you can remove it.
 
+The backend address is in `$mempool_backend`, near the top of
+`nginx-mempool.conf`. The `resolver 127.0.0.11` line next to it is for the
+Docker image, where the address is a container name that nginx looks up
+through Docker's DNS server, `127.0.0.11`. nginx doesn't look up an IP address,
+so the line has no effect here; keep an IP address in `$mempool_backend`. If
+your `server` block has a `resolver` directive of its own, delete the one in
+`nginx-mempool.conf`, because nginx refuses two in one block.
+
 Run `sudo nginx -t` before reloading nginx.
 
 ## Frontend customization

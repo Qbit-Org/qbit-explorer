@@ -23,8 +23,9 @@ Jump to a section:
 No images are published, so build them yourself as shown below.
 [`.github/workflows/docker.yml`](../.github/workflows/docker.yml) runs the same
 build on every pull request and on every `v*` tag. It then starts both images
-with `docker-compose.yml` and checks that all three containers become healthy,
-without pushing the images anywhere.
+with `docker-compose.yml` and checks that all three containers become healthy
+and that the API answers through nginx, also after the `api` container is
+recreated, without pushing the images anywhere.
 
 ### Build the images yourself
 
@@ -49,6 +50,25 @@ contexts (the copies are git-ignored). The frontend image build needs
 network access: it downloads mining pool logos from
 [mempool/mining-pool-logos](https://github.com/mempool/mining-pool-logos),
 which include the logos for the AuxPoW parent pools the explorer recognises.
+
+The build lists those logos through the GitHub API, twice per build. GitHub
+allows 60 unauthenticated API requests an hour per IP address, so a build on a
+busy or shared address can fail with `API rate limit exceeded`. A token is
+optional and raises that limit: set `GITHUB_TOKEN` and add
+`--secret id=github_token,env=GITHUB_TOKEN` to the frontend build. Only the
+build step that downloads the logos sees the token, and it isn't stored in the
+image. `docker.yml` passes the job's read-only token this way.
+
+Both images need BuildKit, Docker's default builder since Docker 23, which
+`docker buildx build` always uses: the frontend image for that secret mount,
+with or without a token, and the backend image for its `--build-context`
+options.
+
+The Dockerfiles pin each base image by digest, and the backend image checks
+NodeSource's Node.js setup script against a SHA-256 before running it.
+Dependabot proposes digest updates. NodeSource can republish `setup_26.x` at
+the same URL, and the backend build then stops at that check: read the new
+script, then put its checksum in both stages of `docker/backend/Dockerfile`.
 
 ## Run with Docker Compose
 
@@ -243,6 +263,7 @@ defaults to outside the container.
 | `MEMPOOL_ENABLED` | `MEMPOOL.ENABLED` | `true` |
 | `MEMPOOL_OFFICIAL` | `MEMPOOL.OFFICIAL` | `false` |
 | `BACKEND_HTTP_PORT` | `MEMPOOL.HTTP_PORT` | `8999` |
+| `MEMPOOL_HTTP_HOST` | `MEMPOOL.HTTP_HOST` | (empty) |
 | `MEMPOOL_SPAWN_CLUSTER_PROCS` | `MEMPOOL.SPAWN_CLUSTER_PROCS` | `0` |
 | `MEMPOOL_UNIX_SOCKET_PATH` | `MEMPOOL.UNIX_SOCKET_PATH` | (empty) |
 | `MEMPOOL_API_URL_PREFIX` | `MEMPOOL.API_URL_PREFIX` | `/api/v1/` |
@@ -255,7 +276,7 @@ defaults to outside the container.
 | `MEMPOOL_BLOCK_TARGET_SPACING_SECONDS` | `MEMPOOL.BLOCK_TARGET_SPACING_SECONDS` | `60` |
 | `MEMPOOL_INITIAL_BLOCKS_AMOUNT` | `MEMPOOL.INITIAL_BLOCKS_AMOUNT` | `8` |
 | `MEMPOOL_MEMPOOL_BLOCKS_AMOUNT` | `MEMPOOL.MEMPOOL_BLOCKS_AMOUNT` | `8` |
-| `MEMPOOL_INDEXING_BLOCKS_AMOUNT` | `MEMPOOL.INDEXING_BLOCKS_AMOUNT` | `11000` |
+| `MEMPOOL_INDEXING_BLOCKS_AMOUNT` | `MEMPOOL.INDEXING_BLOCKS_AMOUNT` | `110000` |
 | `MEMPOOL_BLOCKS_SUMMARIES_INDEXING` | `MEMPOOL.BLOCKS_SUMMARIES_INDEXING` | `false` |
 | `MEMPOOL_GOGGLES_INDEXING` | `MEMPOOL.GOGGLES_INDEXING` | `false` |
 | `MEMPOOL_USE_SECOND_NODE_FOR_MINFEE` | `MEMPOOL.USE_SECOND_NODE_FOR_MINFEE` | `false` |
@@ -278,6 +299,11 @@ defaults to outside the container.
 | `MEMPOOL_ALLOW_UNREACHABLE` | `MEMPOOL.ALLOW_UNREACHABLE` | `true` |
 | `MEMPOOL_PRICE_UPDATES_PER_HOUR` | `MEMPOOL.PRICE_UPDATES_PER_HOUR` | `1` |
 | `MEMPOOL_MAX_TRACKED_ADDRESSES` | `MEMPOOL.MAX_TRACKED_ADDRESSES` | `1` |
+
+`MEMPOOL_HTTP_HOST` is the address the backend listens on: an IP address such
+as `127.0.0.1` or `::1`, or empty for every interface. Under Compose, leave it
+empty. The `web` container reaches the backend over the Compose network, and
+with `127.0.0.1` the backend would only answer from inside its own container.
 
 **CORE_RPC** (qbitd)
 
@@ -394,7 +420,7 @@ mempool.space services and replication (`MEMPOOL_SERVICES_*`,
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `FRONTEND_HTTP_PORT` | `8080` | Port nginx listens on inside the container |
-| `BACKEND_MAINNET_HTTP_HOST` | `127.0.0.1` | Backend host that nginx proxies `/api` and `/ws` to (`api` in the compose file) |
+| `BACKEND_MAINNET_HTTP_HOST` | `127.0.0.1` | Backend host or IP address that nginx proxies `/api` and `/ws` to (`api` in the compose file). See [Backend host names](#backend-host-names) for how nginx looks a host name up |
 | `BACKEND_MAINNET_HTTP_PORT` | `8999` | Backend port for that proxy |
 | `MAINNET_ENABLED` | `true` | Serve qbit mainnet |
 | `TESTNET4_ENABLED` | `false` | Serve qbit testnet4 |
@@ -419,3 +445,33 @@ mempool.space services and replication (`MEMPOOL_SERVICES_*`,
 | `ADDITIONAL_CURRENCIES` | `false` | Extra fiat currencies |
 | `NGINX_PROTOCOL`, `NGINX_HOSTNAME`, `NGINX_PORT` | `http`, `localhost`, `8999` | API address for server-side rendering only; the browser uses relative URLs |
 | `ACCELERATOR`, `ACCELERATOR_BUTTON`, `PUBLIC_ACCELERATIONS`, `SERVICES_API`, `STRATUM_ENABLED` | off or empty | Upstream mempool.space services; leave them off |
+
+### Backend host names
+
+nginx looks up a `BACKEND_MAINNET_HTTP_HOST` host name when a request comes
+in, and keeps the answer for 10 seconds, so it follows a recreated `api`
+container to its new address. An IP address needs no lookup.
+
+At every start, `entrypoint.sh` sets nginx's resolver to the first
+`nameserver` in the container's `/etc/resolv.conf` that nginx can use, so a
+restart after a network change picks up the new one:
+
+- On a user-defined Docker network, such as Compose's, that is Docker's DNS
+  server, `127.0.0.11`. Elsewhere, such as in Kubernetes, in Podman or on
+  Docker's default bridge network, it's the DNS server the container gets
+  there, and the log names it.
+- It skips link-local IPv6 addresses with a zone, such as `fe80::1%eth0`,
+  which nginx can't use. If no nameserver is left, it uses `127.0.0.11` and
+  logs that.
+- With an IPv6 nameserver, nginx asks for IPv4 and IPv6 addresses. With any
+  other, `127.0.0.11` included, it asks for IPv4 addresses only.
+
+nginx doesn't read `/etc/hosts` and doesn't add `search` domains, so some
+names that resolved before don't. Set an IP address instead, with an IPv6
+address in brackets, such as `[fd00::2]`:
+
+- names that only `/etc/hosts` knows, from `extra_hosts`, `--add-host` or
+  `--link`;
+- short names that need a `search` domain, such as a Kubernetes service's
+  `api`. Its full name, `api.<namespace>.svc.cluster.local`, also works;
+- names with only an IPv6 address, when the nameserver is IPv4.
