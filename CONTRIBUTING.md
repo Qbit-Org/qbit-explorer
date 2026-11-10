@@ -57,8 +57,16 @@ Mining: the pool is now Qbit Pool
 
 Use the body to explain why the change is needed.
 
-Pull requests are squash-merged, so `main` gets one commit for each pull
-request. Write the pull request title in the same style.
+Every commit on `main` and `1.x.x` must carry a verified signature, and pull
+requests merge with a merge commit: squash and rebase merges are off. You
+don't need to sign your own commits. When a pull request is ready, a
+maintainer squashes it into one commit, signs it and merges it, so the branch
+gets one commit for each pull request, under GitHub's merge commit. That
+commit's subject is the pull request's title, so write the title in the same
+style. Leave "Allow edits by maintainers" on, so the maintainer can push the
+signed commit to your branch. If your fork can't offer that, a maintainer
+opens the same change from a branch in this repository. The rulesets that
+enforce this are in [`.github/rulesets/`](.github/rulesets/).
 
 ## Review
 

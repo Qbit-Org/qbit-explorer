@@ -229,7 +229,7 @@ jobs:
         run: |
           files=$(git ls-files contributors)
           if [ -n "$files" ]; then
-            echo "::error title=Upstream CLA files::These contributors/ files sign upstream mempool's CLA, but qbit-explorer has no CLA (CONTRIBUTING.md#license). Remove them in another commit with 'git rm -r contributors' and push; pull requests are squash-merged, so they never reach main (README.md#upstream)."
+            echo "::error title=Upstream CLA files::These contributors/ files sign upstream mempool's CLA, but qbit-explorer has no CLA (CONTRIBUTING.md#license). Remove them in another commit with 'git rm -r contributors' and push; a pull request is squashed into one commit before it merges, so they never reach main (README.md#upstream)."
             echo "$files"
             exit 1
           fi
