@@ -6,6 +6,7 @@ import logger from '../logger';
 import config from '../config';
 import pLimit from '../utils/p-limit';
 import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '../utils/weight-units';
+import { decodeInputScripts, decodeScript, DecodedInputScripts, getSigOpCount, getWitnessSigOps, isP2shScript } from '../utils/bitcoin-script';
 
 class TransactionUtils {
   constructor() { }
@@ -135,78 +136,40 @@ class TransactionUtils {
   }
 
   /**
-   *  Calculate the witness-adjusted sigops cost of an asm script
+   * The sigop cost qbitd gives a transaction (GetTransactionSigOpCost, qbit v1.0.0
+   * src/consensus/tx_verify.cpp:143-162), counted over the decoded scripts: the sigops of its
+   * scriptsigs and outputs, a P2SH spend's redeem script, and a v0 witness program's
+   * (WitnessSigOps, src/script/interpreter.cpp:2544-2558). Without prevouts the input sigops
+   * are unknown, so the count is a lower bound. Takes the inputs' scripts if they are decoded already.
    */
-  public countScriptSigops(script: string, isRawScript: boolean = false, witness: boolean = false): number {
-    if (!script?.length) {
-      return 0;
-    }
-
-    let sigops = 0;
-    // count OP_CHECKSIG and OP_CHECKSIGVERIFY (qbitd's GetSigOpCount skips OP_CHECKSIGPQC and OP_CHECKSIGADD)
-    sigops += (script.match(/OP_CHECKSIG(?:VERIFY)?\b/g)?.length || 0);
-
-    // count OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY
-    if (isRawScript) {
-      // in scriptPubKey or scriptSig, always worth 20
-      sigops += 20 * (script.match(/OP_CHECKMULTISIG/g)?.length || 0);
-    } else {
-      // in redeem scripts and witnesses, worth N if preceded by OP_1 to OP_16, 20 otherwise
-      const matches = script.matchAll(/(?:OP_(?:PUSHNUM_)?(\d+) )?OP_CHECKMULTISIG/g);
-      for (const match of matches) {
-        const n = parseInt(match[1]);
-        if (n >= 1 && n <= 16) {
-          sigops += n;
-        } else {
-          sigops += 20;
-        }
-      }
-    }
-
-    return witness ? sigops : (sigops * WITNESS_SCALE_FACTOR);
-  }
-
-  public countSigops(transaction: IEsploraApi.Transaction): number {
+  public countSigops(transaction: IEsploraApi.Transaction, inputs: DecodedInputScripts[] = transaction.vin.map(decodeInputScripts)): number {
     let sigops = 0;
 
-    for (const input of transaction.vin) {
-      if (input.scriptsig_asm) {
-        sigops += this.countScriptSigops(input.scriptsig_asm, true);
-      }
-      if (input.prevout) {
-        switch (true) {
-          case input.prevout.scriptpubkey_type === 'p2sh' && input.witness?.length === 2 && input.scriptsig && input.scriptsig.startsWith('160014'):
-          case input.prevout.scriptpubkey_type === 'v0_p2wpkh':
-            sigops += 1;
-            break;
-
-          case input.prevout?.scriptpubkey_type === 'p2sh' && input.witness?.length && input.scriptsig && input.scriptsig.startsWith('220020'):
-          case input.prevout.scriptpubkey_type === 'v0_p2wsh':
-            if (input.witness?.length) {
-              sigops += this.countScriptSigops(bitcoinjs.script.toASM(Buffer.from(input.witness[input.witness.length - 1], 'hex')), false, true);
-            }
-            break;
-
-          case input.prevout.scriptpubkey_type === 'p2sh':
-            if (input.inner_redeemscript_asm) {
-              sigops += this.countScriptSigops(input.inner_redeemscript_asm);
-            }
-            break;
-        }
-      }
+    for (const input of inputs) {
+      sigops += getSigOpCount(input.scriptsig, false) * WITNESS_SCALE_FACTOR;
     }
-
     for (const output of transaction.vout) {
-      if (output.scriptpubkey_asm) {
-        sigops += this.countScriptSigops(output.scriptpubkey_asm, true);
-      }
+      sigops += getSigOpCount(decodeScript(output.scriptpubkey || ''), false) * WITNESS_SCALE_FACTOR;
     }
+
+    transaction.vin.forEach((vin, index) => {
+      const { prevout, redeemScript } = inputs[index];
+      if (!prevout) {
+        return;
+      }
+      if (!isP2shScript(prevout)) {
+        sigops += getWitnessSigOps(prevout, vin.witness);
+      } else if (redeemScript) {
+        // the redeem script can be a witness program
+        sigops += getSigOpCount(redeemScript, true) * WITNESS_SCALE_FACTOR + getWitnessSigOps(redeemScript, vin.witness);
+      }
+    });
 
     return sigops;
   }
 
     /**
-   * see https://github.com/bitcoin/bitcoin/blob/25c45bb0d0bd6618ec9296a1a43605657124e5de/src/policy/policy.cpp#L166-L193
+   * see qbit v1.0.0 src/policy/policy.cpp:186-210 (CheckSigopsBIP54)
    * returns true if the transactions is permitted under bip54 sigops rules
    *
    * "Unlike the existing block wide sigop limit which counts sigops present in the block
@@ -216,20 +179,20 @@ class TransactionUtils {
    * `fAccurate` means correctly accounting sigops for CHECKMULTISIGs(VERIFY) with 16 pubkeys
    * or fewer. This method of accounting was introduced by BIP16, and BIP54 reuses it.
    * The GetSigOpCount call on the previous scriptPubKey counts both bare and P2SH sigops."
+   *
+   * Without prevouts, only the scriptsigs count, so this can miss a transaction over the limit.
    */
-  public checkSigopsBIP54(tx: TransactionExtended, limit): boolean {
+  public checkSigopsBIP54(tx: TransactionExtended, limit: number, inputs: DecodedInputScripts[] = tx.vin.map(decodeInputScripts)): boolean {
     let sigops = 0;
-    for (const input of tx.vin) {
-      if (input.scriptsig_asm) {
-        sigops += this.countScriptSigops(input.scriptsig_asm);
-      }
-      if (input.prevout) {
-        // P2SH redeem script
-        if (input.prevout.scriptpubkey_type === 'p2sh' && input.inner_redeemscript_asm) {
-          sigops += this.countScriptSigops(input.inner_redeemscript_asm);
+    for (const { scriptsig, prevout, redeemScript } of inputs) {
+      sigops += getSigOpCount(scriptsig, true);
+      if (prevout) {
+        if (isP2shScript(prevout)) {
+          // P2SH redeem script
+          sigops += redeemScript ? getSigOpCount(redeemScript, true) : 0;
         } else {
           // prevout scriptpubkey
-          sigops += this.countScriptSigops(input.prevout.scriptpubkey_asm);
+          sigops += getSigOpCount(prevout, true);
         }
       }
 
@@ -329,6 +292,13 @@ class TransactionUtils {
           b.push('OP_CHECKSIGPQC');
         } else if (op === 0xba) {
           b.push('OP_CHECKSIGADD');
+        } else if (op === 0xbb) {
+          // qbit's P2MR opcodes (qbit v1.0.0 src/script/script.h:317-321), which bitcoinjs-lib doesn't name
+          b.push('OP_CHECKTEMPLATEVERIFY');
+        } else if (op === 0xbc) {
+          b.push('OP_CHECKDATASIGPQC');
+        } else if (op === 0xbd) {
+          b.push('OP_CHECKDATASIGADDPQC');
         } else {
           const opcode = bitcoinjs.script.toASM([ op ]);
           if (opcode && op < 0xfd) {

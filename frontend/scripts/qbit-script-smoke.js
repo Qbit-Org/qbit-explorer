@@ -33,11 +33,19 @@ globalThis.$localize = (strings, ...values) => String.raw({ raw: strings }, ...v
 const { TransactionFlags } = require('../src/app/shared/filters.utils.ts');
 const {
   addressToScriptPubKey,
-  countScriptSigops,
+  breaksRestrictedOutputMode,
+  countSigops,
   decodeRawTransaction,
+  decodeScript,
   getDustThreshold,
+  getPreviewTransactionFlags,
+  getSigOpCount,
   getTransactionFlags,
+  getUnconfirmedParents,
+  getUnconfirmedParentTxids,
   isNonStandard,
+  isNonStandardForParents,
+  isPushOnly,
   scriptPubKeyToAddress,
 } = require('../src/app/shared/transaction.utils.ts');
 const { formatScriptPubKeyType, getReservedWitnessVersion } = require('../src/app/shared/scriptpubkey-type.utils.ts');
@@ -108,196 +116,88 @@ const raw = '0200000001' + '00'.repeat(32) + 'ffffffff00ffffffff0100000000000000
 const decoded = decodeRawTransaction(raw, 'testnet4').tx;
 assert(decoded.vout[0].scriptpubkey_asm === 'OP_CHECKSIGPQC', `0xb3 ASM mismatch: ${decoded.vout[0].scriptpubkey_asm}`);
 
-// qbit enforces its standardness policy from genesis, far below Bitcoin's activation heights.
-// Keep these cases in sync with the backend 'qbit standardness policy' tests.
-const p2mrOutput = (value) => ({
-  scriptpubkey: `5220${'11'.repeat(32)}`,
-  scriptpubkey_asm: `OP_PUSHNUM_2 OP_PUSHBYTES_32 ${'11'.repeat(32)}`,
-  scriptpubkey_type: 'v2_p2mr',
-  value,
-});
-const anchorOutput = (value) => ({
-  scriptpubkey: '51024e73',
-  scriptpubkey_asm: 'OP_PUSHNUM_1 OP_PUSHBYTES_2 4e73',
-  scriptpubkey_type: 'anchor',
-  value,
-});
-const p2pkOutput = {
-  scriptpubkey: `2102${'11'.repeat(32)}ac`,
-  scriptpubkey_asm: `OP_PUSHBYTES_33 02${'11'.repeat(32)} OP_CHECKSIG`,
-  scriptpubkey_type: 'p2pk',
-  value: 100000,
-};
-const nonStandardOutput = {
-  scriptpubkey: 'ff',
-  scriptpubkey_asm: 'OP_INVALIDOPCODE',
-  scriptpubkey_type: 'nonstandard',
-  value: 100000,
-};
+// qbit's standardness and sigop rules, on the vectors the backend tests run too, so that the backend's
+// and the frontend's copies of these rules can't drift apart
+{
+  const vectors = require('../../backend/src/__tests__/fixtures/qbit-standardness-vectors.ts');
+  const testData = (file) => require(`../../backend/src/__tests__/api/test-data/${file}`);
+  const isFlagged = (flags) => (flags & TransactionFlags.nonstandard) === TransactionFlags.nonstandard;
 
-// OP_RETURN followed by a single push of dataBytes bytes
-function opReturnOutput(dataBytes) {
-  const data = 'ab'.repeat(dataBytes);
-  let push = dataBytes.toString(16).padStart(2, '0');
-  if (dataBytes > 0xff) {
-    push = `4d${(dataBytes & 0xff).toString(16).padStart(2, '0')}${(dataBytes >> 8).toString(16).padStart(2, '0')}`;
-  } else if (dataBytes > 75) {
-    push = `4c${push}`;
+  for (const [network, height] of vectors.qbitHeights) {
+    // the frontend names mainnet ''
+    const frontendNetwork = network === 'mainnet' ? '' : network;
+    for (const { name, nonStandard, tx } of vectors.standardnessVectors) {
+      assert(
+        isNonStandard(tx(), height, frontendNetwork) === nonStandard,
+        `${name} should be ${nonStandard ? 'non-standard' : 'standard'} on ${network} at height ${height}`,
+      );
+    }
+    // restricted output mode, which /tx/preview checks on every network but regtest
+    for (const [name, buildTx, allowed] of vectors.restrictedOutputVectors) {
+      const tx = buildTx();
+      assert(breaksRestrictedOutputMode(tx, frontendNetwork) === (!allowed && network !== 'regtest'), `${name}: restricted output mode on ${network}`);
+      assert(!isNonStandard(tx, height, frontendNetwork), `${name} flagged as non-standard on its own on ${network}`);
+    }
   }
-  return { scriptpubkey: `6a${push}${data}`, scriptpubkey_asm: `OP_RETURN ${data}`, scriptpubkey_type: 'op_return', value: 0 };
-}
+  for (const [name, scriptpubkey, threshold] of vectors.dustThresholdVectors) {
+    assert(getDustThreshold(scriptpubkey) === threshold, `${name} dust threshold: ${getDustThreshold(scriptpubkey)}, expected ${threshold}`);
+  }
+  for (const [name, script, accurate, sigops] of vectors.scriptSigopVectors) {
+    const counted = getSigOpCount(decodeScript(script), accurate);
+    assert(counted === sigops, `${name}: ${counted} sigops, expected ${sigops}`);
+  }
+  for (const [name, script, pushOnly] of vectors.pushOnlyVectors) {
+    assert(isPushOnly(decodeScript(script)) === pushOnly, `${name} should ${pushOnly ? '' : 'not '}be push-only`);
+  }
+  for (const [name, buildTx, cost] of vectors.transactionSigopVectors) {
+    assert(countSigops(buildTx()) === cost, `${name}: sigop cost ${countSigops(buildTx())}, expected ${cost}`);
+  }
+  for (const [file, txid, cost] of vectors.realTransactionSigopVectors) {
+    const tx = testData(file).find((candidate) => candidate.txid === txid);
+    assert(countSigops(tx) === cost, `${file} ${txid}: sigop cost ${countSigops(tx)}, expected ${cost}`);
+  }
 
-const p2trOutput = {
-  scriptpubkey: `5120${'11'.repeat(32)}`,
-  scriptpubkey_asm: `OP_PUSHNUM_1 OP_PUSHBYTES_32 ${'11'.repeat(32)}`,
-  scriptpubkey_type: 'v1_p2tr',
-  value: 100000,
-};
-// a 2-byte witness program, which no witness version defines
-const witnessOutput = (version, value = 100000) => ({
-  scriptpubkey: `${(0x50 + version).toString(16)}020000`,
-  scriptpubkey_asm: `OP_PUSHNUM_${version} OP_PUSHBYTES_2 0000`,
-  scriptpubkey_type: 'unknown',
-  value,
-});
-// control blocks for a single leaf: tapscript is leaf version 0xc0 with a 32-byte internal key,
-// and a P2MR v1 leaf is the control byte 0xc0 with bit 0 set
-const tapscriptControlBlock = `c0${'11'.repeat(32)}`;
-const p2mrControlBlock = 'c1';
-// leaf version 0xc2, which taproot and P2MR both reserve for upgrades
-const otherLeafControlBlock = `c2${'11'.repeat(32)}`;
-const otherP2mrLeafControlBlock = 'c3';
-// a bare 1-of-1 multisig output, which counts 20 sigops
-const multisigOutput = {
-  scriptpubkey: `5121${'02' + '11'.repeat(32)}51ae`,
-  scriptpubkey_asm: `OP_PUSHNUM_1 OP_PUSHBYTES_33 02${'11'.repeat(32)} OP_PUSHNUM_1 OP_CHECKMULTISIG`,
-  scriptpubkey_type: 'multisig',
-  value: 1000,
-};
-// a transaction whose sigop cost is not reported, as for a decoded raw transaction
-const withoutSigops = (tx) => ({ ...tx, sigops: undefined });
-// a single-key P2MR spend: a PQC signature with its sighash byte, then <pubkey> OP_CHECKSIGPQC
-const p2mrLeafScript = `20${'11'.repeat(32)}b3`;
-const bytes = (length) => '00'.repeat(length);
+  // /tx/preview only: qbit's rules on unconfirmed parents, and its flags with the signatures a transaction lacks
+  const parentMap = (parents) => new Map(parents.map((parent) => [parent.txid, parent]));
+  for (const { name, nonStandard, tx, parents } of vectors.parentVectors) {
+    assert(isNonStandardForParents(tx(), parentMap(parents())) === nonStandard, `${name} should be ${nonStandard ? 'non-standard' : 'standard'}`);
+  }
+  // the page learns which parents are unconfirmed from /api/v1/prevouts, and checks no rules on them while
+  // any input's is unknown, as for a PSBT's own prevouts, rather than take that parent as confirmed
+  const statuses = new Map([[`${'22'.repeat(32)}:0`, true], [`${'44'.repeat(32)}:1`, false]]);
+  const parentTxids = getUnconfirmedParentTxids([{ txid: '22'.repeat(32), vout: 0 }, { txid: '44'.repeat(32), vout: 1 }], statuses);
+  assert(JSON.stringify(parentTxids) === JSON.stringify(['22'.repeat(32)]), `unconfirmed parents: ${JSON.stringify(parentTxids)}`);
+  assert(getUnconfirmedParentTxids([{ txid: '22'.repeat(32), vout: 0 }, { txid: '55'.repeat(32), vout: 0 }], statuses) === null, 'an input of unknown status taken as confirmed');
+  // and keeps a parent only while it is unconfirmed, as one can confirm after /api/v1/prevouts reported it
+  const parent = vectors.qbitTransaction({ version: 2 });
+  const confirmed = { ...parent, txid: '44'.repeat(32), status: { confirmed: true, block_height: 170000 } };
+  const kept = [...getUnconfirmedParents([parent, confirmed]).keys()];
+  assert(JSON.stringify(kept) === JSON.stringify([parent.txid]), `parents kept as unconfirmed: ${JSON.stringify(kept)}`);
+  for (const [name, buildTx, missing, parents, nonStandard] of vectors.previewVectors) {
+    const flags = getPreviewTransactionFlags(buildTx(), missing, null, 170000, '', parents ? parentMap(parents()) : null);
+    assert(isFlagged(flags) === nonStandard, `${name} should be ${nonStandard ? 'non-standard' : 'standard'} on /tx/preview`);
+  }
 
-function standardnessInput(prevout, scriptsig = '', scriptsig_asm = '', witness = []) {
-  return {
-    txid: '22'.repeat(32),
-    vout: 0,
-    prevout,
-    scriptsig,
-    scriptsig_asm,
-    inner_redeemscript_asm: '',
-    inner_witnessscript_asm: '',
-    witness,
-    is_coinbase: false,
-    sequence: 0xfffffffd,
-  };
-}
-const p2mrSpend = (...witness) => standardnessInput(p2mrOutput(100000), '', '', witness);
-const p2trSpend = (...witness) => standardnessInput(p2trOutput, '', '', witness);
-const singleKeyP2mrSpends = (inputs) => Array.from({ length: inputs }, () => p2mrSpend(bytes(3681), p2mrLeafScript, p2mrControlBlock));
-
-const varIntLength = (n) => (n < 0xfd ? 1 : n <= 0xffff ? 3 : 5);
-const witnessSize = (witness) => varIntLength(witness.length) + witness.reduce((size, item) => size + varIntLength(item.length / 2) + item.length / 2, 0);
-
-function standardnessTx({ version = 2, fee = 1000, vin = [standardnessInput(p2mrOutput(100000))], vout = [p2mrOutput(99000)] } = {}) {
-  // qbit has no witness discount, so weight is the serialized size, with the witness marker and flag
-  // and each input's witness when any input has one
-  const witnesses = vin.filter((txin) => txin.witness.length);
-  const weight = 10
-    + vin.reduce((size, txin) => size + 41 + txin.scriptsig.length / 2, 0)
-    + vout.reduce((size, txout) => size + 9 + txout.scriptpubkey.length / 2, 0)
-    + (witnesses.length ? 2 + witnesses.reduce((size, txin) => size + witnessSize(txin.witness), 0) : 0);
-  return { txid: 'qbit-standardness', version, locktime: 0, size: weight, weight, fee, sigops: 0, status: { confirmed: false }, vin, vout };
-}
-
-// each P2PK prevout carries one legacy sigop that the BIP54 limit counts at spend time
-function legacySigopsTx(inputs) {
-  const signature = '30'.repeat(71);
-  return standardnessTx({
-    vin: Array.from({ length: inputs }, () => standardnessInput(p2pkOutput, `47${signature}`, `OP_PUSHBYTES_71 ${signature}`)),
-  });
-}
-
-const standardnessCases = [
-  ['a v3 (TRUC) transaction', false, () => standardnessTx({ version: 3 })],
-  ['an anchor spend', false, () => standardnessTx({ vin: [standardnessInput(anchorOutput(0)), standardnessInput(p2mrOutput(100000))] })],
-  ['an OP_RETURN above 83 bytes', false, () => standardnessTx({ vout: [opReturnOutput(160), p2mrOutput(99000)] })],
-  ['multiple OP_RETURN outputs', false, () => standardnessTx({ vout: [opReturnOutput(20), opReturnOutput(20), p2mrOutput(99000)] })],
-  ['OP_RETURN outputs that fill the 200,000 byte budget', false, () => standardnessTx({ vout: [...Array(4)].map(() => opReturnOutput(49996)) })],
-  ['ephemeral dust in a zero-fee transaction', false, () => standardnessTx({ version: 3, fee: 0, vout: [anchorOutput(0), p2mrOutput(100000)] })],
-  ['2,500 legacy sigops', false, () => legacySigopsTx(2500)],
-  ['a v4 transaction', true, () => standardnessTx({ version: 4 })],
-  ['OP_RETURN outputs over the 200,000 byte budget', true, () => standardnessTx({ vout: [...[...Array(3)].map(() => opReturnOutput(49996)), opReturnOutput(49997)] })],
-  ['dust in a fee-paying transaction', true, () => standardnessTx({ version: 3, vout: [anchorOutput(0), p2mrOutput(99000)] })],
-  ['two dust outputs in a zero-fee transaction', true, () => standardnessTx({ version: 3, fee: 0, vout: [anchorOutput(0), p2mrOutput(1), p2mrOutput(99999)] })],
-  ['ephemeral dust followed by a non-standard output', true, () => standardnessTx({ version: 3, fee: 0, vout: [anchorOutput(0), nonStandardOutput] })],
-  ['2,501 legacy sigops', true, () => legacySigopsTx(2501)],
-  ['a P2MR output at the 2,855 bit dust threshold', false, () => standardnessTx({ vout: [p2mrOutput(2855)] })],
-  ['outputs to undefined witness v1 and v2 programs at the 121 bit dust threshold', false, () => standardnessTx({ vout: [witnessOutput(1, 121), witnessOutput(2, 121)] })],
-  ['a v3 transaction of 50,000 vB', false, () => ({ ...standardnessTx({ version: 3 }), weight: 50000 })],
-  ['a v3 transaction whose sigops adjust its vsize to 50,000 vB', false, () => ({ ...standardnessTx({ version: 3 }), sigops: 2500 })],
-  ['a v3 transaction with unreported sigops whose outputs count 2,500', false, () => withoutSigops(standardnessTx({ version: 3, vout: Array(125).fill(multisigOutput) }))],
-  ['a v3 transaction that spends 13 single-key P2MR inputs', false, () => standardnessTx({ version: 3, vin: singleKeyP2mrSpends(13) })],
-  ['a v2 transaction that spends 14 single-key P2MR inputs', false, () => standardnessTx({ vin: singleKeyP2mrSpends(14) })],
-  ['a P2MR leaf script argument of 16 KiB', false, () => standardnessTx({ vin: [p2mrSpend(bytes(16384), p2mrLeafScript, p2mrControlBlock)] })],
-  ['P2MR leaf script arguments of 128 KiB in total', false, () => standardnessTx({ vin: [p2mrSpend(...Array(8).fill(bytes(16384)), p2mrLeafScript, p2mrControlBlock)] })],
-  ['a tapscript argument of 80 bytes', false, () => standardnessTx({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock)] })],
-  ['a P2MR output below the 2,855 bit dust threshold', true, () => standardnessTx({ vout: [p2mrOutput(2854)] })],
-  ['an output to an undefined witness v1 program below the 121 bit dust threshold', true, () => standardnessTx({ vout: [witnessOutput(1, 120), p2mrOutput(99000)] })],
-  ...[...Array(14)].map((_, i) => [`an output to reserved witness v${i + 3}`, true, () => standardnessTx({ vout: [p2mrOutput(99000), witnessOutput(i + 3)] })]),
-  ['a v3 transaction over 50,000 vB', true, () => ({ ...standardnessTx({ version: 3 }), weight: 50001 })],
-  ['a v3 transaction whose sigops adjust its vsize over 50,000 vB', true, () => ({ ...standardnessTx({ version: 3 }), sigops: 2501 })],
-  ['a v3 transaction with unreported sigops whose outputs count 2,520', true, () => withoutSigops(standardnessTx({ version: 3, vout: Array(126).fill(multisigOutput) }))],
-  ['a v3 transaction that spends 14 single-key P2MR inputs', true, () => standardnessTx({ version: 3, vin: singleKeyP2mrSpends(14) })],
-  ['a P2MR spend with an annex', true, () => standardnessTx({ vin: [p2mrSpend(bytes(3681), p2mrLeafScript, p2mrControlBlock, '50')] })],
-  ['a P2MR spend without a leaf script', true, () => standardnessTx({ vin: [p2mrSpend(p2mrControlBlock)] })],
-  ['a P2MR spend with an empty control block', true, () => standardnessTx({ vin: [p2mrSpend(bytes(3681), p2mrLeafScript, '')] })],
-  ['a P2MR leaf script argument over 16 KiB', true, () => standardnessTx({ vin: [p2mrSpend(bytes(16385), p2mrLeafScript, p2mrControlBlock)] })],
-  ['P2MR leaf script arguments over 128 KiB in total', true, () => standardnessTx({ vin: [p2mrSpend(...Array(8).fill(bytes(16384)), bytes(1), p2mrLeafScript, p2mrControlBlock)] })],
-  ['a tapscript argument over 80 bytes', true, () => standardnessTx({ vin: [p2trSpend(bytes(81), '51', tapscriptControlBlock)] })],
-  ['a taproot script path spend with an empty control block', true, () => standardnessTx({ vin: [p2trSpend(bytes(1), '51', '')] })],
-  ['a taproot script path spend of another leaf version', true, () => standardnessTx({ vin: [p2trSpend(bytes(1), '51', otherLeafControlBlock)] })],
-  ['a P2MR spend of another leaf version', true, () => standardnessTx({ vin: [p2mrSpend(bytes(3681), p2mrLeafScript, otherP2mrLeafControlBlock)] })],
-  ['a non-standard input after a tapscript spend', true, () => standardnessTx({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock), standardnessInput(witnessOutput(1))] })],
-  ['a non-standard output after a tapscript spend', true, () => standardnessTx({ vin: [p2trSpend(bytes(80), '51', tapscriptControlBlock)], vout: [p2mrOutput(99000), nonStandardOutput] })],
-];
-
-// the thresholds qbit v1.0.0 pins in src/test/transaction_tests.cpp: every output but P2MR is priced
-// with the 148-byte legacy spend, as qbit has no witness discount, and the fee is rounded up
-for (const [name, scriptpubkey, threshold] of [
-  ['compressed P2PK', `21${'02'.repeat(33)}ac`, 144],
-  ['uncompressed P2PK', `41${'04'.repeat(65)}ac`, 168],
-  ['P2PKH', `76a914${'00'.repeat(20)}88ac`, 137],
-  ['P2SH', `a914${'00'.repeat(20)}87`, 135],
-  ['P2WPKH', `0014${'00'.repeat(20)}`, 135],
-  ['P2WSH', `0020${'00'.repeat(32)}`, 144],
-  ['P2TR', `5120${'00'.repeat(32)}`, 144],
-  ['P2MR', `5220${'00'.repeat(32)}`, 2855],
-  ['an unknown witness v1 program', '51020000', 121],
-  ['an unknown witness v2 program', '52020000', 121],
-  ['an anchor', '51024e73', 121],
-  ['an OP_RETURN', `6a14${'00'.repeat(20)}`, 0],
-]) {
-  assert(getDustThreshold(scriptpubkey) === threshold, `${name} dust threshold: ${getDustThreshold(scriptpubkey)}, expected ${threshold}`);
-}
-
-// qbitd's legacy sigop count includes OP_CHECKSIG and OP_CHECKSIGVERIFY, but not OP_CHECKSIGPQC or OP_CHECKSIGADD
-assert(countScriptSigops('OP_CHECKSIG OP_CHECKSIGVERIFY', true, true) === 2, 'OP_CHECKSIG and OP_CHECKSIGVERIFY should each count as one sigop');
-assert(countScriptSigops(`OP_PUSHBYTES_32 ${'11'.repeat(32)} OP_CHECKSIGPQC`, true, true) === 0, 'OP_CHECKSIGPQC should not count as a sigop');
-assert(countScriptSigops('OP_CHECKSIGADD', true, true) === 0, 'OP_CHECKSIGADD should not count as a sigop');
-// in redeem and witness scripts, OP_CHECKMULTISIG is worth N only after OP_1 to OP_16, and 20 otherwise
-assert(countScriptSigops('OP_PUSHNUM_2 OP_CHECKMULTISIG', false, true) === 2, 'OP_PUSHNUM_2 OP_CHECKMULTISIG should count as 2 sigops');
-assert(countScriptSigops('OP_0 OP_CHECKMULTISIG', false, true) === 20, 'OP_0 OP_CHECKMULTISIG should count as 20 sigops');
-assert(countScriptSigops('OP_CHECKMULTISIG OP_CHECKMULTISIG', false, true) === 40, 'a leading OP_CHECKMULTISIG should count as 20 sigops');
-
-for (const [network, height] of [['', 158366], ['', undefined], ['testnet4', 10000], ['regtest', 101]]) {
-  for (const [name, nonStandard, buildTx] of standardnessCases) {
-    assert(
-      isNonStandard(buildTx(), height, network) === nonStandard,
-      `${name} should be ${nonStandard ? 'non-standard' : 'standard'} on ${network || 'mainnet'} at height ${height}`,
-    );
+  // qbit's weight, which with its witness scale factor of 1 is the serialized size, and qbit's opcode names
+  const { addInnerScriptsToVin } = require('../src/app/shared/transaction.utils.ts');
+  for (const [name, buildHex, weight] of vectors.weightVectors) {
+    const decoded = decodeRawTransaction(buildHex(), 'testnet4').tx;
+    assert(decoded.weight === weight, `${name}: weight ${decoded.weight}, expected ${weight}`);
+  }
+  for (const [name, script, asm] of vectors.asmVectors) {
+    const hex = vectors.serializeTransaction(vectors.qbitTransaction({ vout: [{ ...vectors.p2mrOutput(0), scriptpubkey: script }] }));
+    const decodedAsm = decodeRawTransaction(hex, 'testnet4').tx.vout[0].scriptpubkey_asm;
+    assert(decodedAsm === asm, `${name}: ${decodedAsm}, expected ${asm}`);
+  }
+  for (const [file, key] of vectors.realTransactionVectors) {
+    const tx = testData(file)[key];
+    const decoded = decodeRawTransaction(vectors.serializeTransaction(tx), '').tx;
+    assert(decoded.txid === tx.txid && decoded.weight === tx.weight, `${file} ${key}: decoded as ${decoded.txid} of weight ${decoded.weight}, expected weight ${tx.weight}`);
+    for (const vin of tx.vin) {
+      const leaf = { ...vin, inner_witnessscript_asm: undefined };
+      addInnerScriptsToVin(leaf);
+      assert(leaf.inner_witnessscript_asm === vin.inner_witnessscript_asm, `${file} ${key}: leaf script ${leaf.inner_witnessscript_asm}, expected ${vin.inner_witnessscript_asm}`);
+    }
   }
 }
 

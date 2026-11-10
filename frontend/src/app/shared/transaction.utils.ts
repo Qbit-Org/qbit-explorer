@@ -34,9 +34,14 @@ const P2MR_DUST_SPEND_SIZE = 41 + 1 + (3 + PQC_SIG_SIZE + 1) + (1 + 34) + (1 + 1
 export const MAX_OP_RETURN_RELAY = 200_000; // qbit policy: -datacarriersize default, shared by all OP_RETURN outputs
 const MAX_DUST_OUTPUTS_PER_TX = 1; // qbit policy: ephemeral dust allows one dust output
 const DEFAULT_PERMIT_BAREMULTISIG = true;
-const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
+const MAX_TX_LEGACY_SIGOPS = 2_500; // qbit policy: legacy sigops a transaction's inputs can execute (BIP54)
 const TRUC_VERSION = 3;
 const TRUC_MAX_VSIZE = 50_000; // qbit policy: sigop-adjusted vsize of any v3 transaction
+const TRUC_CHILD_MAX_VSIZE = 45_500; // qbit policy: sigop-adjusted vsize of a v3 transaction that spends an unconfirmed one
+// qbit's restricted output mode is on from genesis on every network but regtest, where -p2mronly=0 turns it
+// off, as the backend's regtest harness does (qbit v1.0.0 src/kernel/chainparams.cpp:159, 267, 360, 482, 571).
+// The frontend names mainnet ''.
+const RESTRICTED_OUTPUT_NETWORKS = ['', 'testnet4', 'testnet', 'signet'];
 // the only leaf versions qbit relays: BIP 342 tapscript, and P2MR v1, which qbit defines separately
 const TAPROOT_LEAF_TAPSCRIPT = 0xc0;
 const P2MR_LEAF_VERSION = 0xc0;
@@ -44,33 +49,142 @@ const P2MR_LEAF_VERSION = 0xc0;
 const TAPROOT_NUMS_INTERNAL_KEY = '50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0';
 const SECP256K1_ORDER = BigInt('0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
 
-export function countScriptSigops(script: string, isRawScript: boolean = false, witness: boolean = false): number {
-  if (!script?.length) {
-    return 0;
+// Script decoding as qbitd does it, for its sigop counts and push-only checks (qbit v1.0.0
+// src/script/script.cpp). The backend keeps a copy in src/utils/bitcoin-script.ts.
+const OP_PUSHDATA1 = 0x4c;
+const OP_PUSHDATA2 = 0x4d;
+const OP_PUSHDATA4 = 0x4e;
+const OP_1 = 0x51;
+const OP_16 = 0x60;
+const OP_CHECKSIG = 0xac;
+const OP_CHECKSIGVERIFY = 0xad;
+const OP_CHECKMULTISIG = 0xae;
+const OP_CHECKMULTISIGVERIFY = 0xaf;
+const OP_INVALIDOPCODE = 0xff;
+const MAX_PUBKEYS_PER_MULTISIG = 20;
+
+export interface ScriptOp {
+  opcode: number;
+  // the bytes the instruction pushes, which end where the next instruction starts
+  start: number;
+  end: number;
+}
+
+// A script decoded once, as qbitd's GetScriptOp reads it: its instructions, up to a push that runs
+// past the end of the script, where qbitd stops decoding
+export interface DecodedScript {
+  hex: string;
+  ops: ScriptOp[];
+  complete: boolean;
+}
+
+// An input's scripts, decoded once for the standardness and sigop checks that read them
+export interface DecodedInputScripts {
+  scriptsig: DecodedScript;
+  // the scriptpubkey the input spends, when its prevout is known
+  prevout: DecodedScript | null;
+  // the redeem script of a P2SH spend whose scriptsig is push-only
+  redeemScript: DecodedScript | null;
+}
+
+const hexDigit = (code: number): number => (code <= 0x39 ? code - 0x30 : (code | 0x20) - 0x57);
+const byteAt = (hex: string, index: number): number => (hexDigit(hex.charCodeAt(2 * index)) << 4) | hexDigit(hex.charCodeAt(2 * index + 1));
+const EMPTY_SCRIPT: DecodedScript = { hex: '', ops: [], complete: true };
+
+export function decodeScript(hex: string): DecodedScript {
+  if (!hex) {
+    return EMPTY_SCRIPT;
   }
-
-  let sigops = 0;
-  // count OP_CHECKSIG and OP_CHECKSIGVERIFY (qbitd's GetSigOpCount skips OP_CHECKSIGPQC and OP_CHECKSIGADD)
-  sigops += (script.match(/OP_CHECKSIG(?:VERIFY)?\b/g)?.length || 0);
-
-  // count OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY
-  if (isRawScript) {
-    // in scriptPubKey or scriptSig, always worth 20
-    sigops += 20 * (script.match(/OP_CHECKMULTISIG/g)?.length || 0);
-  } else {
-    // in redeem scripts and witnesses, worth N if preceded by OP_1 to OP_16, 20 otherwise
-    const matches = script.matchAll(/(?:OP_(?:PUSHNUM_)?(\d+) )?OP_CHECKMULTISIG/g);
-    for (const match of matches) {
-      const n = parseInt(match[1]);
-      if (n >= 1 && n <= 16) {
-        sigops += n;
-      } else {
-        sigops += 20;
+  const size = hex.length >> 1;
+  const ops: ScriptOp[] = [];
+  let pc = 0;
+  while (pc < size) {
+    const opcode = byteAt(hex, pc++);
+    let push = 0;
+    if (opcode < OP_PUSHDATA1) {
+      push = opcode;
+    } else if (opcode <= OP_PUSHDATA4) {
+      // the push size follows in 1, 2 or 4 little-endian bytes
+      const sizeBytes = opcode === OP_PUSHDATA1 ? 1 : (opcode === OP_PUSHDATA2 ? 2 : 4);
+      if (size - pc < sizeBytes) {
+        return { hex, ops, complete: false };
       }
+      for (let i = sizeBytes - 1; i >= 0; i--) {
+        push = push * 256 + byteAt(hex, pc + i);
+      }
+      pc += sizeBytes;
     }
+    if (size - pc < push) {
+      return { hex, ops, complete: false };
+    }
+    ops.push({ opcode, start: pc, end: pc + push });
+    pc += push;
   }
+  return { hex, ops, complete: true };
+}
 
-  return witness ? sigops : (sigops * WITNESS_SCALE_FACTOR);
+/**
+ * qbitd's CScript::GetSigOpCount: OP_CHECKSIG and OP_CHECKSIGVERIFY count one sigop each, and
+ * OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY 20, or with accurate, as for redeem and witness
+ * scripts, the key count that an OP_1 to OP_16 right before them gives. Counting stops where
+ * decoding does. OP_CHECKSIGPQC and OP_CHECKSIGADD don't count.
+ */
+export function getSigOpCount(script: DecodedScript, accurate: boolean): number {
+  let sigops = 0;
+  let lastOpcode = OP_INVALIDOPCODE;
+  for (const { opcode } of script.ops) {
+    if (opcode === OP_CHECKSIG || opcode === OP_CHECKSIGVERIFY) {
+      sigops++;
+    } else if (opcode === OP_CHECKMULTISIG || opcode === OP_CHECKMULTISIGVERIFY) {
+      sigops += (accurate && lastOpcode >= OP_1 && lastOpcode <= OP_16) ? lastOpcode - OP_1 + 1 : MAX_PUBKEYS_PER_MULTISIG;
+    }
+    lastOpcode = opcode;
+  }
+  return sigops;
+}
+
+// qbitd's CScript::IsPushOnly: every instruction decodes, and pushes data or a number
+export function isPushOnly(script: DecodedScript): boolean {
+  return script.complete && script.ops.every(op => op.opcode <= OP_16);
+}
+
+/**
+ * The redeem script of a P2SH spend, as qbitd reads it from the scriptsig to count its sigops
+ * (CScript::GetSigOpCount(scriptSig)): the data the last instruction pushes, which is empty when
+ * that pushes a number, or null unless the scriptsig is push-only.
+ */
+export function getRedeemScript(scriptsig: DecodedScript): DecodedScript | null {
+  if (!isPushOnly(scriptsig)) {
+    return null;
+  }
+  const last = scriptsig.ops[scriptsig.ops.length - 1];
+  return decodeScript(last ? scriptsig.hex.slice(last.start * 2, last.end * 2) : '');
+}
+
+// qbitd's CScript::IsPayToScriptHash
+export function isP2shScript(script: DecodedScript): boolean {
+  const hex = script.hex;
+  return hex.length === 46 && byteAt(hex, 0) === 0xa9 && byteAt(hex, 1) === 0x14 && byteAt(hex, 22) === 0x87;
+}
+
+// Decodes an input's scriptsig, the scriptpubkey it spends, and for a P2SH spend, its redeem script
+export function decodeInputScripts(vin: { scriptsig?: string, prevout?: { scriptpubkey: string } | null }): DecodedInputScripts {
+  const scriptsig = decodeScript(vin.scriptsig || '');
+  const prevout = vin.prevout ? decodeScript(vin.prevout.scriptpubkey) : null;
+  return { scriptsig, prevout, redeemScript: prevout && isP2shScript(prevout) ? getRedeemScript(scriptsig) : null };
+}
+
+// qbitd's WitnessSigOps: a v0 key hash program costs one sigop, a v0 script hash program the sigops of
+// its witness script, and any other program none
+export function getWitnessSigOps(program: DecodedScript, witness: string[] | undefined): number {
+  const hex = program.hex;
+  if (hex.length === 44 && byteAt(hex, 0) === 0x00 && byteAt(hex, 1) === 0x14) {
+    return 1;
+  }
+  if (hex.length === 68 && byteAt(hex, 0) === 0x00 && byteAt(hex, 1) === 0x20 && witness?.length) {
+    return getSigOpCount(decodeScript(witness[witness.length - 1]), true);
+  }
+  return 0;
 }
 
 export function setSchnorrSighashFlags(flags: bigint, witness: string[]): bigint {
@@ -560,13 +674,17 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
     return true;
   }
 
+  // each input's scripts, decoded once for the sigop and input checks below
+  const inputScripts = tx.vin.map(decodeInputScripts);
+
   // sigop cost, as esplora reports it, or counted here when it is missing. Counting needs prevouts
   // for the sigops of the outputs being spent, so without them the count is a lower bound, and the
   // sigop limits below can miss a transaction but never flag one wrongly.
-  const sigopCost = tx.sigops ?? countSigops(tx);
+  const sigopCost = tx.sigops ?? countSigops(tx, inputScripts);
 
   // TRUC-violation: a v3 transaction's sigop-adjusted vsize must be within TRUC_MAX_VSIZE
-  // (qbit also caps a v3 child of an unconfirmed v3 parent at 45,500 vB, which needs the mempool to check)
+  // (a v3 transaction that spends an unconfirmed one is limited to 45,500 vB: qbitd checks that before
+  // a transaction enters its mempool, so it is checked on /tx/preview only, see isNonStandardForParents)
   if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(sigopCost)) > TRUC_MAX_VSIZE) {
     return true;
   }
@@ -582,12 +700,13 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
   }
 
   // legacy sigops
-  if (isNonStandardLegacySigops(tx, height, network)) {
+  if (isNonStandardLegacySigops(tx, height, network, inputScripts)) {
     return true;
   }
 
   // input validation
-  for (const vin of tx.vin) {
+  for (let i = 0; i < tx.vin.length; i++) {
+    const vin = tx.vin[i];
     if (vin.is_coinbase) {
       // standardness rules don't apply to coinbase transactions
       return false;
@@ -597,19 +716,15 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
       return true;
     }
     // scriptsig-not-pushonly
-    if (vin.scriptsig_asm) {
-      for (const op of vin.scriptsig_asm.split(' ')) {
-        if (opcodes[op] && opcodes[op] > opcodes['OP_16']) {
-          return true;
-        }
-      }
+    if (!isPushOnly(inputScripts[i].scriptsig)) {
+      return true;
     }
     // bad-txns-nonstandard-inputs
     if (vin.prevout?.scriptpubkey_type === 'p2sh') {
       // TODO: evaluate script (https://github.com/bitcoin/bitcoin/blob/1ac627c485a43e50a9a49baddce186ee3ad4daad/src/policy/policy.cpp#L177)
-      // countScriptSigops returns the witness-scaled sigops, so normalize before comparing with MAX_P2SH_SIGOPS
-      const sigops = (countScriptSigops(vin.inner_redeemscript_asm || '') / WITNESS_SCALE_FACTOR);
-      if (sigops > MAX_P2SH_SIGOPS) {
+      // the redeem script is the last item the push-only scriptsig pushes
+      const redeemScript = inputScripts[i].redeemScript;
+      if (redeemScript && getSigOpCount(redeemScript, true) > MAX_P2SH_SIGOPS) {
         return true;
       }
     } else if (['unknown', 'provably_unspendable', 'empty'].includes(vin.prevout?.scriptpubkey_type || '')) {
@@ -719,6 +834,104 @@ export function isNonStandard(tx: Transaction, height?: number, network?: string
   return false;
 }
 
+/**
+ * qbit's restricted output mode (qbit v1.0.0 src/consensus/restricted_outputs.h): every output, the
+ * coinbase's too, must be P2MR, start with OP_RETURN, or be the P2A anchor. Outputs to witness versions
+ * 3 to 16 are allowed as well, from height 0 where the mode is on, though policy rejects them. qbitd
+ * rejects any other output as tx-output-not-p2mr, before its policy, and a block with one as
+ * bad-txns-output-not-p2mr (src/validation.cpp:849-852, 2853-2860). Regtest may turn the mode off.
+ */
+export function breaksRestrictedOutputMode(tx: Transaction, network: string): boolean {
+  if (!RESTRICTED_OUTPUT_NETWORKS.includes(network ?? '')) {
+    return false;
+  }
+  return tx.vout.some(vout => {
+    const witnessProgram = isWitnessProgram(vout.scriptpubkey);
+    return !(vout.scriptpubkey.startsWith('6a') || vout.scriptpubkey === '51024e73'
+      || (witnessProgram && (witnessProgram.version >= 3 || (witnessProgram.version === 2 && witnessProgram.program.length === 64))));
+  });
+}
+
+/**
+ * qbit's rules on a transaction's unconfirmed parents, which qbitd checks when the transaction reaches
+ * its mempool (qbit v1.0.0 src/policy/truc_policy.cpp:164-243 SingleTRUCChecks, and
+ * src/policy/ephemeral_policy.cpp:33-95 CheckEphemeralSpends):
+ *
+ * - a v3 transaction spends only v3 transactions while they are unconfirmed, and others spend none;
+ * - a v3 transaction with an unconfirmed parent has no other unconfirmed ancestor, and is within
+ *   TRUC_CHILD_MAX_VSIZE;
+ * - a transaction spends all of its unconfirmed parents' dust.
+ *
+ * unconfirmedParents holds the unconfirmed transactions it spends, by txid; its other inputs spend
+ * confirmed ones. A parent's own unconfirmed ancestors aren't known here.
+ */
+export function isNonStandardForParents(tx: Transaction, unconfirmedParents: Map<string, Transaction>): boolean {
+  const parents = [...new Set(tx.vin.map(vin => vin.txid))]
+    .map(txid => unconfirmedParents.get(txid))
+    .filter((parent): parent is Transaction => !!parent);
+  if (!parents.length) {
+    return false;
+  }
+  const truc = tx.version === TRUC_VERSION;
+  // TRUC-violation: v3 transactions and others don't spend each other while unconfirmed
+  if (parents.some(parent => (parent.version === TRUC_VERSION) !== truc)) {
+    return true;
+  }
+  // TRUC-violation: a v3 child has one unconfirmed ancestor, and its sigop-adjusted vsize is within TRUC_CHILD_MAX_VSIZE
+  if (truc && (parents.length > 1 || Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(tx.sigops ?? countSigops(tx))) > TRUC_CHILD_MAX_VSIZE)) {
+    return true;
+  }
+  // missing-ephemeral-spends: it spends all of its unconfirmed parents' dust
+  const spent = new Set(tx.vin.map(vin => `${vin.txid}:${vin.vout}`));
+  return parents.some(parent => parent.vout.some((vout, index) => vout.scriptpubkey_type !== 'op_return'
+    && isDustOutput(vout.value, vout.scriptpubkey) && !spent.has(`${parent.txid}:${index}`)));
+}
+
+/**
+ * The txids of the unconfirmed transactions a transaction spends, from whether each input's parent is
+ * unconfirmed, by outpoint, as /api/v1/prevouts reports it. Null when any input's is unknown: the rules
+ * on unconfirmed parents can't be checked then, rather than taking that parent as confirmed.
+ */
+export function getUnconfirmedParentTxids(vin: { txid: string, vout: number }[], parentUnconfirmed: Map<string, boolean>): string[] | null {
+  const outpoint = (input: { txid: string, vout: number }): string => `${input.txid}:${input.vout}`;
+  if (vin.some(input => !parentUnconfirmed.has(outpoint(input)))) {
+    return null;
+  }
+  return [...new Set(vin.filter(input => parentUnconfirmed.get(outpoint(input))).map(input => input.txid))];
+}
+
+/**
+ * The unconfirmed parents /tx/preview checks qbit's rules against, by txid: the parents it loaded that are
+ * still unconfirmed. /api/v1/prevouts can lag a block, and a parent can confirm between the requests.
+ */
+export function getUnconfirmedParents(parents: Transaction[]): Map<string, Transaction> {
+  return new Map(parents.filter(parent => !parent.status?.confirmed).map(parent => [parent.txid, parent]));
+}
+
+/**
+ * The flags /tx/preview shows for a transaction qbitd hasn't seen: its own flags, as it will be once the
+ * signatures it lacks are added, and the rules qbitd applies when a transaction reaches its mempool,
+ * which a transaction in the mempool or a block has passed: restricted output mode, and the rules on its
+ * unconfirmed parents. missing is what the missing signatures add: weight, and size without witnesses,
+ * which a P2MR input's signature doesn't add to. unconfirmedParents is null when the page couldn't load
+ * them; the rules on parents are then left out, and the page says so.
+ */
+export function getPreviewTransactionFlags(tx: Transaction, missing: { weight: number, nonWitnessSize: number }, cpfpInfo: CpfpInfo | null,
+  height: number | null, network: string, unconfirmedParents: Map<string, Transaction> | null): bigint {
+  const signed = { ...tx, weight: tx.weight + missing.weight };
+  let flags = getTransactionFlags(signed, cpfpInfo, null, height, network);
+  if (
+    // tx-size-small, with the missing signatures counted where they go: isNonStandard derives the size
+    // without witnesses from the weight, so on the signed copy it counts them all as non-witness bytes
+    getNonWitnessSize(tx) + missing.nonWitnessSize < MIN_STANDARD_TX_NONWITNESS_SIZE
+    || breaksRestrictedOutputMode(signed, network)
+    || (unconfirmedParents && isNonStandardForParents(signed, unconfirmedParents))
+  ) {
+    flags |= TransactionFlags.nonstandard;
+  }
+  return flags;
+}
+
 // Individual versioned standardness rules
 // qbit nodes have enforced all of these rules since genesis (qbit v1.0.0 src/policy/), so every
 // qbit network activates them at height 0 rather than at Bitcoin Core's activation heights.
@@ -825,14 +1038,14 @@ const LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT = {
   'regtest': 0,
   '': 0,
 };
-function isNonStandardLegacySigops(tx: Transaction, height?: number, network?: string): boolean {
+function isNonStandardLegacySigops(tx: Transaction, height?: number, network?: string, inputScripts?: DecodedInputScripts[]): boolean {
   if (
     height == null || (
       LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT[network] != null
       && height >= LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT[network]
     )
   ) {
-    if (!checkSigopsBIP54(tx, MAX_TX_LEGACY_SIGOPS)) {
+    if (!checkSigopsBIP54(tx, MAX_TX_LEGACY_SIGOPS, inputScripts)) {
       return true;
     }
   }
@@ -1587,7 +1800,9 @@ function fromBuffer(buffer: Uint8Array, network: string, inputs?: PsbtKeyValueMa
 
   const rawHex = serializeTransaction(tx, hasWitness);
   tx.size = rawHex.length;
-  tx.weight = (tx.size - witnessSize) * 3 + tx.size;
+  // qbitd's GetTransactionWeight: the size without witnesses counts WITNESS_SCALE_FACTOR - 1 more times,
+  // so with qbit's factor of 1, the weight is the serialized size
+  tx.weight = (tx.size - witnessSize) * (WITNESS_SCALE_FACTOR - 1) + tx.size;
   tx.txid = txid(tx);
 
   return { tx, hex: uint8ArrayToHexString(rawHex) };
@@ -1858,48 +2073,41 @@ function txid(tx: Transaction): string {
   return uint8ArrayToHexString(hash2.reverse());
 }
 
-// Copied from mempool backend https://github.com/mempool/mempool/blob/14e49126c3ca8416a8d7ad134a95c5e090324d69/backend/src/api/transaction-utils.ts#L177
-export function countSigops(transaction: Transaction): number {
+/**
+ * The sigop cost qbitd gives a transaction (GetTransactionSigOpCost, qbit v1.0.0
+ * src/consensus/tx_verify.cpp:143-162), counted over the decoded scripts: the sigops of its
+ * scriptsigs and outputs, a P2SH spend's redeem script, and a v0 witness program's
+ * (WitnessSigOps, src/script/interpreter.cpp:2544-2558). Without prevouts the input sigops
+ * are unknown, so the count is a lower bound. Takes the inputs' scripts if they are decoded already.
+ */
+export function countSigops(transaction: Transaction, inputs: DecodedInputScripts[] = transaction.vin.map(decodeInputScripts)): number {
   let sigops = 0;
 
-  for (const input of transaction.vin) {
-    if (input.scriptsig_asm) {
-      sigops += countScriptSigops(input.scriptsig_asm, true);
-    }
-    if (input.prevout) {
-      switch (true) {
-        case input.prevout.scriptpubkey_type === 'p2sh' && input.witness?.length === 2 && input.scriptsig && input.scriptsig.startsWith('160014'):
-        case input.prevout.scriptpubkey_type === 'v0_p2wpkh':
-          sigops += 1;
-          break;
-
-        case input.prevout?.scriptpubkey_type === 'p2sh' && input.witness?.length && input.scriptsig && input.scriptsig.startsWith('220020'):
-        case input.prevout.scriptpubkey_type === 'v0_p2wsh':
-          if (input.witness?.length) {
-            sigops += countScriptSigops(convertScriptSigAsm(input.witness[input.witness.length - 1]), false, true);
-          }
-          break;
-
-        case input.prevout.scriptpubkey_type === 'p2sh':
-          if (input.inner_redeemscript_asm) {
-            sigops += countScriptSigops(input.inner_redeemscript_asm);
-          }
-          break;
-      }
-    }
+  for (const input of inputs) {
+    sigops += getSigOpCount(input.scriptsig, false) * WITNESS_SCALE_FACTOR;
   }
-
   for (const output of transaction.vout) {
-    if (output.scriptpubkey_asm) {
-      sigops += countScriptSigops(output.scriptpubkey_asm, true);
-    }
+    sigops += getSigOpCount(decodeScript(output.scriptpubkey || ''), false) * WITNESS_SCALE_FACTOR;
   }
+
+  transaction.vin.forEach((vin, index) => {
+    const { prevout, redeemScript } = inputs[index];
+    if (!prevout) {
+      return;
+    }
+    if (!isP2shScript(prevout)) {
+      sigops += getWitnessSigOps(prevout, vin.witness);
+    } else if (redeemScript) {
+      // the redeem script can be a witness program
+      sigops += getSigOpCount(redeemScript, true) * WITNESS_SCALE_FACTOR + getWitnessSigOps(redeemScript, vin.witness);
+    }
+  });
 
   return sigops;
 }
 
 /**
- * see https://github.com/bitcoin/bitcoin/blob/25c45bb0d0bd6618ec9296a1a43605657124e5de/src/policy/policy.cpp#L166-L193
+ * see qbit v1.0.0 src/policy/policy.cpp:186-210 (CheckSigopsBIP54)
  * returns true if the transactions is permitted under bip54 sigops rules
  *
  * "Unlike the existing block wide sigop limit which counts sigops present in the block
@@ -1909,20 +2117,20 @@ export function countSigops(transaction: Transaction): number {
  * `fAccurate` means correctly accounting sigops for CHECKMULTISIGs(VERIFY) with 16 pubkeys
  * or fewer. This method of accounting was introduced by BIP16, and BIP54 reuses it.
  * The GetSigOpCount call on the previous scriptPubKey counts both bare and P2SH sigops."
+ *
+ * Without prevouts, only the scriptsigs count, so this can miss a transaction over the limit.
  */
-function checkSigopsBIP54(tx: Transaction, limit: number = MAX_TX_LEGACY_SIGOPS): boolean {
+function checkSigopsBIP54(tx: Transaction, limit: number = MAX_TX_LEGACY_SIGOPS, inputs: DecodedInputScripts[] = tx.vin.map(decodeInputScripts)): boolean {
   let sigops = 0;
-  for (const input of tx.vin) {
-    if (input.scriptsig_asm) {
-      sigops += countScriptSigops(input.scriptsig_asm);
-    }
-    if (input.prevout) {
-      // P2SH redeem script
-      if (input.prevout.scriptpubkey_type === 'p2sh' && input.inner_redeemscript_asm) {
-        sigops += countScriptSigops(input.inner_redeemscript_asm);
+  for (const { scriptsig, prevout, redeemScript } of inputs) {
+    sigops += getSigOpCount(scriptsig, true);
+    if (prevout) {
+      if (isP2shScript(prevout)) {
+        // P2SH redeem script
+        sigops += redeemScript ? getSigOpCount(redeemScript, true) : 0;
       } else {
         // prevout scriptpubkey
-        sigops += countScriptSigops(input.prevout.scriptpubkey_asm);
+        sigops += getSigOpCount(prevout, true);
       }
     }
 
@@ -2616,6 +2824,10 @@ const opcodes = {
   184: 'OP_NOP9',
   185: 'OP_NOP10',
   186: 'OP_CHECKSIGADD',
+  // qbit's P2MR opcodes (qbit v1.0.0 src/script/script.h:317-321), named as qbitd and qbit-electrs name them
+  187: 'OP_CHECKTEMPLATEVERIFY',
+  188: 'OP_CHECKDATASIGPQC',
+  189: 'OP_CHECKDATASIGADDPQC',
   253: 'OP_PUBKEYHASH',
   254: 'OP_PUBKEY',
   255: 'OP_INVALIDOPCODE',

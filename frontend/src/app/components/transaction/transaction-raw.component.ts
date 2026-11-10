@@ -5,7 +5,7 @@ import { WuBytesPipe } from '@app/shared/pipes/bytes-pipe/wubytes.pipe';
 import { Transaction, Vout } from '@interfaces/electrs.interface';
 import { StateService } from '@app/services/state.service';
 import { Filter, toFilters } from '@app/shared/filters.utils';
-import { decodeRawTransaction, getTransactionFlags, addInnerScriptsToVin, countSigops, fillUnsignedInput } from '@app/shared/transaction.utils';
+import { decodeRawTransaction, getPreviewTransactionFlags, getUnconfirmedParents, getUnconfirmedParentTxids, addInnerScriptsToVin, countSigops, fillUnsignedInput } from '@app/shared/transaction.utils';
 import { catchError, firstValueFrom, Subscription, switchMap, tap, throwError, timer } from 'rxjs';
 import { WebsocketService } from '@app/services/websocket.service';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -39,6 +39,11 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
   errorCpfpInfo: string;
   hasPrevouts: boolean;
   missingPrevouts: string[];
+  // the unconfirmed transactions this one spends, by txid, for qbit's rules on them; null when they
+  // couldn't be loaded, and the page says those rules weren't checked
+  unconfirmedParents: Map<string, Transaction> | null = null;
+  // whether each input spends an unconfirmed transaction, by outpoint, as /api/v1/prevouts reports it
+  parentUnconfirmed = new Map<string, boolean>();
   isLoadingBroadcast: boolean;
   errorBroadcast: string;
   successBroadcast: boolean;
@@ -47,6 +52,8 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
   fragmentSubscription: Subscription;
   weightFromMissingSig: number = 0;
   sizeFromMissingSig: number = 0;
+  // the part of sizeFromMissingSig outside the witness: a legacy input's scriptsig, not a P2MR signature
+  nonWitnessSizeFromMissingSig: number = 0;
   missingSignatures: boolean;
   tooltipSize: string;
   tooltipVsize: string;
@@ -119,6 +126,7 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
     try {
       const { tx, hex, psbt } = decodeRawTransaction(this.pushTxForm.get('txRaw').value.trim(), this.stateService.network);
       await this.fetchPrevouts(tx);
+      await this.fetchUnconfirmedParents(tx);
       this.checkSignatures(tx, hex);
       await this.fetchCpfpInfo(tx);
       this.processTransaction(tx, hex, psbt);
@@ -152,6 +160,7 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
             const fetched = prevouts[fetchIndex];
             if (fetched) {
               input.prevout = fetched.prevout;
+              this.parentUnconfirmed.set(`${input.txid}:${input.vout}`, fetched.unconfirmed);
             } else {
               this.missingPrevouts.push(`${input.txid}:${input.vout}`);
             }
@@ -171,6 +180,39 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
         this.errorPrevouts = error?.error?.error || error?.message;
         this.isLoadingPrevouts = false;
       }
+    }
+  }
+
+  // Loads the unconfirmed transactions this one spends, for qbit's rules on them. Leaves unconfirmedParents
+  // null when it can't tell which parents are unconfirmed, or can't load one.
+  async fetchUnconfirmedParents(transaction: Transaction): Promise<void> {
+    if (transaction.vin[0].is_coinbase) {
+      this.unconfirmedParents = new Map();
+      return;
+    }
+    if (this.offlineMode) {
+      return;
+    }
+    const outpoint = (vin: { txid: string, vout: number }): string => `${vin.txid}:${vin.vout}`;
+    try {
+      // fetched prevouts came with their parents' status; ask the same for the prevouts a PSBT gave
+      const unknown = transaction.vin.filter(vin => !this.parentUnconfirmed.has(outpoint(vin))).map(vin => ({ txid: vin.txid, vout: vin.vout }));
+      for (let i = 0; i < unknown.length; i += 100) {
+        const results: ({ prevout: Vout, unconfirmed: boolean } | null)[] = await firstValueFrom(this.apiService.getPrevouts$(unknown.slice(i, i + 100)));
+        results.forEach((result, j) => {
+          if (result) {
+            this.parentUnconfirmed.set(outpoint(unknown[i + j]), result.unconfirmed);
+          }
+        });
+      }
+      const txids = getUnconfirmedParentTxids(transaction.vin, this.parentUnconfirmed);
+      if (!txids) {
+        return;
+      }
+      const parents = await Promise.all(txids.map(txid => firstValueFrom(this.electrsApi.getTransaction$(txid))));
+      this.unconfirmedParents = getUnconfirmedParents(parents);
+    } catch {
+      // unconfirmedParents stays null
     }
   }
 
@@ -202,6 +244,7 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
     }
 
     this.sizeFromMissingSig = missingWitnessBytes + missingNonWitnessBytes;
+    this.nonWitnessSizeFromMissingSig = missingNonWitnessBytes;
     this.weightFromMissingSig = missingWitnessBytes + WITNESS_SCALE_FACTOR * missingNonWitnessBytes;
 
     if (this.weightFromMissingSig) {
@@ -273,7 +316,10 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
     });
 
     const txHeight = this.transaction.status?.block_height || (this.stateService.latestBlockHeight >= 0 ? this.stateService.latestBlockHeight + 1 : null);
-    this.transaction.flags = getTransactionFlags(this.transaction, this.cpfpInfo, null, txHeight, this.stateService.network);
+    // the flags at the weight the page shows, with the signatures the transaction lacks, plus the rules qbitd
+    // applies when a transaction reaches its mempool
+    this.transaction.flags = getPreviewTransactionFlags(this.transaction, { weight: this.weightFromMissingSig, nonWitnessSize: this.nonWitnessSizeFromMissingSig },
+      this.cpfpInfo, txHeight, this.stateService.network, this.unconfirmedParents);
     this.filters = this.transaction.flags ? toFilters(this.transaction.flags).filter(f => f.txPage) : [];
 
     this.setupGraph();
@@ -343,8 +389,11 @@ export class TransactionRawComponent implements OnInit, OnDestroy {
     this.filters = [];
     this.hasPrevouts = false;
     this.missingPrevouts = [];
+    this.unconfirmedParents = null;
+    this.parentUnconfirmed = new Map<string, boolean>();
     this.weightFromMissingSig = 0;
     this.sizeFromMissingSig = 0;
+    this.nonWitnessSizeFromMissingSig = 0;
     this.missingSignatures = false;
     this.tooltipSize = null;
     this.tooltipVsize = null;

@@ -4,6 +4,12 @@ export const QBIT_MAX_STANDARD_TX_WEIGHT = 400_000;
 export const QBIT_DEFAULT_BLOCK_RESERVED_WEIGHT = 4_000;
 export const DEFAULT_BYTES_PER_SIGOP = 20;
 
+// qbitd's GetTransactionWeight: the size without witnesses counts WITNESS_SCALE_FACTOR - 1 more times,
+// so with qbit's factor of 1, a transaction's weight is its serialized size
+export function getTransactionWeight(baseSize: number, totalSize: number): number {
+  return baseSize * (WITNESS_SCALE_FACTOR - 1) + totalSize;
+}
+
 export function weightToVsize(weight: number): number {
   return Math.ceil(weightToFractionalVsize(weight));
 }

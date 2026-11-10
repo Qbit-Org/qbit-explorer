@@ -39,7 +39,7 @@ const {
   weightToVsize,
   WITNESS_SCALE_FACTOR,
 } = require('../src/app/shared/weight-units.ts');
-const { countScriptSigops, getNonWitnessSize } = require('../src/app/shared/transaction.utils.ts');
+const { countSigops, getNonWitnessSize } = require('../src/app/shared/transaction.utils.ts');
 
 function assert(condition, message) {
   if (!condition) {
@@ -52,7 +52,7 @@ assert(weightToVsize(400) === 400, 'qbit weight-to-vsize conversion divided by l
 assert(weightToFractionalVsize(1_800_000) === 1_800_000, 'qbit fractional vsize should equal weight');
 assert(vsizeToWeight(1_800_000) === 1_800_000, 'qbit vsize-to-weight should be identity');
 assert(feeRatePerVsize(100, 400) === 0.25, 'qbit fee rate should use weight as vsize');
-assert(countScriptSigops('OP_CHECKSIG') === 1, 'qbit legacy sigops should scale by WSF=1');
+assert(countSigops({ vin: [], vout: [{ scriptpubkey: 'ac' }] }) === 1, 'qbit legacy sigops should scale by WSF=1');
 assert(sigopsToAdjustedVsize(30) === 600, 'qbit adjusted vsize should use 20 bytes per sigop with WSF=1');
 assert(getNonWitnessSize({ weight: 400, vin: [] }) === 400, 'qbit non-witness size should not divide weight by 4');
 assert(DEFAULT_FEE_RATE_WEIGHT === vsizeToWeight(1), 'fee-rate component should default to one qbit vbyte');

@@ -5,9 +5,9 @@ import config from '../config';
 import transactionUtils from './transaction-utils';
 import { isPoint } from '../utils/secp256k1';
 import logger from '../logger';
-import { getVarIntLength, opcodes, parseMultisigScript } from '../utils/bitcoin-script';
+import { decodeInputScripts, DecodedInputScripts, getSigOpCount, getVarIntLength, isPushOnly, parseMultisigScript } from '../utils/bitcoin-script';
 import { IEsploraApi } from './bitcoin/esplora-api.interface';
-import { feeRatePerVsize, sigopsToAdjustedVsize, vsizeToWeight, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '../utils/weight-units';
+import { feeRatePerVsize, getTransactionWeight, sigopsToAdjustedVsize, vsizeToWeight, weightToFractionalVsize, weightToVsize } from '../utils/weight-units';
 import { QBIT_PRICE_FEEDS_AVAILABLE } from '../utils/qbit-price-feeds';
 
 // Bitcoin Core default policy settings
@@ -35,7 +35,7 @@ const P2MR_DUST_SPEND_SIZE = 41 + 1 + (3 + PQC_SIG_SIZE + 1) + (1 + 34) + (1 + 1
 const MAX_OP_RETURN_RELAY = 200_000; // qbit policy: -datacarriersize default, shared by all OP_RETURN outputs
 const MAX_DUST_OUTPUTS_PER_TX = 1; // qbit policy: ephemeral dust allows one dust output
 const DEFAULT_PERMIT_BAREMULTISIG = true;
-const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
+const MAX_TX_LEGACY_SIGOPS = 2_500; // qbit policy: legacy sigops a transaction's inputs can execute (BIP54)
 const TRUC_VERSION = 3;
 const TRUC_MAX_VSIZE = 50_000; // qbit policy: sigop-adjusted vsize of any v3 transaction
 // the only leaf versions qbit relays: BIP 342 tapscript, and P2MR v1, which qbit defines separately
@@ -223,13 +223,17 @@ export class Common {
       return true;
     }
 
+    // each input's scripts, decoded once for the sigop and input checks below
+    const inputScripts = tx.vin.map(decodeInputScripts);
+
     // sigop cost, as esplora reports it, or counted here when it is missing. Counting needs prevouts
     // for the sigops of the outputs being spent, so without them the count is a lower bound, and the
     // sigop limits below can miss a transaction but never flag one wrongly.
-    const sigopCost = tx.sigops ?? transactionUtils.countSigops(tx);
+    const sigopCost = tx.sigops ?? transactionUtils.countSigops(tx, inputScripts);
 
     // TRUC-violation: a v3 transaction's sigop-adjusted vsize must be within TRUC_MAX_VSIZE
-    // (qbit also caps a v3 child of an unconfirmed v3 parent at 45,500 vB, which needs the mempool to check)
+    // (a v3 transaction that spends an unconfirmed one is limited to 45,500 vB: qbitd checks that before
+    // a transaction enters its mempool, so the frontend checks it on /tx/preview only)
     if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(sigopCost)) > TRUC_MAX_VSIZE) {
       return true;
     }
@@ -245,12 +249,13 @@ export class Common {
     }
 
     // legacy sigops
-    if (this.isNonStandardLegacySigops(tx, height)) {
+    if (this.isNonStandardLegacySigops(tx, height, inputScripts)) {
       return true;
     }
 
     // input validation
-    for (const vin of tx.vin) {
+    for (let i = 0; i < tx.vin.length; i++) {
+      const vin = tx.vin[i];
       if (vin.is_coinbase) {
         // standardness rules don't apply to coinbase transactions
         return false;
@@ -260,19 +265,15 @@ export class Common {
         return true;
       }
       // scriptsig-not-pushonly
-      if (vin.scriptsig_asm?.length) {
-        for (const op of vin.scriptsig_asm.split(' ')) {
-          if (opcodes[op] && opcodes[op] > opcodes['OP_16']) {
-            return true;
-          }
-        }
+      if (!isPushOnly(inputScripts[i].scriptsig)) {
+        return true;
       }
       // bad-txns-nonstandard-inputs
       if (vin.prevout?.scriptpubkey_type === 'p2sh') {
         // TODO: evaluate script (https://github.com/bitcoin/bitcoin/blob/1ac627c485a43e50a9a49baddce186ee3ad4daad/src/policy/policy.cpp#L177)
-        // countScriptSigops returns the witness-scaled sigops, so normalize before comparing with MAX_P2SH_SIGOPS
-        const sigops = (transactionUtils.countScriptSigops(vin.inner_redeemscript_asm) / WITNESS_SCALE_FACTOR);
-        if (sigops > MAX_P2SH_SIGOPS) {
+        // the redeem script is the last item the push-only scriptsig pushes
+        const redeemScript = inputScripts[i].redeemScript;
+        if (redeemScript && getSigOpCount(redeemScript, true) > MAX_P2SH_SIGOPS) {
           return true;
         }
       } else if (['unknown', 'provably_unspendable', 'empty'].includes(vin.prevout?.scriptpubkey_type || '')) {
@@ -547,7 +548,7 @@ export class Common {
     'regtest': 0,
     'mainnet': 0,
   };
-  static isNonStandardLegacySigops(tx: TransactionExtended, height?: number): boolean {
+  static isNonStandardLegacySigops(tx: TransactionExtended, height?: number, inputScripts?: DecodedInputScripts[]): boolean {
     const activationHeight = this.getActivationHeight(this.LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT);
     if (
       height == null || (
@@ -555,7 +556,7 @@ export class Common {
         && height >= activationHeight
       )
     ) {
-      if (!transactionUtils.checkSigopsBIP54(tx, MAX_TX_LEGACY_SIGOPS)) {
+      if (!transactionUtils.checkSigopsBIP54(tx, MAX_TX_LEGACY_SIGOPS, inputScripts)) {
         return true;
       }
     }
@@ -1153,8 +1154,8 @@ export class Common {
       throw Object.assign(new Error('Invalid transaction (could not parse)'), { code: -4 });
     }
 
-    // Check 2: Simple size check
-    if (tx.weight() > config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT) {
+    // Check 2: Simple size check, of qbit's weight: bitcoinjs-lib's tx.weight() is Bitcoin's
+    if (getTransactionWeight(tx.byteLength(false), tx.byteLength()) > config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT) {
       throw Object.assign(new Error(`Transaction too large (max ${config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT} weight units)`), { code: -3 });
     }
 
@@ -1170,7 +1171,9 @@ export class Common {
 
         if (maybeScriptSpend) {
           const controlBlock = witness[witness.length - scriptSpendMinLength + 1];
-          if (controlBlock.length === 0 || !this.isValidLeafVersion(controlBlock[0])) {
+          // the leaf version is the control byte without bit 0, which taproot uses for parity and P2MR
+          // always sets (qbit v1.0.0 src/script/interpreter.cpp:2378-2381)
+          if (controlBlock.length === 0 || !this.isValidLeafVersion(controlBlock[0] & 0xfe)) {
             // Skip this input, it's not taproot
             return;
           }

@@ -1,20 +1,44 @@
 import transactionUtils from '../../api/transaction-utils';
+import { IEsploraApi } from '../../api/bitcoin/esplora-api.interface';
+import { decodeInputScripts, decodeScript, DecodedScript, getRedeemScript, getSigOpCount, isPushOnly } from '../../utils/bitcoin-script';
+import { pushOnlyVectors, realTransactionSigopVectors, scriptSigopVectors, transactionSigopVectors } from '../fixtures/qbit-standardness-vectors';
 
-describe('transactionUtils.countScriptSigops', () => {
-  test('counts OP_CHECKSIG and OP_CHECKSIGVERIFY as one sigop each', () => {
-    expect(transactionUtils.countScriptSigops('OP_CHECKSIG OP_CHECKSIGVERIFY', true, true)).toBe(2);
+const hex = (script: DecodedScript | null): string | null => (script ? script.hex : null);
+
+// the vectors the frontend smoke runs too (src/__tests__/fixtures/qbit-standardness-vectors.ts)
+describe('qbit sigops over decoded scripts', () => {
+  test.each(scriptSigopVectors)('counts the sigops of %s', (_name, script, accurate, sigops) => {
+    expect(getSigOpCount(decodeScript(script), accurate)).toBe(sigops);
   });
 
-  test('does not count OP_CHECKSIGPQC or OP_CHECKSIGADD, which qbitd GetSigOpCount skips', () => {
-    expect(transactionUtils.countScriptSigops(`OP_PUSHBYTES_32 ${'11'.repeat(32)} OP_CHECKSIGPQC`, true, true)).toBe(0);
-    expect(transactionUtils.countScriptSigops('OP_CHECKSIGADD', true, true)).toBe(0);
+  test.each(pushOnlyVectors)('tells whether %s is push-only', (_name, script, pushOnly) => {
+    expect(isPushOnly(decodeScript(script))).toBe(pushOnly);
   });
 
-  test('counts OP_CHECKMULTISIG as N only after OP_1 to OP_16 in redeem and witness scripts', () => {
-    expect(transactionUtils.countScriptSigops('OP_PUSHNUM_2 OP_CHECKMULTISIG', false, true)).toBe(2);
-    expect(transactionUtils.countScriptSigops('OP_PUSHNUM_16 OP_CHECKMULTISIGVERIFY', false, true)).toBe(16);
-    expect(transactionUtils.countScriptSigops('OP_0 OP_CHECKMULTISIG', false, true)).toBe(20);
-    expect(transactionUtils.countScriptSigops('OP_CHECKMULTISIG OP_CHECKMULTISIG', false, true)).toBe(40);
+  test.each(transactionSigopVectors)('counts the sigop cost of %s', (_name, buildTransaction, cost) => {
+    expect(transactionUtils.countSigops(buildTransaction() as unknown as IEsploraApi.Transaction)).toBe(cost);
+  });
+
+  test.each(realTransactionSigopVectors)('counts the sigop cost of %s transaction %s', (file, txid, cost) => {
+    const transaction = require(`./test-data/${file}`).find((tx: IEsploraApi.Transaction) => tx.txid === txid);
+    expect(transactionUtils.countSigops(transaction)).toBe(cost);
+  });
+
+  test('reads a P2SH redeem script as the last push of a push-only scriptsig', () => {
+    expect(hex(getRedeemScript(decodeScript('0002aaaa03acacac')))).toBe('acacac');
+    // a last instruction that pushes a number, OP_1, leaves no redeem script
+    expect(hex(getRedeemScript(decodeScript('02aaaa51')))).toBe('');
+    // nor does a scriptsig that isn't push-only
+    expect(getRedeemScript(decodeScript('03acacac61'))).toBe(null);
+  });
+
+  test('decodes each script of an input once, and the redeem script only for a P2SH spend', () => {
+    const scriptsig = `0f${'ac'.repeat(15)}`;
+    const p2sh = decodeInputScripts({ scriptsig, prevout: { scriptpubkey: `a914${'11'.repeat(20)}87` } });
+    expect(hex(p2sh.redeemScript)).toBe('ac'.repeat(15));
+    expect(getSigOpCount(p2sh.redeemScript as DecodedScript, true)).toBe(15);
+    expect(decodeInputScripts({ scriptsig, prevout: { scriptpubkey: `76a914${'11'.repeat(20)}88ac` } }).redeemScript).toBe(null);
+    expect(decodeInputScripts({ scriptsig, prevout: null })).toMatchObject({ prevout: null, redeemScript: null });
   });
 });
 
