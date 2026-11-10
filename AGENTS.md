@@ -175,8 +175,12 @@ The qbit CI/CD workflows are:
   against MariaDB, on a host port Docker picks (`MEMPOOL_TEST_DB_HOST_PORT=0`).
 - `.github/workflows/docker.yml` — on every pull request, builds both images
   from the pull request merged onto its base branch and checks that the
-  `docker/docker-compose.yml` stack becomes healthy. It runs the same check on
-  `v*` tags, and never pushes images anywhere.
+  `docker/docker-compose.yml` stack becomes healthy, and that the API and
+  WebSocket answer through nginx, also after the `api` container is recreated
+  at another address. It runs the same check on `v*` tags, and never pushes
+  images anywhere. The frontend build gets the job's read-only
+  `GITHUB_TOKEN` as a BuildKit secret, for the GitHub API calls that list the
+  mining pool logos.
 - `.github/workflows/qbit-design-check.yml` — drift gate for the vendored
   qbit.org design contract in `frontend/src/resources/qbit-design/`. Those
   vendored files are machine-managed by `frontend/scripts/sync-qbit-design.mjs`
@@ -196,7 +200,9 @@ Keep the workflows safe for a public repository. Each one sets
 `permissions: contents: read` and checks out with `persist-credentials: false`.
 Third-party actions are pinned to a commit SHA; GitHub-owned `actions/*` stay
 pinned to their major version tag (`@v4`). Only the Docker publish jobs read
-secrets, and they skip pull requests from forks. Do not add
+secrets, and they skip pull requests from forks. The automatic `GITHUB_TOKEN`
+isn't a repository secret, and under `contents: read` it can only read; pass
+it only to the step that needs it, as `docker.yml` does. Do not add
 `pull_request_target` or `workflow_run` triggers that run pull request code.
 
 `ci.yml`'s Repository checks job fails a pull request with files under
@@ -227,6 +233,13 @@ cherry-picks) lives in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 - Verify constants against the qbit source or qbit-electrs contract, not old
   planning text.
+- The pins in `docker/*/Dockerfile`, base image digests and the SHA-256 of
+  NodeSource's `setup_26.x` (in both backend stages), are the ones the
+  production image build uses. When NodeSource republishes the script at the
+  same URL, the backend build fails that check: review the new script and
+  update both stages. A PR that changes any of these pins, a Dependabot
+  digest bump included, says so in its description, so that the production
+  deployment moves with it.
 - Check every weight/vsize change for the WSF=1 invariant.
 - Qbit mainnet has launched; mainnet wording is no longer launch-gated. The
   qbit.org design contract (banner and nav) is authoritative for public

@@ -78,11 +78,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
+      # The frontend build lists the mining pool logos through the GitHub API,
+      # which allows 60 unauthenticated requests an hour per IP address, shared
+      # with every other job on the runner's address. The job's read-only
+      # token raises that limit. It reaches only the build step that downloads
+      # the logos, as a BuildKit secret, and isn't stored in the image.
       - name: Build frontend image locally
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           docker buildx build \
             --tag test-frontend:$TAG \
             --build-arg commitHash=$SHORT_SHA \
+            --secret id=github_token,env=GITHUB_TOKEN \
             --load \
             --platform linux/amd64 \
             ./frontend/
@@ -243,6 +251,65 @@ jobs:
           
           echo "All containers are healthy!"
 
+      # nginx in the web container looks the api container's name up when a
+      # request comes in (nginx-mempool.conf). Check the API and the WebSocket
+      # through nginx, then recreate api at another address and check both
+      # again. An nginx that kept the old address would answer 502.
+      - name: Check the API through nginx across an api container restart
+        run: |
+          compose() { docker compose -f docker-compose.test.yml "$@"; }
+          # backend-info names the container that answered as its hostname
+          api_through_nginx() {
+            api_host=$(docker inspect -f '{{.Config.Hostname}}' "$(compose ps -q api)")
+            for _ in $(seq 60); do
+              if curl -fs --max-time 5 http://localhost:8080/api/v1/backend-info | jq -e --arg h "$api_host" '.hostname == $h' >/dev/null &&
+                curl -fs --max-time 5 http://localhost:8080/api/backend-info | jq -e --arg h "$api_host" '.hostname == $h' >/dev/null; then
+                echo "/api/v1/ and /api/ answer through nginx from api container ${api_host}"
+                return 0
+              fi
+              sleep 2
+            done
+            echo "The API didn't answer through nginx from api container ${api_host}"
+            compose logs web
+            return 1
+          }
+          # curl waits on an upgraded connection until --max-time, then fails
+          websocket_through_nginx() {
+            for path in /api/v1/ws /ws; do
+              status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 \
+                -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+                -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+                "http://localhost:8080${path}" || true)
+              if [ "$status" != 101 ]; then
+                echo "The WebSocket upgrade at ${path} through nginx answered ${status}, not 101"
+                return 1
+              fi
+            done
+            echo "/api/v1/ws and /ws upgrade to a WebSocket through nginx"
+          }
+          api_address() {
+            docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(compose ps -q api)"
+          }
+
+          api_through_nginx
+          websocket_through_nginx
+
+          old_address=$(api_address)
+          network=$(docker inspect -f '{{range $name, $settings := .NetworkSettings.Networks}}{{$name}}{{end}}' "$(compose ps -q api)")
+          compose rm --stop --force api
+          # hold the freed address, so the new api container gets another one
+          docker run -d --name api-address-holder --network "$network" --entrypoint sleep "test-backend:${TAG}" 600
+          compose up -d --no-deps api
+          new_address=$(api_address)
+          echo "The api container moved from ${old_address} to ${new_address}"
+          if [ "$new_address" = "$old_address" ]; then
+            echo "The api container kept its address, so this check can't tell"
+            exit 1
+          fi
+          api_through_nginx
+          websocket_through_nginx
+          docker rm -f api-address-holder
+
       # Skip when the job failed before the test compose file existed; compose
       # would only add a misleading second error.
       - name: Show container logs
@@ -253,4 +320,6 @@ jobs:
       - name: Clean up containers
         if: always() && hashFiles('docker-compose.test.yml') != ''
         run: |
+          # the address holder is on the compose network, which down removes
+          docker rm -f api-address-holder 2>/dev/null || true
           docker compose -f docker-compose.test.yml down -v

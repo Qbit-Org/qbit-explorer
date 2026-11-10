@@ -6,6 +6,31 @@ __MEMPOOL_FRONTEND_HTTP_PORT__=${FRONTEND_HTTP_PORT:=8080}
 sed -i "s/__MEMPOOL_BACKEND_MAINNET_HTTP_HOST__/${__MEMPOOL_BACKEND_MAINNET_HTTP_HOST__}/g" /etc/nginx/conf.d/nginx-mempool.conf
 sed -i "s/__MEMPOOL_BACKEND_MAINNET_HTTP_PORT__/${__MEMPOOL_BACKEND_MAINNET_HTTP_PORT__}/g" /etc/nginx/conf.d/nginx-mempool.conf
 
+# nginx-mempool.conf looks the backend's host name up through 127.0.0.11, the
+# DNS server of containers on a user-defined Docker network. On every start,
+# set that resolver line from the first nameserver in /etc/resolv.conf that
+# nginx can use, so the image also works in Kubernetes, Podman or on Docker's
+# default bridge network, and follows a network change. nginx can't use a
+# link-local address with a zone, such as fe80::1%eth0. An IPv6 nameserver
+# gets IPv6 lookups too. nginx reads neither /etc/hosts nor search domains
+# (docker/README.md).
+nameserver=$(awk '$1 == "nameserver" && $2 !~ /%/ { print $2; exit }' /etc/resolv.conf 2>/dev/null)
+case "$nameserver" in
+  "")
+    resolver="127.0.0.11 valid=10s ipv6=off"
+    echo "/etc/resolv.conf has no nameserver nginx can use: nginx resolves BACKEND_MAINNET_HTTP_HOST through 127.0.0.11"
+    ;;
+  127.0.0.11) resolver="127.0.0.11 valid=10s ipv6=off" ;;
+  *)
+    case "$nameserver" in
+      *:*) resolver="[${nameserver}] valid=10s ipv6=on" ;;
+      *) resolver="${nameserver} valid=10s ipv6=off" ;;
+    esac
+    echo "nginx resolves BACKEND_MAINNET_HTTP_HOST through ${nameserver}, the first usable nameserver in /etc/resolv.conf"
+    ;;
+esac
+sed -i -E "s/^([[:space:]]*)resolver [^ ;]+ valid=10s( ipv6=(on|off))?;/\1resolver ${resolver};/" /etc/nginx/conf.d/nginx-mempool.conf
+
 cp /etc/nginx/nginx.conf /patch/nginx.conf
 sed -i "s/__MEMPOOL_FRONTEND_HTTP_PORT__/${__MEMPOOL_FRONTEND_HTTP_PORT__}/g" /patch/nginx.conf
 cat /patch/nginx.conf > /etc/nginx/nginx.conf
