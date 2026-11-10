@@ -40,6 +40,7 @@ import { ZONE_SERVICE } from '@app/injection-tokens';
 import { MiningService, MiningStats } from '@app/services/mining.service';
 import { ETA, EtaService } from '@app/services/eta.service';
 import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize } from '@app/shared/weight-units';
+import { isAwaitableTransactionError } from '@app/shared/http-error.utils';
 
 export interface Pool {
   id: number;
@@ -852,7 +853,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   handleLoadElectrsTransactionError(error: any): Observable<any> {
-    if (error.status === 404 && /^[a-fA-F0-9]{64}$/.test(this.txId)) {
+    if (isAwaitableTransactionError(error) && /^[a-fA-F0-9]{64}$/.test(this.txId)) {
       this.websocketService.startMultiTrackTransaction(this.txId);
       this.waitingForTransaction = true;
     }

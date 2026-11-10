@@ -93,6 +93,13 @@ export namespace IEsploraApi {
     stale: boolean;
   }
 
+  // qbit-electrs answers in_best_chain false, with nulls, for a block outside the best chain or one it doesn't know
+  export interface BlockStatus {
+    in_best_chain: boolean;
+    height: number | null;
+    next_best: string | null;
+  }
+
   export interface Address {
     address: string;
     chain_stats: ChainStats;

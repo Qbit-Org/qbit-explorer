@@ -107,7 +107,7 @@
                 </div>
                 <div class="description">
                   <div class="subtitle">Payload</div>
-                  <pre><code [innerText]="item.payload"></code></pre>
+                  <pre><code [innerText]="item[wsPayloadKey] || item.payload"></code></pre>
                 </div>
                 <app-code-template [hostname]="hostname" [baseNetworkUrl]="baseNetworkUrl" [method]="item.httpRequestMethod" [code]="item.codeExample.default" [network]="network.val" [showCodeExample]="item.showJsExamples"></app-code-template>
               </div>

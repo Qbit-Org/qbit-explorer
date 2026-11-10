@@ -513,4 +513,25 @@ require('@angular/compiler');
   assert(httpErrorStatus({ status: 0, statusText: 'Unknown error' }) === '0 Unknown error', 'network failure status');
 }
 
+// The transaction and tracker pages wait for a transaction, tracking it over the websocket, when the backend answers
+// 404, and also 503: under the none and electrum backends, qbitd's txindex is disabled or still building
+{
+  const { TransactionComponent } = require('../src/app/components/transaction/transaction.component.ts');
+  const { TrackerComponent } = require('../src/app/components/tracker/tracker.component.ts');
+  for (const [page, componentClass] of [['transaction page', TransactionComponent], ['tracker page', TrackerComponent]]) {
+    for (const [status, txId, waits] of [
+      [404, 'ab'.repeat(32), true],
+      [503, 'ab'.repeat(32), true],
+      [500, 'ab'.repeat(32), false],
+      [400, 'not-a-txid', false],
+    ]) {
+      const tracked = [];
+      const state = { txId, websocketService: { startMultiTrackTransaction: (id) => tracked.push(id) }, seoService: { logSoft404() {} } };
+      componentClass.prototype.handleLoadElectrsTransactionError.call(state, { status });
+      assert(!!state.waitingForTransaction === waits && tracked.length === (waits ? 1 : 0),
+        `${page} after a ${status}: waitingForTransaction ${state.waitingForTransaction}, tracked ${JSON.stringify(tracked)}`);
+    }
+  }
+}
+
 console.log('qbit script smoke passed');

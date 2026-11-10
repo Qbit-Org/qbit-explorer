@@ -22,6 +22,9 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
   private destroy$: Subject<any> = new Subject<any>();
   plainHostname = document.location.hostname;
   electrsPort = 0;
+  // A websocket example's payload field: testnet4's examples that name an address have their own, so the payload
+  // matches the response, which testnet4 takes from codeSampleTestnet
+  wsPayloadKey: 'payload' | 'payloadTestnet' = 'payload';
   hostname = document.location.hostname;
   network$: Observable<string>;
   active = 0;
@@ -104,6 +107,7 @@ export class ApiDocsComponent implements OnInit, AfterViewInit {
 
     this.network$.pipe(takeUntil(this.destroy$)).subscribe((network) => {
       this.active = 0;
+      this.wsPayloadKey = ['testnet', 'testnet4'].includes(network) ? 'payloadTestnet' : 'payload';
       switch( network ) {
         case '':
           this.electrsPort = 50002; break;

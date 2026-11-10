@@ -44,6 +44,19 @@ describe('Esplora API', () => {
     expect(get).toHaveBeenCalledWith(path);
   });
 
+  test.each([
+    ['a block\'s status', (api: EsploraApi) => api.$getBlockStatus('block-hash'), ['/block/block-hash/status'], { in_best_chain: true }],
+    ['the spending status of an output', (api: EsploraApi) => api.$getOutspend('tx', 2), ['/tx/tx/outspend/2'], { spent: false }],
+    ['a transaction\'s merkle block proof, as text', (api: EsploraApi) => api.$getTransactionMerkleBlockProof('tx'),
+      ['/tx/tx/merkleblock-proof', 'text'], '00'],
+  ])('should proxy %s to electrs', async (_label, lookup, args, answer) => {
+    const api = new EsploraApi();
+    const get = jest.spyOn(api['failoverRouter'], '$get').mockResolvedValue(answer);
+
+    await expect(lookup(api)).resolves.toStrictEqual(answer);
+    expect(get).toHaveBeenCalledWith(...args);
+  });
+
   describe('against an electrs HTTP server', () => {
     const RAW_BLOCK = Buffer.from('00e01332ce72108dd402ed0308506600ff', 'hex');
     // Valid JSON numbers: axios' JSON transform would turn these into numbers
@@ -62,6 +75,7 @@ describe('Esplora API', () => {
         const routes: Record<string, [string, string | Buffer]> = {
           '/tx/numeric/hex': ['text/plain', NUMERIC_HEX],
           '/tx/leading-zero/hex': ['text/plain', LEADING_ZERO_HEX],
+          '/tx/numeric/merkleblock-proof': ['text/plain', NUMERIC_HEX],
           '/block/known/raw': ['application/octet-stream', RAW_BLOCK],
         };
         const route = routes[req.url || ''];
@@ -95,6 +109,16 @@ describe('Esplora API', () => {
 
     test('surfaces an electrs 404 for an unknown transaction hex as not found', async () => {
       const error = await api.$getTransactionHex('unknown').catch((e) => e);
+      expect(error?.response?.status).toBe(404);
+      expect(isTxNotFoundError(error)).toBe(true);
+    });
+
+    test('returns a numeric text/plain merkle block proof unaltered', async () => {
+      await expect(api.$getTransactionMerkleBlockProof('numeric')).resolves.toBe(NUMERIC_HEX);
+    });
+
+    test('surfaces an electrs 404 for a merkle block proof as not found', async () => {
+      const error = await api.$getTransactionMerkleBlockProof('unconfirmed').catch((e) => e);
       expect(error?.response?.status).toBe(404);
       expect(isTxNotFoundError(error)).toBe(true);
     });
