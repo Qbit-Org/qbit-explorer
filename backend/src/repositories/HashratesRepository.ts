@@ -328,6 +328,7 @@ class HashratesRepository {
 
   /**
    * Delete hashrates from the database from timestamp
+   * @asyncSafe
    */
   public async $deleteHashratesFromTimestamp(timestamp: number) {
     logger.info(`Delete newer hashrates from timestamp ${new Date(timestamp * 1000).toUTCString()} from the database`, logger.tags.mining);
