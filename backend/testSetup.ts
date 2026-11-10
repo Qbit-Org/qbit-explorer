@@ -14,7 +14,6 @@ jest.mock('./src/logger.ts', () => ({
   updateNetwork: jest.fn(),
   tags: {
     mining: 'mining',
-    ln: 'ln',
     goggles: 'goggles',
   },
 }), { virtual: true });

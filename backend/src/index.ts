@@ -20,17 +20,10 @@ import syncAssets from './sync-assets';
 import { Common } from './api/common';
 import poolsUpdater from './tasks/pools-updater';
 import indexer from './indexer';
-import nodesRoutes from './api/explorer/nodes.routes';
-import channelsRoutes from './api/explorer/channels.routes';
-import generalLightningRoutes from './api/explorer/general.routes';
-import lightningStatsUpdater from './tasks/lightning/stats-updater.service';
-import networkSyncService from './tasks/lightning/network-sync.service';
 import statisticsRoutes from './api/statistics/statistics.routes';
 import pricesRoutes from './api/prices/prices.routes';
 import miningRoutes from './api/mining/mining-routes';
 import bitcoinRoutes from './api/bitcoin/bitcoin.routes';
-import fundingTxFetcher from './tasks/lightning/sync-tasks/funding-tx-fetcher';
-import forensicsService from './tasks/lightning/forensics.service';
 import priceUpdater from './tasks/price-updater';
 import chainTips from './api/chain-tips';
 import { AxiosError } from 'axios';
@@ -199,10 +192,6 @@ class Server {
 
     setInterval(() => { this.healthCheck(); }, 2500);
 
-    if (config.LIGHTNING.ENABLED) {
-      void this.$runLightningBackend();
-    }
-
     // without a host, Node listens on every interface
     this.server.listen(config.MEMPOOL.HTTP_PORT, config.MEMPOOL.HTTP_HOST || undefined, () => {
       if (worker) {
@@ -288,20 +277,6 @@ class Server {
     }
   }
 
-  /** @asyncSafe */
-  async $runLightningBackend(): Promise<void> {
-    try {
-      await fundingTxFetcher.$init();
-      await networkSyncService.$startService();
-      await lightningStatsUpdater.$startService();
-      await forensicsService.$startService();
-    } catch(e) {
-      logger.err(`Exception in $runLightningBackend. Restarting in 1 minute. Reason: ${(e instanceof Error ? e.message : e)}`);
-      await Common.sleep$(1000 * 60);
-      void this.$runLightningBackend();
-    };
-  }
-
   setUpWebsocketHandling(): void {
     if (this.wss) {
       websocketHandler.addWebsocketServer(this.wss);
@@ -337,11 +312,6 @@ class Server {
     }
     if (Common.indexingEnabled() && config.MEMPOOL.ENABLED) {
       miningRoutes.initRoutes(this.app);
-    }
-    if (config.LIGHTNING.ENABLED) {
-      generalLightningRoutes.initRoutes(this.app);
-      nodesRoutes.initRoutes(this.app);
-      channelsRoutes.initRoutes(this.app);
     }
     if (!config.MEMPOOL.OFFICIAL) {
       aboutRoutes.initRoutes(this.app);

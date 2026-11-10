@@ -122,7 +122,7 @@ testnet4 qbitd or qbit-electrs evidence in the PR or issue comment.
 | Address or script rendering | backend unit tests plus frontend build | Sample `tq` or `qbrt` addresses, P2MR, anchor, and PQC transactions |
 | Weight, vsize, or fee math | backend unit tests around the touched module | Fixture or curl evidence showing `vsize == weight` under WSF=1 |
 | Difficulty, subsidy, or mining UI | backend tests and frontend build | qbit source citation plus regtest/testnet4 sample data |
-| Lightning, Liquid, accelerator, services | frontend/backend build | Confirm disabled or gracefully hidden for qbit |
+| Liquid, accelerator, services | frontend/backend build | Confirm disabled or gracefully hidden for qbit |
 | Block, transaction, address or mempool pages | `npm run cypress:run:regtest` against the regtest harness (`docs/qbit-local-dev.md`) | |
 
 ## qbit Consensus Quick Reference

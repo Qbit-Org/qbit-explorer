@@ -129,13 +129,6 @@ describe('Mempool Backend Config', () => {
         MEMPOOL_ONION: ''
       });
 
-      expect(config.MAXMIND).toStrictEqual({
-        ENABLED: false,
-        GEOLITE2_CITY: '/usr/local/share/GeoIP/GeoLite2-City.mmdb',
-        GEOLITE2_ASN: '/usr/local/share/GeoIP/GeoLite2-ASN.mmdb',
-        GEOIP2_ISP: '/usr/local/share/GeoIP/GeoIP2-ISP.mmdb'
-      });
-
       expect(config.REPLICATION).toStrictEqual({
         ENABLED: false,
         AUDIT: false,
@@ -233,6 +226,64 @@ describe('Mempool Backend Config', () => {
         'Unsupported MEMPOOL.NETWORK "liquid". Supported qbit networks: mainnet, testnet, testnet4, signet, regtest'
       );
     });
+  });
+
+  test('should load a config file that still has the removed Lightning and MaxMind sections, ignore them, and say so', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      jest.isolateModules(() => {
+        // the sections backend/mempool-config.sample.json had, switched on
+        jest.mock('../../mempool-config.json', () => ({
+          MAXMIND: {
+            ENABLED: true,
+            GEOLITE2_CITY: '/usr/local/share/GeoIP/GeoLite2-City.mmdb',
+            GEOLITE2_ASN: '/usr/local/share/GeoIP/GeoLite2-ASN.mmdb',
+            GEOIP2_ISP: '/usr/local/share/GeoIP/GeoIP2-ISP.mmdb'
+          },
+          LIGHTNING: {
+            ENABLED: true,
+            BACKEND: 'lnd',
+            STATS_REFRESH_INTERVAL: 600,
+            GRAPH_REFRESH_INTERVAL: 600,
+            LOGGER_UPDATE_INTERVAL: 30,
+            FORENSICS_INTERVAL: 43200,
+            FORENSICS_RATE_LIMIT: 20
+          },
+          LND: { TLS_CERT_PATH: 'tls.cert', MACAROON_PATH: 'readonly.macaroon', REST_API_URL: 'https://localhost:8080', TIMEOUT: 10000 },
+          CLIGHTNING: { SOCKET: 'lightning-rpc' }
+        }), { virtual: true });
+
+        const config = jest.requireActual('../config').default;
+
+        for (const section of ['LIGHTNING', 'LND', 'CLIGHTNING', 'MAXMIND']) {
+          expect(config).not.toHaveProperty(section);
+        }
+        expect(config.MEMPOOL.NETWORK).toBe('mainnet');
+      });
+      expect(warn.mock.calls).toStrictEqual([[
+        'Ignoring config file sections that only the removed Lightning backend read: LIGHTNING, LND, CLIGHTNING, MAXMIND.'
+      ]]);
+
+      // only the sections the file has
+      warn.mockClear();
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MAXMIND: { ENABLED: false } }), { virtual: true });
+        jest.requireActual('../config');
+      });
+      expect(warn.mock.calls).toStrictEqual([[
+        'Ignoring config file sections that only the removed Lightning backend read: MAXMIND.'
+      ]]);
+
+      // and nothing without them
+      warn.mockClear();
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MEMPOOL: { NETWORK: 'regtest' } }), { virtual: true });
+        jest.requireActual('../config');
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   test('should accept an IP address or nothing as MEMPOOL.HTTP_HOST', () => {

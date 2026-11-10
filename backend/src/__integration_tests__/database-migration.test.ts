@@ -1,4 +1,7 @@
+import { RowDataPacket } from 'mysql2';
+import config from '../config';
 import DB from '../database';
+import logger from '../logger';
 import { insertTestBlock, setupTestDatabase, waitForDatabase } from './test-helpers';
 
 describe('Database Migration Integration Tests', () => {
@@ -20,7 +23,7 @@ describe('Database Migration Integration Tests', () => {
   test('should have schema version in state table', async () => {
     const [result] = await DB.query<any>('SELECT number FROM state WHERE name = \'schema_version\'');
     expect(result).toHaveLength(1);
-    expect(result[0].number).toBe(112);
+    expect(result[0].number).toBe(113);
   });
 
   test('should create blocks table', async () => {
@@ -238,7 +241,7 @@ describe('Database Migration Integration Tests', () => {
     await setupTestDatabase();
 
     const [schemaRows] = await DB.query<any>(`SELECT number FROM state WHERE name = 'schema_version'`);
-    expect(schemaRows[0].number).toBe(112);
+    expect(schemaRows[0].number).toBe(113);
     const [blocks] = await DB.query<any>('SELECT height, lane FROM blocks ORDER BY height');
     expect(blocks).toEqual([
       { height: 100, lane: 'permissionless' },
@@ -264,7 +267,7 @@ describe('Database Migration Integration Tests', () => {
     await setupTestDatabase();
 
     const [schemaRows] = await DB.query<any>(`SELECT number FROM state WHERE name = 'schema_version'`);
-    expect(schemaRows[0].number).toBe(112);
+    expect(schemaRows[0].number).toBe(113);
     const [blocks] = await DB.query<any>(
       'SELECT hash, coinbase_payouts FROM blocks WHERE hash = ?',
       [hash]
@@ -280,6 +283,75 @@ describe('Database Migration Integration Tests', () => {
     expect(rerunBlocks).toEqual([{ hash, coinbase_payouts: null }]);
 
     await DB.query('DELETE FROM blocks');
+  });
+
+  const lightningTables = ['nodes_records', 'nodes_sockets', 'nodes', 'node_stats', 'channels', 'lightning_stats', 'geo_names'];
+
+  // Those of these tables that exist in the database the migrations run on
+  async function existingTables(tables: string[]): Promise<string[]> {
+    const [rows] = await DB.query<RowDataPacket[]>(
+      `SELECT TABLE_NAME
+       FROM information_schema.tables
+       WHERE table_schema = ?
+       AND table_name IN (?)`,
+      [config.DATABASE.DATABASE, tables]
+    );
+    return rows.map((row) => row.TABLE_NAME).sort();
+  }
+
+  test('should leave no Lightning tables after the migrations', async () => {
+    // finding state shows that the query reads the migrated database
+    expect(await existingTables(['state', ...lightningTables])).toEqual(['state']);
+  });
+
+  test('migration 113 should drop the Lightning tables of a schema-112 database and resume safely', async () => {
+    const notice = jest.spyOn(logger, 'notice');
+    try {
+      // Emulate a deployed schema-112 database, where nodes_records references
+      // nodes and both hold a row. Drop any Lightning tables first, so the test
+      // starts from the same state whichever migrations ran before it.
+      for (const table of lightningTables) {
+        await DB.query(`DROP TABLE IF EXISTS ${table}`);
+      }
+      const publicKey = '02'.padEnd(66, '0');
+      await DB.query('CREATE TABLE nodes (public_key varchar(66) NOT NULL, PRIMARY KEY (public_key)) ENGINE=InnoDB');
+      await DB.query(`CREATE TABLE nodes_records (
+        public_key varchar(66) NOT NULL,
+        type int(10) unsigned NOT NULL,
+        UNIQUE KEY public_key_type (public_key, type),
+        FOREIGN KEY (public_key) REFERENCES nodes (public_key) ON DELETE CASCADE
+      ) ENGINE=InnoDB`);
+      for (const table of ['nodes_sockets', 'node_stats', 'channels', 'lightning_stats', 'geo_names']) {
+        await DB.query(`CREATE TABLE ${table} (id int(11) unsigned NOT NULL) ENGINE=InnoDB`);
+      }
+      await DB.query('INSERT INTO nodes (public_key) VALUES (?)', [publicKey]);
+      await DB.query('INSERT INTO nodes_records (public_key, type) VALUES (?, 1)', [publicKey]);
+      expect(await existingTables(lightningTables)).toEqual([...lightningTables].sort());
+      await DB.query(`UPDATE state SET number = 112 WHERE name = 'schema_version'`);
+
+      await setupTestDatabase();
+
+      const [schemaRows] = await DB.query<RowDataPacket[]>(`SELECT number FROM state WHERE name = 'schema_version'`);
+      expect(schemaRows[0].number).toBe(113);
+      expect(await existingTables(['state', ...lightningTables])).toEqual(['state']);
+      expect(notice).toHaveBeenCalledWith('Lightning tables have been dropped: nodes_records, nodes_sockets, nodes, node_stats, channels, lightning_stats, geo_names.');
+
+      // A process stopped part-way through migration 113 drops what is left on
+      // its next startup, and names only those tables
+      notice.mockClear();
+      await DB.query('CREATE TABLE nodes (public_key varchar(66) NOT NULL, PRIMARY KEY (public_key)) ENGINE=InnoDB');
+      await DB.query('CREATE TABLE geo_names (id int(11) unsigned NOT NULL) ENGINE=InnoDB');
+      await DB.query(`UPDATE state SET number = 112 WHERE name = 'schema_version'`);
+
+      await setupTestDatabase();
+
+      const [resumedRows] = await DB.query<RowDataPacket[]>(`SELECT number FROM state WHERE name = 'schema_version'`);
+      expect(resumedRows[0].number).toBe(113);
+      expect(await existingTables(['state', ...lightningTables])).toEqual(['state']);
+      expect(notice).toHaveBeenCalledWith('Lightning tables have been dropped: nodes, geo_names.');
+    } finally {
+      notice.mockRestore();
+    }
   });
 
   test('pools table should have required columns', async () => {

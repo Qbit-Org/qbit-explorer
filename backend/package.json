@@ -15,8 +15,7 @@
     "bitcoin",
     "mempool",
     "blockchain",
-    "explorer",
-    "lightning"
+    "explorer"
   ],
   "main": "index.ts",
   "scripts": {
@@ -47,7 +46,6 @@
     "bitcoinjs-lib": "~6.1.8",
     "crypto-js": "~4.2.0",
     "express": "~4.22.3",
-    "maxmind": "~4.3.11",
     "mysql2": "~3.24.2",
     "rust-gbt": "file:./rust-gbt",
     "redis": "^4.7.0",
