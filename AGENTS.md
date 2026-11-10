@@ -105,6 +105,7 @@ npm run lint
 npm run smoke:qbit-scripts
 npm run smoke:qbit-weight
 npm run smoke:qbit-block-target
+npm run smoke:qbit-reorg
 npm run build
 ```
 
@@ -167,11 +168,11 @@ qbit source and the deployed network rather than pre-launch planning text.
 The qbit CI/CD workflows are:
 
 - `.github/workflows/ci.yml` — backend and frontend lint and builds, backend
-  unit tests, the frontend qbit script, weight and block target smokes, plus a
-  check that `docker/backend/start.sh` renders valid JSON. As upstream, the
-  frontend unit-test step is commented out, so frontend specs do not gate pull
-  requests. Its Rust GBT job runs `cargo test --locked` in `rust/gbt` and fails
-  on a RustSec vulnerability or unsound advisory against
+  unit tests, the frontend qbit script, weight, block target and reorg smokes,
+  plus a check that `docker/backend/start.sh` renders valid JSON. As upstream,
+  the frontend unit-test step is commented out, so frontend specs do not gate
+  pull requests. Its Rust GBT job runs `cargo test --locked` in `rust/gbt` and
+  fails on a RustSec vulnerability or unsound advisory against
   `rust/gbt/Cargo.lock`, with a `cargo-audit` release binary pinned by SHA-256.
 - `.github/workflows/backend-integration.yml` — backend integration tests
   against MariaDB, on a host port Docker picks (`MEMPOOL_TEST_DB_HOST_PORT=0`).

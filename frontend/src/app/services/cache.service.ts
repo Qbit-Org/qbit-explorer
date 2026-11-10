@@ -35,6 +35,10 @@ export class CacheService {
       this.clearBlocks();
     });
     this.stateService.chainTip$.subscribe((height) => {
+      // after a reorg to a shorter chain, the blocks above the tip are the old chain's
+      if (height < this.tip) {
+        this.dropBlocksAbove(height);
+      }
       this.tip = height;
     });
     this.stateService.networkChanged$.subscribe((network) => {
@@ -118,6 +122,22 @@ export class CacheService {
         delete this.copiesInBlockQueue[height];
       }
     }
+  }
+
+  // remove the blocks above a height from the cache, and drop any still loading there
+  dropBlocksAbove(height: number): void {
+    const above = (byHeight: object): number[] => Object.keys(byHeight).map(Number).filter((h) => h > height);
+    for (const h of above(this.blockCache)) {
+      delete this.blockHashCache[this.blockCache[h].id];
+      delete this.blockCache[h];
+    }
+    for (const h of above(this.copiesInBlockQueue)) {
+      delete this.copiesInBlockQueue[h];
+    }
+    for (const h of above(this.blockLoading)) {
+      delete this.blockLoading[h];
+    }
+    this.blockPriorities = this.blockPriorities.filter((h) => h <= height);
   }
 
   // remove all blocks from the cache

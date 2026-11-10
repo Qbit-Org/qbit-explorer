@@ -239,6 +239,11 @@ jobs:
         run: npm run smoke:qbit-block-target
         working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
 
+      - name: qbit Reorg Smoke
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run smoke:qbit-reorg
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
       # - name: Test
       #   run: npm run test
 

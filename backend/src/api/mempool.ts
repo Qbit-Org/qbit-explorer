@@ -248,7 +248,17 @@ class Mempool {
 
     // warn if this run stalls the main loop for more than 2 minutes
     const timer = this.startTimer();
+    try {
+      await this.$syncMempool(transactions, accelerations, minFeeMempool, minFeeTip, pollRate, timer);
+    } finally {
+      // a failed run has ended, and runMainUpdateLoop reports why: it must
+      // not be reported as stalled two minutes later
+      this.clearTimer(timer);
+    }
+  }
 
+  /** @asyncUnsafe */
+  private async $syncMempool(transactions: string[], accelerations: Record<string, Acceleration> | null, minFeeMempool: string[], minFeeTip: number, pollRate: number, timer: { progress: string }): Promise<void> {
     const start = new Date().getTime();
     let hasChange: boolean = false;
     const currentMempoolSize = Object.keys(this.mempoolCache).length;
@@ -427,8 +437,6 @@ class Mempool {
     const end = new Date().getTime();
     const time = end - start;
     logger.debug(`Mempool updated in ${time / 1000} seconds. New size: ${Object.keys(this.mempoolCache).length} (${diff > 0 ? '+' + diff : diff})`);
-
-    this.clearTimer(timer);
   }
 
   public getAccelerations(): { [txid: string]: Acceleration } {

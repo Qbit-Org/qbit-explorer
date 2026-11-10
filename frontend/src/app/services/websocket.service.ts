@@ -317,9 +317,8 @@ export class WebsocketService {
 
     if (response.blocks && response.blocks.length) {
       const blocks = response.blocks;
-      this.stateService.resetBlocks(blocks);
-      const maxHeight = blocks.reduce((max, block) => Math.max(max, block.height), this.stateService.latestBlockHeight);
-      this.stateService.updateChainTip(maxHeight);
+      // sets the tip too, which only a reorg's list can lower
+      this.stateService.resetBlocks(blocks, response.reorg === true);
     }
 
     if (response.tx) {

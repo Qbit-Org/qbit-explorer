@@ -42,6 +42,7 @@
     "smoke:qbit-scripts": "node scripts/qbit-script-smoke.js",
     "smoke:qbit-weight": "node scripts/qbit-weight-smoke.js",
     "smoke:qbit-block-target": "node scripts/qbit-block-target-smoke.js",
+    "smoke:qbit-reorg": "node scripts/qbit-reorg-smoke.js",
     "prettier": "prettier --write \"src/app/**/*.{js,json,css,scss,less,md,ts,html,component.html}\"",
     "e2e": "npm run cypress:run:regtest",
     "dev:ssr": "npm run generate-config && ng run mempool:serve-ssr",
