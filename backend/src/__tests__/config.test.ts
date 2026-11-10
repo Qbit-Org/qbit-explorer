@@ -44,7 +44,7 @@ describe('Mempool Backend Config', () => {
         POOLS_JSON_URL: '',
         POOLS_UPDATE_DELAY: 604800,
         AUDIT: false,
-        RUST_GBT: false,
+        RUST_GBT: true,
         LIMIT_GBT: false,
         CPFP_INDEXING: false,
         MAX_BLOCKS_BULK_QUERY: 0,
@@ -259,7 +259,7 @@ describe('Mempool Backend Config', () => {
         expect(config.MEMPOOL.BLOCKS_SUMMARIES_INDEXING).toBe(true);
         expect(config.MEMPOOL.GOGGLES_INDEXING).toBe(true);
         expect(config.MEMPOOL.CPFP_INDEXING).toBe(true);
-        // rust/gbt still applies Bitcoin's witness scale factor of 4
+        // production keeps the TypeScript block template builder until its operator switches
         expect(config.MEMPOOL.RUST_GBT).toBe(false);
         // upstream's operator templates set these for mempool.space: an official
         // instance, Esplora sockets and fallback hosts, and FreeBSD's MariaDB socket
