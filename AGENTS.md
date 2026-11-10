@@ -170,7 +170,9 @@ The qbit CI/CD workflows are:
   unit tests, the frontend qbit script, weight and block target smokes, plus a
   check that `docker/backend/start.sh` renders valid JSON. As upstream, the
   frontend unit-test step is commented out, so frontend specs do not gate pull
-  requests.
+  requests. Its Rust GBT job runs `cargo test --locked` in `rust/gbt` and fails
+  on a RustSec vulnerability or unsound advisory against
+  `rust/gbt/Cargo.lock`, with a `cargo-audit` release binary pinned by SHA-256.
 - `.github/workflows/backend-integration.yml` — backend integration tests
   against MariaDB, on a host port Docker picks (`MEMPOOL_TEST_DB_HOST_PORT=0`).
 - `.github/workflows/docker.yml` — on every pull request, builds both images
@@ -201,6 +203,18 @@ secrets, and they skip pull requests from forks. Do not add
 
 `ci.yml`'s Repository checks job fails a pull request with files under
 `contributors/`, which are upstream's CLA signatures (README.md, Upstream).
+It also runs `frontend/scripts/check-translations.mjs`, which fails on a unit
+in a built translation file whose English text differs from `messages.xlf`, or
+whose translation uses a placeholder `messages.xlf`'s English doesn't have
+(CONTRIBUTING.md, Translations).
+
+Dependabot reads `.github/dependabot.yml` only from `main`, so a change to it
+takes effect when a release brings it there. The file on this branch opens
+version updates, including `cargo` for `rust/gbt`, against `1.x.x`. Security
+updates always open against `main`. Dependabot reads `rust/gbt/rust-toolchain`
+only in TOML form, so keep that file TOML. Workflows and the npm build read its
+channel with `rust/gbt/scripts/toolchain-channel.sh`, which fails when it finds
+none.
 
 Every checked-in GitHub Actions job runs on the pinned Blacksmith Ubuntu 24.04
 runner `blacksmith-4vcpu-ubuntu-2404`. The Blacksmith GitHub App must retain

@@ -110,6 +110,14 @@ run from `frontend/`, regenerates that file from the source. The translation
 files for other languages (`messages.<lang>.xlf`) are upstream mempool's and
 have not been updated for qbit.
 
+Each unit in a translation file keeps the English text it translates. CI
+fails when that text differs from the unit with the same id in `messages.xlf`,
+or when the translation uses a placeholder that English doesn't have. That
+happens when you change the English of a message with a custom `@@` id, which
+keeps its id. Then run `node scripts/check-translations.mjs --fix` from
+`frontend/`: it removes those units, and the build shows your English text in
+every language.
+
 ## License
 
 Contributions are licensed under the same terms as the rest of the project:

@@ -83,8 +83,9 @@ jobs:
       - name: Read rust-toolchain files
         id: gettoolchain
         run: |
+          gbt="$(sh qbit-explorer/rust/gbt/scripts/toolchain-channel.sh)"
           {
-            echo "gbt=$(cat qbit-explorer/rust/gbt/rust-toolchain)"
+            echo "gbt=$gbt"
             echo "electrs=$(cat qbit-electrs/rust-toolchain)"
             echo "glibc=$(ldd --version | head -n 1 | awk '{print $NF}')"
           } >> "$GITHUB_OUTPUT"

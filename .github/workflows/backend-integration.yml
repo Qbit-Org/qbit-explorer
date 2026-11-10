@@ -59,7 +59,9 @@ jobs:
 
       - name: Read rust-toolchain file from repository
         id: gettoolchain
-        run: echo "toolchain=$(cat ./rust/gbt/rust-toolchain)" >> "$GITHUB_OUTPUT"
+        run: |
+          toolchain="$(sh rust/gbt/scripts/toolchain-channel.sh)"
+          echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
         working-directory: ${{ matrix.node }}/integration
 
       - name: Cache Rust dependencies
