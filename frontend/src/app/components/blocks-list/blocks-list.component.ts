@@ -18,8 +18,9 @@ type BlocksUpdate = { page: number, from: number, blocks: BlockExtended[] }
   | { live: BlockExtended[] }
   | { reorg: { blocks: BlockExtended[], from: number } };
 
-// How often the list asks again, 10 seconds apart, for an answer from the API that doesn't fit the
-// chain the websocket sent, before it shows what fits of it. A network's other origin can lag.
+// How often the list asks again, 10 seconds apart and past caches, for an answer from the API that
+// doesn't fit the chain the websocket sent, before it shows what fits of it. A network's other origin
+// can lag. Retries after an error don't count, and ask at the same URL, as upstream.
 const RETRIES_FOR_STALE_ANSWER = 2;
 
 @Component({
@@ -47,6 +48,9 @@ export class BlocksList implements OnInit {
   shownFrom: number = undefined;
   // whether the next request asks past the copies the browser or a CDN keep
   freshRequest = false;
+  // Whether the page shows what fits of an answer that kept not fitting the websocket's chain. Until the
+  // next reorg, or another page, new blocks then fill it without asking the API again.
+  showsWhatFits = false;
   maxSize = window.innerWidth <= 767.98 ? 3 : 5;
   blocksCount: number;
   fromHeightSubject: BehaviorSubject<number> = new BehaviorSubject(this.fromBlockHeight);
@@ -140,15 +144,26 @@ export class BlocksList implements OnInit {
           const reorg = this.stateService.lastReorg;
           const fresh = this.freshRequest || (reorg !== null && reorg.from <= (page === 1 ? Infinity : fromBlockHeight));
           this.freshRequest = false;
-          // every request counts towards RETRIES_FOR_STALE_ANSWER, a reload's too
-          let attempts = 0;
+          // The answers that didn't fit the websocket's chain, a reload's too: only after one does the
+          // retry ask past caches. A retry after an error asks at the same URL.
+          let staleAnswers = 0;
+          let askFresh = fresh;
           return defer(() => {
-            attempts++;
-            return this.apiService.getBlocks$(page === 1 ? undefined : fromBlockHeight, fresh || attempts > 1);
+            const asked = this.apiService.getBlocks$(page === 1 ? undefined : fromBlockHeight, askFresh);
+            askFresh = false;
+            return asked;
           })
             .pipe(
               // the answer can be from before a reorg, a copy the browser kept, or from an origin that lags
-              map(blocks => this.followWebsocket(blocks, page, fromBlockHeight, attempts > RETRIES_FOR_STALE_ANSWER)),
+              map((blocks) => {
+                const shown = this.followWebsocket(blocks, page, fromBlockHeight, staleAnswers >= RETRIES_FOR_STALE_ANSWER);
+                if (shown === null) {
+                  staleAnswers++;
+                  askFresh = true;
+                  throw new Error(`the API's blocks from ${blocks[0]?.height} down don't fit the chain the websocket sent`);
+                }
+                return shown;
+              }),
               tap(blocks => {
                 if (this.blocksCount === undefined) {
                   this.blocksCount = blocks[0].height + 1;
@@ -196,11 +211,13 @@ export class BlocksList implements OnInit {
       if (this.shownPage !== 1) {
         return acc;
       }
-      const blocks = this.firstPage(this.followChain(acc, update.live, this.stateService.lastReorg?.from ?? 0), true);
+      const blocks = this.firstPage(this.followChain(acc, update.live, this.stateService.lastReorg?.from ?? 0), !this.showsWhatFits);
       this.blocksCount = Math.max(this.blocksCount, blocks[0].height + 1);
       return blocks;
     }
     const tip = Math.max(...update.reorg.blocks.map((block) => block.height));
+    // a reorg can bring the API's answers back onto the websocket's chain
+    this.showsWhatFits = false;
     // the page count follows the new chain, longer or shorter, whatever page is shown
     this.blocksCount = tip + 1;
     if (this.shownPage === 1) {
@@ -256,9 +273,9 @@ export class BlocksList implements OnInit {
   // they are newer than the websocket's, as when its socket has dropped without the page noticing yet.
   // An answer that holds blocks that don't fit that chain, and leaves the page short without them, is
   // from before a reorg that went deeper than the blocks the websocket sent, or from an origin on
-  // another chain. It's asked for again, up to RETRIES_FOR_STALE_ANSWER times; on the `last` answer, the
-  // page shows the blocks that fit.
-  private followWebsocket(blocks: BlockExtended[], page: number, from: number, last: boolean): BlockExtended[] {
+  // another chain. Then it returns null, so that the answer is asked for again, up to
+  // RETRIES_FOR_STALE_ANSWER times; on the `last` answer, the page shows the blocks that fit.
+  private followWebsocket(blocks: BlockExtended[], page: number, from: number, last: boolean): BlockExtended[] | null {
     const reorg = this.stateService.lastReorg;
     const removed = new Set(reorg?.removed ?? []);
     const tip = blocks.some((block) => removed.has(block.id)) ? this.stateService.latestBlockHeight : Infinity;
@@ -271,9 +288,11 @@ export class BlocksList implements OnInit {
     // to a shorter chain.
     const misfits = answered.filter((block) => block.height <= tip && !heights.has(block.height));
     const stale = misfits.length > 0 || (answered.length > 0 && answered.every((block) => block.height > tip));
-    if (stale && !last && this.isShort(shown, page, from, tip)) {
-      throw new Error(`the API's blocks ${answered.map((block) => block.height).join(', ')} don't fit the chain the websocket sent`);
+    const showsWhatFits = stale && this.isShort(shown, page, from, tip);
+    if (showsWhatFits && !last) {
+      return null;
     }
+    this.showsWhatFits = showsWhatFits;
     return shown;
   }
 

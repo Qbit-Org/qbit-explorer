@@ -288,6 +288,8 @@ function openBlocksList({ widget = false, page = 1, before = () => undefined } =
             .map((block) => ({ ...block, extras: { pool: { ...block.extras.pool } } })));
           subscriber.complete();
         },
+        // the API answers with an HTTP error
+        fail: () => subscriber.error(new Error('503 Service Unavailable')),
       });
     }),
   };
@@ -618,6 +620,46 @@ async function checkBlocksList() {
   assert(page.requests.length === 2 && page.requests[1].fresh, `/blocks should ask for its page again when a height is missing: ${page.listed()}, ${JSON.stringify(page.requests)}`);
   page.answer(chain('A', 0, 110));
   assert(page.listed() === ids('A', 110, 96), `/blocks should show A110 to A96: ${page.listed()}`);
+  page.close();
+
+  // As upstream, an HTTP error is asked for again every 10 seconds, at the same URL: a CDN can answer it
+  page = openBlocksList();
+  page.stateService.isBrowser = true;
+  await withImmediateTimers(async () => {
+    page.requests[0].fail();
+    await tick();
+    page.requests[1].fail();
+    await tick();
+    page.answer(nodeA);
+  });
+  assert(page.requests.map((request) => request.fresh).join() === 'false,false,false' && page.listed() === ids('A', 101, 87), `/blocks should ask again after an error at the same URL, not past caches: ${JSON.stringify(page.requests)}, ${page.listed()}`);
+  page.close();
+
+  // Errors don't count towards the retries for an answer that doesn't fit the websocket's chain, and
+  // only those retries ask past caches. Here the tab saw a chain wipe and the API is still on the old
+  // chain: its first request asks past caches (the reorg may reach the page), the two after errors
+  // don't, and the two after an answer that didn't fit do.
+  page = openBlocksList({ before: (tab) => tab.receive({ blocks: chain('new', 43, 50), reorg: true }) });
+  page.stateService.isBrowser = true;
+  await withImmediateTimers(async () => {
+    page.requests[0].fail();
+    await tick();
+    page.requests[1].fail();
+    await tick();
+    for (let answer = 0; answer < 3; answer++) {
+      page.answer(nodeA);
+      await tick();
+    }
+  });
+  assert(page.requests.map((request) => request.fresh).join() === 'true,false,false,true,true' && page.listed() === ids('new', 50, 43) && !page.list.isLoading, `/blocks should retry errors at the same URL and still ask twice more, past caches, for an answer that doesn't fit: ${JSON.stringify(page.requests)}, ${page.listed()}`);
+  // Once it shows what fits, a new block doesn't ask the API again: the origin still disagrees
+  page.receive({ block: chain('new', 51, 51)[0] });
+  await tick();
+  assert(page.requests.length === 5 && page.listed() === ids('new', 51, 43), `a new block should not ask the API again once /blocks shows what fits of its answers: ${page.requests.length} requests, ${page.listed()}`);
+  // A new reorg does
+  page.receive({ blocks: chain('newer', 40, 52), reorg: true });
+  await tick();
+  assert(page.requests.length === 6 && page.requests[5].fresh, `a new reorg should ask the API again: ${JSON.stringify(page.requests)}`);
   page.close();
 }
 
