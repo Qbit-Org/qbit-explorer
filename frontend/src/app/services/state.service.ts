@@ -161,6 +161,11 @@ export class StateService {
   signaturesMode$: BehaviorSubject<SignaturesMode>;
   blocksSubject$ = new BehaviorSubject<BlockExtended[]>([]);
   blocks$: Observable<BlockExtended[]>;
+  // A reorg's blocks, newest first, just before they go out on blocks$, and the lowest height whose
+  // block the reorg may have replaced or removed: the blocks the page had below it are on the new chain
+  reorg$ = new Subject<{ blocks: BlockExtended[], from: number }>();
+  // the last reorg on reorg$, for the components that start after it
+  lastReorg: { blocks: BlockExtended[], from: number } = null;
   transactions$ = new BehaviorSubject<TransactionStripped[]>(null);
   conversions$ = new ReplaySubject<Record<string, number>>(1);
   bsqPrice$ = new ReplaySubject<number>(1);
@@ -315,6 +320,7 @@ export class StateService {
       this.stratumJobs$ = new BehaviorSubject<Record<string, StratumJob>>({});
       this.stratumJobUpdate$.next({ state: {} });
       this.blocksSubject$.next([]);
+      this.lastReorg = null;
     });
 
     this.signaturesMode$ = new BehaviorSubject<SignaturesMode>(this.storageService.getValue('signatures-mode') as SignaturesMode || null);
@@ -471,8 +477,10 @@ export class StateService {
   // as to a shorter chain: any other list below the tip, as from a backend that
   // lags the one the page used before, leaves it until that backend passes it.
   // The tip changes first, so the list's subscribers see the tip that goes with
-  // it, as they do for a new block.
-  resetBlocks(blocks: BlockExtended[], reorg = false): void {
+  // it, as they do for a new block. A reorg's list goes out on reorg$ before
+  // blocks$, with `reorgFrom`, the lowest height whose block it may have
+  // replaced, so that a list that follows both sees the reorg first.
+  resetBlocks(blocks: BlockExtended[], reorg = false, reorgFrom = 0): void {
     const tip = blocks.reduce((max, block) => Math.max(max, block.height), -1);
     if (reorg && tip < this.latestBlockHeight) {
       this.latestBlockHeight = tip;
@@ -481,6 +489,11 @@ export class StateService {
       this.updateChainTip(tip);
     }
     this.blocks = blocks.reverse();
+    if (reorg) {
+      // a copy: addBlock() changes this.blocks in place
+      this.lastReorg = { blocks: [...blocks], from: reorgFrom };
+      this.reorg$.next(this.lastReorg);
+    }
     this.blocksSubject$.next(blocks);
   }
 
