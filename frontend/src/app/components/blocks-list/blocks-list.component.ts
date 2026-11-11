@@ -135,8 +135,10 @@ export class BlocksList implements OnInit {
           this.isLoading = true;
           this.lastBlockHeightFetched = fromBlockHeight;
           const page = this.page;
-          // a reload, and a retry, ask past the copies the browser or a CDN keep
-          const fresh = this.freshRequest;
+          // A reload, a retry, and a request for a page the last reorg may have reached ask past the
+          // copies the browser or a CDN keep: one from before the reorg can't always be told apart.
+          const reorg = this.stateService.lastReorg;
+          const fresh = this.freshRequest || (reorg !== null && reorg.from <= (page === 1 ? Infinity : fromBlockHeight));
           this.freshRequest = false;
           // every request counts towards RETRIES_FOR_STALE_ANSWER, a reload's too
           let attempts = 0;
@@ -199,15 +201,15 @@ export class BlocksList implements OnInit {
       return blocks;
     }
     const tip = Math.max(...update.reorg.blocks.map((block) => block.height));
+    // the page count follows the new chain, longer or shorter, whatever page is shown
+    this.blocksCount = tip + 1;
     if (this.shownPage === 1) {
-      this.blocksCount = tip + 1;
       return this.firstPage(this.followChain(acc, update.reorg.blocks, update.reorg.from, tip, true), true);
     }
     // An older page shows the heights from shownFrom down. It stays as it is, unless the reorg reached them.
     if (update.reorg.from > this.shownFrom) {
       return acc;
     }
-    this.blocksCount = tip + 1;
     const blocks = this.withPoolLogos(this.olderPage(this.followChain(acc, update.reorg.blocks, update.reorg.from, tip, true), this.shownFrom));
     if (this.shownFrom > tip) {
       this.showPageOfNewChain();
@@ -223,10 +225,12 @@ export class BlocksList implements OnInit {
   }
 
   // The newest blocks, as many as the first page shows. With `reload`, the page asks the API for them
-  // again if there are too few, as after a reorg that went deeper than the blocks it sent.
+  // again if there are too few, as after a reorg that went deeper than the blocks it sent, or if a height
+  // is missing, as after the tab missed more blocks than the websocket's list holds.
   private firstPage(blocks: BlockExtended[], reload = false): BlockExtended[] {
     const shown = this.withPoolLogos(blocks.slice(0, this.pageSize));
-    if (reload && this.isShort(shown, 1)) {
+    const gap = shown.some((block, i) => block.height !== shown[0].height - i);
+    if (reload && (this.isShort(shown, 1) || gap)) {
       this.reload();
     }
     return shown;
@@ -247,14 +251,17 @@ export class BlocksList implements OnInit {
   }
 
   // An answer from the API, on the chain the websocket sent: the state's blocks and the last reorg's win
-  // at their heights, and after a reorg, blocks above the tip come from the websocket only. An answer that
-  // holds blocks that don't fit that chain, and leaves the page short without them, is from before a
-  // reorg that went deeper than the blocks the websocket sent, or from an origin on another chain. It's
-  // asked for again, up to RETRIES_FOR_STALE_ANSWER times; on the `last` answer, the page shows the
-  // blocks that fit.
+  // at their heights. An answer that holds a block the last reorg replaced or removed is from before it,
+  // and its blocks above the websocket's tip come from the websocket only. Any other answer keeps them:
+  // they are newer than the websocket's, as when its socket has dropped without the page noticing yet.
+  // An answer that holds blocks that don't fit that chain, and leaves the page short without them, is
+  // from before a reorg that went deeper than the blocks the websocket sent, or from an origin on
+  // another chain. It's asked for again, up to RETRIES_FOR_STALE_ANSWER times; on the `last` answer, the
+  // page shows the blocks that fit.
   private followWebsocket(blocks: BlockExtended[], page: number, from: number, last: boolean): BlockExtended[] {
     const reorg = this.stateService.lastReorg;
-    const tip = reorg ? this.stateService.latestBlockHeight : Infinity;
+    const removed = new Set(reorg?.removed ?? []);
+    const tip = blocks.some((block) => removed.has(block.id)) ? this.stateService.latestBlockHeight : Infinity;
     const followed = this.followChain(blocks, [...(reorg?.blocks ?? []), ...this.stateService.blocksSubject$.getValue()], reorg?.from ?? 0, tip);
     const shown = page === 1 ? this.firstPage(followed) : this.withPoolLogos(this.olderPage(followed, from));
     const heights = new Set(shown.map((block) => block.height));

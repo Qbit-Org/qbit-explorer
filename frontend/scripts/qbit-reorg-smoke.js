@@ -58,7 +58,7 @@ function assert(condition, message) {
 function chain(name, from, to) {
   const blocks = [];
   for (let height = from; height <= to; height++) {
-    blocks.push({ id: `${name}${height}`, height, extras: { pool: { slug: 'unknown' } } });
+    blocks.push({ id: `${name}${height}`, height, previousblockhash: `${name}${height - 1}`, extras: { pool: { slug: 'unknown' } } });
   }
   return blocks;
 }
@@ -496,7 +496,7 @@ async function checkBlocksList() {
     }
   });
   assert(page.listed() === ids('new', 50, 43) && !page.list.isLoading, `/blocks should show the blocks that fit after asking an origin on another chain three times, not stay on its skeleton: ${page.emissions()} lists, ${page.listed()}`);
-  assert(page.requests.map((request) => request.fresh).join() === 'false,true,true', `/blocks should ask such an origin three times, the last two past caches: ${JSON.stringify(page.requests)}`);
+  assert(page.requests.map((request) => request.fresh).join() === 'true,true,true', `/blocks should ask such an origin three times, past caches: the tab saw a reorg that may reach its page: ${JSON.stringify(page.requests)}`);
   page.close();
   // Then page 2, after a reorg to B101 that /blocks followed on page 1, from an origin still on A
   page = openBlocksList();
@@ -556,6 +556,68 @@ async function checkBlocksList() {
   page.receive({ blocks: [...chain('A', 0, 20), ...chain('D', 21, 30)], reorg: true });
   await tick();
   assert(page.list.blocksCount === 31 && page.navigated.join() === '/blocks/3', `page 5 should go to page 3 after a reorg to D30: ${page.list.blocksCount} blocks, ${JSON.stringify(page.navigated)}`);
+  page.close();
+
+  // The page count follows a reorg that doesn't reach the older page shown too, which stays as it is:
+  // a reorg to A100, then one to B103
+  page = openBlocksList({ page: 2 });
+  page.answer(nodeA);
+  page.answer(nodeA);
+  page.receive({ blocks: chain('A', 69, 100), reorg: true });
+  assert(page.listed() === ids('A', 86, 72) && page.list.blocksCount === 101, `page 2 should stay as it is and count 101 blocks after a reorg to A100: ${page.listed()}, ${page.list.blocksCount} blocks`);
+  page.receive({ blocks: [...chain('A', 72, 99), ...chain('B', 100, 103)], reorg: true });
+  assert(page.listed() === ids('A', 86, 72) && page.list.blocksCount === 104 && page.requests.length === 2, `page 2 should stay as it is and count 104 blocks after a reorg to B103: ${page.listed()}, ${page.list.blocksCount} blocks, ${page.requests.length} requests`);
+  page.close();
+
+  // After a reorg, the API's blocks above the websocket's tip show unless the answer holds a block the
+  // reorg removed: here the tab's tip is still A100, after a reorg to it, as when its socket has
+  // dropped without the page noticing yet, and the API is at A130
+  page = openBlocksList({ before: (tab) => tab.receive({ blocks: chain('A', 69, 100), reorg: true }) });
+  page.answer(chain('A', 0, 130));
+  assert(page.listed() === ids('A', 130, 116) && page.list.blocksCount === 131, `/blocks should show the API's A130 to A116 above an old tip: ${page.listed()}, ${page.list.blocksCount} blocks`);
+  page.close();
+
+  // A later reorg the tab didn't take as one, as it was offline, leaves the last reorg's blocks behind:
+  // here the chain forked at 91 again and grew to C130. The list on reconnecting holds none of the
+  // tab's heights, so the last reorg no longer counts, and page 3, A100 to A86 on the old chain, shows
+  // the API's C100 to C91 and A90 to A86.
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.receive(reorgToB());
+  page.receive({ blocks: chain('C', 123, 130) });
+  assert(page.stateService.lastReorg === null, 'the last reorg should no longer count once the tab\'s blocks have moved past it');
+  page.goTo(3);
+  page.answer([...chain('A', 0, 90), ...chain('C', 91, 130)]);
+  assert(page.requests[page.requests.length - 1].from === 100 && page.listed() === `${ids('C', 100, 91)} ${ids('A', 90, 86)}`, `page 3 should show the API's C100 to C91 and A90 to A86, not the old reorg's blocks: ${page.listed()}`);
+  page.close();
+
+  // After a reorg that went deeper than the tab could tell, the request for a page it may have reached
+  // asks past the browser's copy, which can be from before it. Here page 2 reloads, the visitor goes to
+  // page 1 and back, and the browser would answer page 2 with its copy from before the reorg.
+  const nodeBOnly = chain('B', 0, 101);
+  page = openBlocksList({ page: 2 });
+  page.answer(nodeA);
+  page.answer(nodeA);
+  page.receive({ blocks: chain('B', 94, 101) });
+  await tick();
+  page.answer(nodeBOnly);
+  page.goTo(1);
+  page.answer(nodeBOnly);
+  page.goTo(2);
+  const backToPage2 = page.requests[page.requests.length - 1];
+  backToPage2.answer(backToPage2.fresh ? nodeBOnly : nodeA);
+  assert(backToPage2.from === 86 && page.listed() === ids('B', 86, 72), `page 2 should ask past the browser's copy after a reorg that may reach it, and show B86 to B72: ${JSON.stringify(backToPage2)}, ${page.listed()}`);
+  page.close();
+
+  // A list that holds none of the tab's heights, as after the tab missed more blocks than a list holds,
+  // leaves a gap on the first page, which then asks for its blocks again
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.receive({ blocks: chain('A', 103, 110) });
+  await tick();
+  assert(page.requests.length === 2 && page.requests[1].fresh, `/blocks should ask for its page again when a height is missing: ${page.listed()}, ${JSON.stringify(page.requests)}`);
+  page.answer(chain('A', 0, 110));
+  assert(page.listed() === ids('A', 110, 96), `/blocks should show A110 to A96: ${page.listed()}`);
   page.close();
 }
 
