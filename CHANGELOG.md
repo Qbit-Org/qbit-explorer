@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1
+
+### Fixed
+
+- Under `MEMPOOL.BACKEND` `esplora`, `POST /api/tx` and `POST /api/txs/test`
+  answered 400 for every transaction, so neither the Broadcast Transaction
+  page nor clients of the esplora API's `POST /tx` could broadcast. Both now
+  go through qbitd, as `POST /api/tx/push` does. A broadcast answers the
+  txid, and a transaction qbitd refuses gets 400 with qbitd's error code
+  (`sendrawtransaction RPC error: {"code":N}`). Nothing changes under the
+  `none` and `electrum` backends, which already sent both to qbitd. Upgrading
+  needs no database migration or config change: the backend already talks to
+  qbitd's RPC for the chain tip.
+
 ## 1.1.0
 
 ### Added
