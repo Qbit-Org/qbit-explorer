@@ -11,6 +11,15 @@ import { hasTouchScreen } from '@app/shared/pipes/bytes-pipe/utils';
 import { ActiveFilter } from '@app/shared/filters.utils';
 import { weightToFractionalVsize } from '@app/shared/weight-units';
 
+// A reorg: its blocks, newest first; the lowest height whose block it may have replaced or removed,
+// below which the blocks the page had are on the new chain; and the ids of the blocks the page had that
+// it replaced or removed
+export interface Reorg {
+  blocks: BlockExtended[];
+  from: number;
+  removed: string[];
+}
+
 export interface MarkBlockState {
   blockHeight?: number;
   txid?: string;
@@ -161,11 +170,11 @@ export class StateService {
   signaturesMode$: BehaviorSubject<SignaturesMode>;
   blocksSubject$ = new BehaviorSubject<BlockExtended[]>([]);
   blocks$: Observable<BlockExtended[]>;
-  // A reorg's blocks, newest first, just before they go out on blocks$, and the lowest height whose
-  // block the reorg may have replaced or removed: the blocks the page had below it are on the new chain
-  reorg$ = new Subject<{ blocks: BlockExtended[], from: number }>();
-  // the last reorg on reorg$, for the components that start after it
-  lastReorg: { blocks: BlockExtended[], from: number } = null;
+  // A reorg, just before its blocks go out on blocks$
+  reorg$ = new Subject<Reorg>();
+  // The last reorg on reorg$, for the components that start after it, while the state's blocks are on
+  // its chain (keepLastReorg)
+  lastReorg: Reorg = null;
   transactions$ = new BehaviorSubject<TransactionStripped[]>(null);
   conversions$ = new ReplaySubject<Record<string, number>>(1);
   bsqPrice$ = new ReplaySubject<number>(1);
@@ -478,9 +487,10 @@ export class StateService {
   // lags the one the page used before, leaves it until that backend passes it.
   // The tip changes first, so the list's subscribers see the tip that goes with
   // it, as they do for a new block. A reorg's list goes out on reorg$ before
-  // blocks$, with `reorgFrom`, the lowest height whose block it may have
-  // replaced, so that a list that follows both sees the reorg first.
-  resetBlocks(blocks: BlockExtended[], reorg = false, reorgFrom = 0): void {
+  // blocks$, with `reorg`'s lowest height whose block it may have replaced and
+  // the blocks it replaced or removed, so that a list that follows both sees
+  // the reorg first.
+  resetBlocks(blocks: BlockExtended[], reorg?: { from: number, removed: string[] }): void {
     const tip = blocks.reduce((max, block) => Math.max(max, block.height), -1);
     if (reorg && tip < this.latestBlockHeight) {
       this.latestBlockHeight = tip;
@@ -491,8 +501,10 @@ export class StateService {
     this.blocks = blocks.reverse();
     if (reorg) {
       // a copy: addBlock() changes this.blocks in place
-      this.lastReorg = { blocks: [...blocks], from: reorgFrom };
+      this.lastReorg = { blocks: [...blocks], ...reorg };
       this.reorg$.next(this.lastReorg);
+    } else {
+      this.keepLastReorg();
     }
     this.blocksSubject$.next(blocks);
   }
@@ -500,7 +512,26 @@ export class StateService {
   addBlock(block: BlockExtended): void {
     this.blocks.unshift(block);
     this.blocks = this.blocks.slice(0, this.env.KEEP_BLOCKS_AMOUNT);
+    this.keepLastReorg();
     this.blocksSubject$.next(this.blocks);
+  }
+
+  // The last reorg counts while the state's blocks are on its chain: they hold one of its blocks, and
+  // none in place of one, or start right above them. Otherwise they moved on through a later reorg the
+  // page didn't take as one, as after going offline, and its blocks no longer count.
+  private keepLastReorg(): void {
+    if (!this.lastReorg || !this.blocks.length) {
+      return;
+    }
+    const ids = new Map(this.lastReorg.blocks.map((block) => [block.height, block.id]));
+    const holds = this.blocks.some((block) => ids.get(block.height) === block.id);
+    const replaces = this.blocks.some((block) => ids.has(block.height) && ids.get(block.height) !== block.id);
+    const lowest = this.blocks.reduce((low, block) => block.height < low.height ? block : low);
+    const parent = ids.get(lowest.height - 1);
+    const above = parent !== undefined && parent === lowest.previousblockhash;
+    if (replaces || !(holds || above)) {
+      this.lastReorg = null;
+    }
   }
 
   focusSearchInputDesktop() {

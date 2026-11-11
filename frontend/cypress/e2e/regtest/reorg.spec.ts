@@ -241,6 +241,52 @@ describe('Cadence lanes across reorgs', () => {
     });
   });
 
+  // The messages the backend's websocket sends a client that wants blocks, as the page's own does
+  function watchWebsocket(): Cypress.Chainable<string[]> {
+    return cy.window().then((win) => {
+      const messages: string[] = [];
+      const socket = new win.WebSocket(`${win.location.protocol === 'https:' ? 'wss' : 'ws'}://${win.location.host}/regtest/api/v1/ws`);
+      socket.onopen = (): void => socket.send(JSON.stringify({ action: 'want', data: ['blocks'] }));
+      socket.onmessage = (event): void => {
+        messages.push(String(event.data));
+      };
+      return messages;
+    });
+  }
+
+  // the height of the list's first row
+  function expectFirstHeight(height: number): void {
+    cy.get('app-blocks-list td.height a', { timeout: 30000 }).first().invoke('text')
+      .should((text) => expect(Number(text.replace(/\D/g, ''))).to.equal(height));
+  }
+
+  // A reorg above the heights of the older page shown leaves that page as it is, and the page count
+  // follows the new chain: page 3 then starts 30 below the new tip
+  it('counts the new chain\'s blocks after a reorg above the older page shown', () => {
+    qbitCliJson<number>('getblockcount').then((tip) => {
+      minePermissionless().then((removed) => {
+        cy.visit('/regtest/blocks');
+        expectListed(removed, tip + 1);
+        // with the new block, page 2 starts at tip - 14
+        clearBrowserCache();
+        cy.visit('/regtest/blocks/2');
+        expectFirstHeight(tip - 14);
+        watchWebsocket().then((messages) => {
+          qbitCli('invalidateblock', removed);
+          cy.wrap(messages, { timeout: 30000 }).should((received) => {
+            expect(received.some((message) => message.includes('"reorg"'))).to.equal(true);
+          });
+        });
+        // the page has the reorg too, and page 2 stays as it was
+        cy.wait(500);
+        expectFirstHeight(tip - 14);
+        cy.contains('ngb-pagination a.page-link', /^\s*3\s*$/).click();
+        expectFirstHeight(tip - 30);
+        expectConsecutiveHeights();
+      });
+    });
+  });
+
   it('does not show a stale AuxPoW submission', () => {
     auxpowCandidate().then(({ hash, payload }) => {
       minePermissionless().then((tipHash) => {

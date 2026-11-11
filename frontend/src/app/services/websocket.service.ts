@@ -313,11 +313,19 @@ export class WebsocketService {
   // How a list compares with the blocks the page lists or has cached. `replaces`: whether it holds a
   // block at one of their heights, with another hash. `from`: the lowest height from which its chain
   // may differ from theirs, one above the highest height, below any block it replaces, at which it
-  // holds the same block; 0 if there is none.
-  private compareWithKnownBlocks(blocks: BlockExtended[]): { replaces: boolean, from: number } {
+  // holds the same block; 0 if there is none. `removed`: the ids of those it holds another block in
+  // place of, and of those above its tip, which as a reorg's list it removes.
+  private compareWithKnownBlocks(blocks: BlockExtended[]): { replaces: boolean, from: number, removed: string[] } {
     const listed = new Map(this.stateService.blocksSubject$.getValue().map((block) => [block.height, block.id]));
-    const { replaced, same } = compareBlocks(blocks, (height) => listed.get(height) ?? this.cacheService.getCachedBlock(height)?.id);
-    return { replaces: replaced !== Infinity, from: same + 1 };
+    const known = (height: number): string | undefined => listed.get(height) ?? this.cacheService.getCachedBlock(height)?.id;
+    const { replaced, same } = compareBlocks(blocks, known);
+    const inList = new Map(blocks.map((block) => [block.height, block.id]));
+    const tip = Math.max(...inList.keys());
+    const knownHeights = new Set([...listed.keys(), ...Object.keys(this.cacheService.blockCache).map(Number)]);
+    const removed = [...knownHeights]
+      .filter((height) => height > tip || (inList.has(height) && inList.get(height) !== known(height)))
+      .map(known);
+    return { replaces: replaced !== Infinity, from: same + 1, removed };
   }
 
   handleResponse(response: WebsocketResponse) {
@@ -332,7 +340,8 @@ export class WebsocketService {
       const compared = this.compareWithKnownBlocks(blocks);
       // sets the tip too, which only a reorg's list can lower. The list a page gets when it
       // reconnects isn't marked, so one that replaces a block the page has follows a reorg it missed.
-      this.stateService.resetBlocks(blocks, response.reorg === true || compared.replaces, compared.from);
+      const reorg = response.reorg === true || compared.replaces;
+      this.stateService.resetBlocks(blocks, reorg ? { from: compared.from, removed: compared.removed } : undefined);
     }
 
     if (response.tx) {
