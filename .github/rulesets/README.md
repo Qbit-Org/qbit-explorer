@@ -2,7 +2,10 @@
 
 These files are this repository's GitHub rulesets, as they are live. GitHub
 doesn't read them. After a pull request that changes one of them merges, a
-repository admin applies it with `gh` from the repository root.
+repository admin applies it with `gh` from the repository root. One exception:
+a change to `main-protection.json` that merges into `1.x.x` waits for the
+release that brings it to `main`, because until then `main`'s own workflows
+are the ones that report its checks (see "Rename a required check").
 
 | File | Enforces |
 | --- | --- |
@@ -81,6 +84,34 @@ gh api -X PATCH "$repo" -F allow_merge_commit=true --silent &&
   apply .github/rulesets/release-tags.json &&
   gh api -X PATCH "$repo" -F allow_merge_commit=true -F allow_squash_merge=false -F allow_rebase_merge=false --silent
 ```
+
+## Rename a required check
+
+GitHub matches required checks by name. Five of them end with the Node version
+from the `node` matrix in `ci.yml` and `backend-integration.yml`, such as
+`Backend (dev) - node 26.13.1`, so a pull request that changes that version
+renames them. Its checks then report under names that no ruleset requires,
+and the old names never report, so it can't merge until the ruleset changes.
+A ruleset needs every check it lists, and no run reports both names, so don't
+list the new names next to the old ones. Swap them, in this order:
+
+1. The pull request changes the names in both files. Wait until its last push
+   has passed every check under the new names.
+2. Rename the checks in the `1.x.x-integration` ruleset on GitHub, then merge
+   the pull request straight away. Applying the pull request's
+   `1.x.x-integration.json` does that, if the file has no other change that
+   isn't ready to apply. Other open pull requests into `1.x.x` wait for the
+   new names until their next push, which runs their checks again with the
+   new workflows.
+3. Rename them in `main-protection` when the pull request that brings the
+   change to `main` has passed under the new names, then merge it. Not
+   before: `main`'s workflows still report the old names until then, so an
+   earlier rename blocks every pull request into `main`, Dependabot's
+   security updates included. In the meantime, the check below reports
+   `main-protection` as different from the file on `1.x.x`; that's expected.
+
+Don't remove a required check to get a pull request through. Nothing checks
+what it checked while it's gone.
 
 ## Check that GitHub matches
 

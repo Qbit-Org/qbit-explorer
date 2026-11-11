@@ -59,7 +59,7 @@ should accept outside connections.
 - Fast SSD or NVMe storage with room for an archive qbitd with `txindex` and
   the qbit-electrs index next to it
 - git, a C/C++ toolchain, `clang` and `cmake`
-- Node.js v26.12.1 (see [`.nvmrc`](../.nvmrc)) and npm
+- Node.js v26.13.1 (see [`.nvmrc`](../.nvmrc)) and npm
 - Rust through rustup. Installing the backend dependencies compiles
   [`rust/gbt`](../rust/gbt) with the toolchain pinned in
   `rust/gbt/rust-toolchain`.
