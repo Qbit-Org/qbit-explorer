@@ -89,6 +89,36 @@ interface ChainCheckRow {
   stale: number;
 }
 
+// The timestamp of the oldest block the hashrate indexers index from, as
+// $getOldestConsecutiveBlock finds it, once the repairs are written: the
+// lowest of the canonical chain that runs down from the highest canonical
+// row without a gap. Read from the snapshot, with the repaired heights
+// canonical, as a repair can fill a gap.
+function oldestConsecutiveTimestamp(blocks: ChainCheckRow[], blocksByHeight: Record<number, ChainCheckRow[]>, repairs: BelowWalkRepair[]): number {
+  const repairAt = new Map(repairs.map(repair => [repair.height, repair]));
+  let oldest: ChainCheckRow | undefined;
+  for (let i = 0; i < blocks.length; i++) {
+    const height = blocks[i].height;
+    if (blocks[i - 1]?.height === height) {
+      continue;
+    }
+    if (oldest !== undefined && oldest.height - height > 1) {
+      break;
+    }
+    const rows = blocksByHeight[height];
+    const repair = repairAt.get(height);
+    const canonical = repair ? rows.find(row => row.hash === repair.hash) ?? rows[0] : rows.find(row => !row.stale);
+    if (!canonical) {
+      if (oldest === undefined) {
+        continue;
+      }
+      break;
+    }
+    oldest = canonical;
+  }
+  return oldest?.timestamp ?? 0;
+}
+
 // heights for a log line: '#1, #2', or the first 20 and how many more
 function nameHeights(heights: number[]): string {
   const named = heights.slice(0, 20).map(height => `#${height}`).join(', ');
@@ -1019,7 +1049,11 @@ class BlocksRepository {
         // would never be indexed again.
         HashratesRepository.retryMissingHashrates();
         writingBelowWalk = true;
-        await this.$writeRepairsBelowWalk(repairsBelowWalk, lowestCpfpHeight);
+        await this.$writeRepairsBelowWalk(repairsBelowWalk, lowestCpfpHeight, oldestConsecutiveTimestamp(blocks, blocksByHeight, repairsBelowWalk));
+        // they aren't left alone any more
+        for (const repair of repairsBelowWalk) {
+          this.heightsLeftBelowWalk.delete(repair.height);
+        }
       }
       // said once, once the repairs are written: the node isn't asked about
       // these again until their rows change
@@ -1055,18 +1089,19 @@ class BlocksRepository {
    * Write the repairs $validateChain found below its walk: first the data
    * derived from the rows they replace, so a failure is retried, then the
    * flags, from the highest height down.
+   * @param oldestIndexedFrom the timestamp of the oldest block the hashrate
+   * indexers will index from once the flags are written
    * @asyncUnsafe
    */
-  private async $writeRepairsBelowWalk(repairs: BelowWalkRepair[], lowestCpfpHeight: number): Promise<void> {
+  private async $writeRepairsBelowWalk(repairs: BelowWalkRepair[], lowestCpfpHeight: number, oldestIndexedFrom: number): Promise<void> {
     // A lone canonical row from another chain made a consecutive block
     // window, so the hashrates of the periods around it were computed with
     // it, and the indexers keep them: delete those, back to the oldest block
-    // they index from, to have them computed again. From a week before it to
-    // two weeks after: the periods it's in, and the next ones, which it can
-    // start.
+    // they will index from, to have them computed again. From a week before
+    // it to two weeks after: the periods it's in, and the next ones, which it
+    // can start.
     const replacedTimestamps = repairs.map(repair => repair.replacedTimestamp).filter((timestamp): timestamp is number => timestamp !== undefined);
     if (replacedTimestamps.length > 0) {
-      const oldestIndexedFrom = (await this.$getOldestConsecutiveBlock())?.timestamp ?? 0;
       for (const timestamp of replacedTimestamps) {
         const from = Math.max(timestamp - 604800, oldestIndexedFrom + 1);
         if (from <= timestamp + 2 * 604800) {
@@ -1092,6 +1127,11 @@ class BlocksRepository {
         if (repair.height >= lowestCpfpHeight) {
           await cpfpRepository.$deleteClustersAt(repair.height);
           await blocks.$indexCPFP(repair.hash, repair.height);
+          // $indexCPFP logs a failed save without throwing, and once the
+          // flags are written nothing would index this height again
+          if (!await this.$isCpfpIndexedAt(repair.height)) {
+            throw new Error(`the CPFP clusters at #${repair.height} weren't saved`);
+          }
         }
       }
     }
@@ -1103,6 +1143,16 @@ class BlocksRepository {
     for (const repair of [...repairs].sort((a, b) => b.height - a.height)) {
       await this.$setCanonicalBlockAtHeight(repair.hash, repair.height);
     }
+  }
+
+  /**
+   * Whether the CPFP indexer counts a height as indexed: whether it has a
+   * row in compact_cpfp_clusters, a cluster or a progress marker
+   * @asyncUnsafe
+   */
+  private async $isCpfpIndexedAt(height: number): Promise<boolean> {
+    const [rows] = await DB.query(`SELECT height FROM compact_cpfp_clusters WHERE height = ? LIMIT 1`, [height]) as RowDataPacket[][];
+    return rows.length > 0;
   }
 
   /**
@@ -1209,7 +1259,9 @@ class BlocksRepository {
       if (canonicalCount === 0 && !rows.some(row => row.hash === namedAbove)) {
         continue;
       }
-      if (this.heightsLeftBelowWalk.get(height) === rowsKeyOf(rows)) {
+      // the window's lowest height is never left alone: it can be one
+      // remembered from when the tip was higher
+      if (height !== highestHeight && this.heightsLeftBelowWalk.get(height) === rowsKeyOf(rows)) {
         continue;
       }
       await ask(height, rows, canonicalCount);

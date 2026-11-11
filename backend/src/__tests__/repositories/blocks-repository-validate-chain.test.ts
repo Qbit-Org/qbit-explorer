@@ -13,6 +13,8 @@ const mockEsploraTip = jest.fn();
 const mockLoggerWarn = jest.fn();
 let mockCpfpIndexing = true;
 let mockIndexingBlocksAmount = 11000;
+// whether the CPFP clusters $indexCPFP saves are in the database after it
+let mockCpfpSaved = true;
 
 jest.mock('../../database', () => ({
   __esModule: true,
@@ -183,7 +185,10 @@ const mockChain = (rows: Row[], tip = hash(best[102])): void => {
     return height === undefined ? undefined : { id, height };
   });
   const sorted = [...rows].sort((a, b) => b.height - a.height);
-  mockDbQuery.mockImplementation(async (sql: string) => {
+  mockDbQuery.mockImplementation(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes('FROM compact_cpfp_clusters')) {
+      return [mockCpfpSaved ? [{ height: params[0] }] : []];
+    }
     if (sql.includes('SELECT')) {
       return [sql.includes('WHERE stale = 0') ? sorted.filter(stored => !stored.stale) : sorted];
     }
@@ -235,6 +240,7 @@ describe('BlocksRepository $validateChain', () => {
     jest.clearAllMocks();
     mockCpfpIndexing = true;
     mockIndexingBlocksAmount = 11000;
+    mockCpfpSaved = true;
   });
 
   test('accepts a chain whose best blocks are its only canonical rows', async () => {
@@ -781,6 +787,67 @@ describe('BlocksRepository $validateChain', () => {
       expect(updates()).toEqual([madeCanonical(best[100]), markedStaleAt(100, hash(best[100]))]);
       expect(mockDeleteHashratesBetween.mock.calls).toEqual([[bestRow(98).timestamp + 1, r.timestamp + 2 * WEEK]]);
       expect(mockLoggerWarn.mock.calls).toEqual([['Chain divergence detected below block #101: repairing 1 height, #100']]);
+    });
+
+    test('writes no flag at the window\'s lowest height until its new CPFP clusters are saved', async () => {
+      // $indexCPFP logs a failed save without throwing. With the flags
+      // written, 100 would never be repaired again, and once the window
+      // moves past it the CPFP indexer never indexes it again either.
+      mockChain([bestRow(98), bestRow(99), bestRow(100), row(100, 'p', 'i'), bestRow(101), bestRow(102)]);
+      mockCpfpSaved = false;
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockIndexCpfp.mock.calls).toEqual([[hash(best[100]), 100]]);
+      expect(updates()).toEqual([]);
+
+      mockCpfpSaved = true;
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockIndexCpfp).toHaveBeenCalledTimes(2);
+      expect(updates()).toEqual([madeCanonical(best[100]), markedStaleAt(100, hash(best[100]))]);
+    });
+
+    test('deletes the hashrates around a replaced lone row even when the same repairs fill a gap above it', async () => {
+      // the window is 101 and 102. 100 holds only qbitd's j, stale, which
+      // 101's row names: a gap in the canonical chain, which the repair
+      // fills. 98 holds qbitd's h and another chain's x, both canonical, and
+      // 99 holds x's child q, canonical, and qbitd's i, stale: q is replaced.
+      // The blocks above 100 came three weeks later. Read before the flags,
+      // the hashrate indexers' oldest block was 101, after q's periods, so
+      // none were deleted, though the indexers would go past 100 once the gap
+      // was filled.
+      mockIndexingBlocksAmount = 2;
+      const later = (stored: Row): Row => ({ ...stored, timestamp: stored.timestamp + 3 * WEEK });
+      const q = row(99, 'q', 'x');
+      mockChain([
+        bestRow(98), row(98, 'x', 'g'), q, { ...bestRow(99), stale: 1 }, { ...bestRow(100), stale: 1 },
+        later(bestRow(101)), later(bestRow(102)),
+      ]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockGetBlockHash.mock.calls).toEqual([[100], [98], [99]]);
+      expect(mockDeleteHashratesBetween.mock.calls).toEqual([[bestRow(98).timestamp + 1, q.timestamp + 2 * WEEK]]);
+    });
+
+    test('checks a height it left alone again once that is the window\'s lowest height, after the tip went down', async () => {
+      // 99 holds two other chains' blocks, and qbitd's i isn't indexed: left
+      // alone, and remembered. Then qbitd's tip goes down to 101, as after a
+      // reorg to a shorter chain, and 99 is the window's lowest height, where
+      // the block indexer counts it as indexed. qbitd's block is indexed there
+      // and made canonical, and 99 is forgotten.
+      const rows = [bestRow(98), row(99, 'o', 'h'), row(99, 'p', 'h'), bestRow(100), bestRow(101)];
+      const remembered = (BlocksRepository as unknown as { heightsLeftBelowWalk: Map<number, string> }).heightsLeftBelowWalk;
+      mockChain([...rows, bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+      expect(remembered.has(99)).toBe(true);
+
+      mockChain(rows, hash(best[101]));
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockIndexBlock.mock.calls).toEqual([[hash(best[99])]]);
+      expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+      expect(remembered.has(99)).toBe(false);
     });
 
     test('clears the CPFP clusters at the window\'s lowest height before it repairs it, as the CPFP indexer covers that height', async () => {
