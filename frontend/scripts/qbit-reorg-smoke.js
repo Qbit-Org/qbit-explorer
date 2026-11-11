@@ -2,7 +2,7 @@
 
 const path = require('path');
 const Module = require('module');
-const { EMPTY, Subject } = require('rxjs');
+const { BehaviorSubject, EMPTY, Observable, Subject } = require('rxjs');
 
 const frontendRoot = path.resolve(__dirname, '..');
 // compile like the app, as qbit-weight-smoke.js does
@@ -28,8 +28,16 @@ Module._resolveFilename = function(request, parent, isMain, options) {
 };
 
 // the browser state the services and components below read
-globalThis.window = { __env: {}, document: { referrer: '' }, location: { pathname: '/' }, innerWidth: 1280 };
+globalThis.window = {
+  __env: {},
+  document: { referrer: '' },
+  location: { pathname: '/' },
+  innerWidth: 1280,
+  matchMedia: () => ({ matches: false }),
+};
 globalThis.document = { referrer: '', location: { hostname: 'localhost', protocol: 'http:', host: 'localhost' } };
+// for the page titles BlocksList sets
+globalThis.$localize = (strings, ...values) => String.raw({ raw: strings }, ...values);
 // StateService imports @angular/common and @angular/router, which need the JIT compiler outside an Angular build
 require('@angular/compiler');
 
@@ -38,6 +46,7 @@ const { WebsocketService } = require('../src/app/services/websocket.service.ts')
 const { CacheService } = require('../src/app/services/cache.service.ts');
 const { MempoolBlocksComponent } = require('../src/app/components/mempool-blocks/mempool-blocks.component.ts');
 const { MempoolBlockOverviewComponent } = require('../src/app/components/mempool-block-overview/mempool-block-overview.component.ts');
+const { BlocksList } = require('../src/app/components/blocks-list/blocks-list.component.ts');
 
 function assert(condition, message) {
   if (!condition) {
@@ -49,9 +58,14 @@ function assert(condition, message) {
 function chain(name, from, to) {
   const blocks = [];
   for (let height = from; height <= to; height++) {
-    blocks.push({ id: `${name}${height}`, height });
+    blocks.push({ id: `${name}${height}`, height, extras: { pool: { slug: 'unknown' } } });
   }
   return blocks;
+}
+
+// the ids of chain `name`'s blocks from height `from` down to `to`, as a list shows them
+function ids(name, from, to) {
+  return chain(name, to, from).reverse().map((block) => block.id).join(' ');
 }
 
 const changeDetector = { markForCheck: () => undefined, detectChanges: () => undefined };
@@ -256,9 +270,299 @@ async function checkCache() {
   assert(requested.join() === '990,980,1000', `a block page above the old tip should load from the API, not the cache: ${requested.join()}`);
 }
 
+// /blocks, or with `widget`, the mining dashboard's latest blocks, on a tab whose state has blocks A94
+// to A101, and to which `before` sends anything else before the list opens. The API answers a request
+// when the check calls answer() with the node's chain: for /api/v1/blocks/<from>, the 15 blocks from
+// `from`, or the tip, down. As with HttpClient, each subscription sends a request, so a retry sends
+// another. A request is `fresh` when it asks past the browser's and any CDN's copies.
+function openBlocksList({ widget = false, page = 1, before = () => undefined } = {}) {
+  const requests = [];
+  const apiService = {
+    getInitData$: () => EMPTY,
+    getBlocks$: (from, fresh = false) => new Observable((subscriber) => {
+      requests.push({
+        from,
+        fresh,
+        answer: (nodeChain) => {
+          subscriber.next(nodeChain.filter((block) => from === undefined || block.height <= from).slice(-15).reverse()
+            .map((block) => ({ ...block, extras: { pool: { ...block.extras.pool } } })));
+          subscriber.complete();
+        },
+      });
+    }),
+  };
+  const tab = openPage(apiService);
+  tab.receive({ blocks: chain('A', 94, 101) });
+  before(tab);
+  const params = new BehaviorSubject({ page: String(page) });
+  const navigated = [];
+  const list = new BlocksList(apiService, tab.websocketService, tab.stateService, changeDetector,
+    { setTitle: () => undefined, setDescription: () => undefined }, { setManualOgImage: () => undefined },
+    { params }, { navigate: (commands) => navigated.push(commands.join('')) }, { transform: (url) => url }, 'en-US');
+  list.widget = widget;
+  list.ngOnInit();
+  let listed = [];
+  let emissions = 0;
+  const subscription = list.blocks$.subscribe((blocks) => {
+    listed = blocks;
+    emissions++;
+  });
+  return {
+    ...tab,
+    list,
+    requests,
+    navigated,
+    // the API answers the latest request
+    answer: (nodeChain) => requests[requests.length - 1].answer(nodeChain),
+    goTo: (number) => params.next({ page: String(number) }),
+    listed: () => listed.map((block) => block.id).join(' '),
+    emissions: () => emissions,
+    close: () => subscription.unsubscribe(),
+  };
+}
+
+// runs `check` with rxjs's timers, such as the 10 seconds before the block list asks the API again,
+// firing at once
+async function withImmediateTimers(check) {
+  const setInterval = globalThis.setInterval;
+  globalThis.setInterval = (handler, timeout, ...args) => setInterval(handler, 0, ...args);
+  try {
+    await check();
+  } finally {
+    globalThis.setInterval = setInterval;
+  }
+}
+
+// /blocks and the mining dashboard's latest blocks load a page from the API, then follow the state's
+// blocks, and its reorgs
+async function checkBlocksList() {
+  const tick = () => new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+  const nodeA = chain('A', 0, 101);
+  // the node's chain after B100 on A99 replaces A100 and A101
+  const nodeB = [...chain('A', 0, 99), ...chain('B', 100, 100)];
+  // the backend's message for that reorg, with its cached blocks, 32 by default. A new one each time:
+  // the page keeps and changes the list it gets, as it does the one it parses from each message.
+  const reorgToB = () => ({ blocks: [...chain('A', 69, 99), ...chain('B', 100, 100)], reorg: true });
+
+  // /blocks after a reorg to a shorter chain, and the next block
+  let page = openBlocksList();
+  page.answer(nodeA);
+  assert(page.listed() === ids('A', 101, 87), `/blocks should show A101 to A87: ${page.listed()}`);
+  page.receive(reorgToB());
+  assert(page.listed() === `B100 ${ids('A', 99, 86)}` && page.list.blocksCount === 101, `/blocks should replace A100 and A101 with B100 after a reorg: ${page.listed()}, ${page.list.blocksCount} blocks`);
+  page.receive({ block: chain('B', 101, 101)[0] });
+  assert(page.listed() === `B101 B100 ${ids('A', 99, 87)}`, `/blocks should show the block after a reorg to a shorter chain: ${page.listed()}`);
+  // a reorg that replaces the tip at the same height, then one to a longer chain
+  page.receive({ blocks: [...chain('A', 70, 99), ...chain('B', 100, 100), ...chain('C', 101, 101)], reorg: true });
+  assert(page.listed() === `C101 B100 ${ids('A', 99, 87)}`, `/blocks should replace the tip at the same height: ${page.listed()}`);
+  page.receive({ blocks: [...chain('A', 71, 99), ...chain('D', 100, 102)], reorg: true });
+  assert(page.listed() === `D102 D101 D100 ${ids('A', 99, 88)}` && page.list.blocksCount === 103, `/blocks should follow a reorg to a longer chain: ${page.listed()}, ${page.list.blocksCount} blocks`);
+  assert(page.requests.length === 1, `the reorgs' lists hold the blocks /blocks shows, so it should not ask the API again: ${page.requests.length} requests`);
+  page.close();
+
+  // the mining dashboard's latest blocks, which show six
+  page = openBlocksList({ widget: true });
+  page.answer(nodeA);
+  page.receive(reorgToB());
+  assert(page.listed() === `B100 ${ids('A', 99, 95)}`, `the mining dashboard should replace A100 and A101 with B100 after a reorg: ${page.listed()}`);
+  page.receive({ block: chain('B', 101, 101)[0] });
+  assert(page.listed() === `B101 B100 ${ids('A', 99, 96)}`, `the mining dashboard should show the block after a reorg to a shorter chain: ${page.listed()}`);
+  page.close();
+
+  // a reorg to the chain below the tip, as after an invalidateblock that no block replaced yet
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.receive({ blocks: chain('A', 69, 100), reorg: true });
+  assert(page.listed() === ids('A', 100, 86), `/blocks should drop A101 after a reorg to A100: ${page.listed()}`);
+  page.receive({ block: chain('B', 101, 101)[0] });
+  assert(page.listed() === `B101 ${ids('A', 100, 87)}`, `/blocks should show the block after A100: ${page.listed()}`);
+  page.close();
+
+  // A page whose socket dropped during the reorg gets the new list, unmarked and eight blocks long,
+  // when it reconnects. /blocks then has 14 of its 15 blocks and asks the API for its page again.
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.receive({ blocks: [...chain('A', 93, 99), ...chain('B', 100, 100)] });
+  await tick();
+  assert(page.requests.length === 2 && page.requests[1].fresh, `/blocks should ask for its page again, past the browser's copy, after a reorg that left it 14 blocks: ${JSON.stringify(page.requests)}`);
+  page.answer(nodeB);
+  assert(page.listed() === `B100 ${ids('A', 99, 86)}`, `/blocks should follow a reorg it missed while offline: ${page.listed()}`);
+  page.close();
+
+  // A reorg to a longer chain that forked below the blocks the backend sent, which are all above those
+  // /blocks shows: it can't tell which of them the reorg kept, and asks for its page again
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.receive({ blocks: chain('B', 102, 109), reorg: true });
+  assert(page.listed() === ids('B', 109, 102), `/blocks should show only B109 to B102 after a reorg from below its blocks: ${page.listed()}`);
+  await tick();
+  page.answer(chain('B', 0, 109));
+  assert(page.listed() === ids('B', 109, 95) && page.requests.length === 2, `/blocks should show B109 to B95: ${page.listed()}`);
+  page.close();
+
+  // As upstream, a list from an origin that lags leaves the blocks shown, and a new block shows on top
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.receive({ blocks: chain('A', 92, 99) });
+  page.receive({ block: chain('A', 102, 102)[0] });
+  assert(page.listed() === ids('A', 102, 88) && page.requests.length === 1, `a list from a lagging origin should leave /blocks as it was: ${page.listed()}`);
+  page.close();
+
+  // An older page that a reorg didn't reach stays as it is. Page 2 asks for the blocks from 86 down,
+  // after page 1's answer counted them.
+  page = openBlocksList({ page: 2 });
+  page.answer(nodeA);
+  page.answer(nodeA);
+  assert(page.requests.map((request) => request.from).join() === ',86' && page.listed() === ids('A', 86, 72), `page 2 should show A86 to A72: ${page.listed()}`);
+  page.receive(reorgToB());
+  assert(page.listed() === ids('A', 86, 72) && page.requests.length === 2, `a reorg above page 2 should leave it as it was: ${page.listed()}, ${page.requests.length} requests`);
+  // the same for one it gets when it reconnects, eight blocks long: the blocks the tab had locate it
+  page.receive({ blocks: [...chain('A', 93, 99), ...chain('C', 100, 100)] });
+  assert(page.listed() === ids('A', 86, 72) && page.requests.length === 2, `a reorg on reconnecting, above page 2, should leave it as it was: ${page.listed()}, ${page.requests.length} requests`);
+  // One that a reorg reached takes the reorg's blocks: here B80 on A79 replaces A80 and up
+  page.receive({ blocks: [...chain('A', 70, 79), ...chain('B', 80, 101)], reorg: true });
+  assert(page.listed() === `${ids('B', 86, 80)} ${ids('A', 79, 72)}` && page.requests.length === 2, `a reorg from B80 should replace page 2's A86 to A80: ${page.listed()}, ${page.requests.length} requests`);
+  page.close();
+  // After a reorg deeper than the blocks the backend sent, it asks for its page again
+  page = openBlocksList({ page: 2 });
+  page.answer(nodeA);
+  page.answer(nodeA);
+  page.receive({ blocks: chain('B', 94, 101), reorg: true });
+  await tick();
+  assert(page.requests.length === 3 && page.requests[2].from === 86 && page.requests[2].fresh, `page 2 should ask for its blocks again, past the browser's copy, after a reorg deeper than the list: ${JSON.stringify(page.requests)}`);
+  page.answer(chain('B', 0, 101));
+  assert(page.listed() === ids('B', 86, 72), `page 2 should show B86 to B72: ${page.listed()}`);
+  page.close();
+
+  // An answer from before a reorg doesn't bring back the blocks the reorg replaced: here the reorg
+  // comes while /blocks waits for its first answer
+  page = openBlocksList();
+  page.receive(reorgToB());
+  page.answer(nodeA);
+  assert(page.listed() === `B100 ${ids('A', 99, 86)}`, `an answer from before a reorg should not bring back A100 and A101: ${page.listed()}`);
+  // Nor does the copy of page 1 that the browser kept, for up to 60 seconds, when the visitor goes to
+  // page 2 and back
+  page.goTo(2);
+  page.answer(nodeB);
+  assert(page.listed() === ids('A', 85, 71), `page 2 should show A85 to A71: ${page.listed()}`);
+  page.goTo(1);
+  page.answer(nodeA);
+  assert(page.listed() === `B100 ${ids('A', 99, 86)}`, `a copy of page 1 from before a reorg should not bring back A100 and A101: ${page.listed()}`);
+  page.close();
+
+  // After a chain wipe, the reorg's eight blocks are too few for /blocks, which asks for its page
+  // again. A copy the browser kept from before the wipe is not shown, and is asked for again after
+  // the 10 seconds the list waits between requests (in the browser; the server renders once).
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.stateService.isBrowser = true;
+  page.receive({ blocks: chain('new', 43, 50), reorg: true });
+  assert(page.listed() === ids('new', 50, 43), `/blocks should show the new chain's blocks after a chain wipe: ${page.listed()}`);
+  await tick();
+  await withImmediateTimers(async () => {
+    page.answer(nodeA);
+    assert(page.listed() === ids('new', 50, 43), `a copy of page 1 from before a chain wipe should not show: ${page.listed()}`);
+    await tick();
+    assert(page.requests.length === 3 && page.requests[2].fresh, `/blocks should ask again, past the browser's copy, for an answer it could not follow: ${JSON.stringify(page.requests)}`);
+    page.answer(chain('new', 0, 50));
+    assert(page.listed() === ids('new', 50, 36), `/blocks should show new50 to new36: ${page.listed()}`);
+  });
+  page.close();
+
+  // Until the API's first answer, the list sends nothing, so that the page shows its skeleton, not an
+  // empty table: the tab's state has blocks already, as when the visitor comes from another page
+  page = openBlocksList();
+  assert(page.emissions() === 0, `/blocks should send no list before the API's first answer, not ${page.emissions()}: [${page.listed()}]`);
+  page.answer(nodeA);
+  assert(page.emissions() === 1 && page.listed() === ids('A', 101, 87), `/blocks should send the API's first answer: ${page.emissions()} lists, ${page.listed()}`);
+  page.close();
+
+  // A list that opens after a reorg to a shorter chain doesn't take the block that reorg removed from
+  // a copy of /api/v1/blocks the browser kept, for up to 60 seconds
+  page = openBlocksList({ before: (tab) => tab.receive({ blocks: chain('A', 69, 100), reorg: true }) });
+  page.answer(nodeA);
+  assert(page.listed() === ids('A', 100, 86), `a list that opens after a reorg to A100 should not show A101 from the browser's copy: ${page.listed()}`);
+  page.close();
+
+  // An API origin whose chain differs from the websocket's, as a network's other origin can: the list
+  // asks it twice more, past caches and 10 seconds apart, then shows the blocks that fit. First, on a
+  // tab that saw a chain wipe before /blocks opened, an origin that still has the old chain.
+  page = openBlocksList({ before: (tab) => tab.receive({ blocks: chain('new', 43, 50), reorg: true }) });
+  page.stateService.isBrowser = true;
+  await withImmediateTimers(async () => {
+    for (let answer = 0; answer < 3; answer++) {
+      page.answer(nodeA);
+      await tick();
+    }
+  });
+  assert(page.listed() === ids('new', 50, 43) && !page.list.isLoading, `/blocks should show the blocks that fit after asking an origin on another chain three times, not stay on its skeleton: ${page.emissions()} lists, ${page.listed()}`);
+  assert(page.requests.map((request) => request.fresh).join() === 'false,true,true', `/blocks should ask such an origin three times, the last two past caches: ${JSON.stringify(page.requests)}`);
+  page.close();
+  // Then page 2, after a reorg to B101 that /blocks followed on page 1, from an origin still on A
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.receive({ blocks: chain('B', 80, 101), reorg: true });
+  page.stateService.isBrowser = true;
+  page.goTo(2);
+  await withImmediateTimers(async () => {
+    for (let answer = 0; answer < 3; answer++) {
+      page.answer(nodeA);
+      await tick();
+    }
+  });
+  assert(page.list.shownPage === 2 && page.listed() === ids('B', 86, 80) && !page.list.isLoading && page.requests.length === 4, `page 2 should show the blocks that fit after asking an origin on another chain three times, not stay on page 1's: page ${page.list.shownPage}, ${page.listed()}, ${page.requests.length} requests`);
+  page.close();
+  // Right after a reorg, until the next block, the backend's list for a page that connects holds its
+  // whole cache, 32 blocks by default. They cover /blocks, so an origin on another chain needs no retry:
+  // the list shows the websocket's blocks at once.
+  page = openBlocksList({ before: (tab) => tab.receive({ blocks: chain('B', 70, 101) }) });
+  page.answer(nodeA);
+  assert(page.listed() === ids('B', 101, 87) && page.requests.length === 1, `/blocks should show the websocket's B101 to B87 at once when its blocks cover the page: ${page.listed()}, ${page.requests.length} requests`);
+  page.close();
+  // Then a reload after a reorg the tab missed while offline, whose eight blocks replaced all of /blocks'
+  // A94 to A101: the reload counts towards the retries too
+  page = openBlocksList();
+  page.answer(nodeA);
+  page.stateService.isBrowser = true;
+  page.receive({ blocks: chain('B', 94, 101) });
+  await tick();
+  assert(page.requests.length === 2 && page.requests[1].fresh, `/blocks should ask for its page again, past caches, after a reorg that left it eight blocks: ${JSON.stringify(page.requests)}`);
+  await withImmediateTimers(async () => {
+    for (let answer = 0; answer < 3; answer++) {
+      page.answer(nodeA);
+      await tick();
+    }
+  });
+  assert(page.listed() === ids('B', 101, 94) && !page.list.isLoading && page.requests.length === 4, `/blocks should show the blocks that fit after asking again, and retrying twice, for an origin still on A: ${page.listed()}, loading ${page.list.isLoading}, ${page.requests.length} requests`);
+  page.close();
+
+  // A reorg to a shorter chain that takes all of page 2's heights: the list counts the new chain's
+  // blocks, and page 2 shows its page of the new chain, as a reload would
+  page = openBlocksList({ page: 2 });
+  page.answer(nodeA);
+  page.answer(nodeA);
+  page.receive({ blocks: [...chain('A', 29, 55), ...chain('C', 56, 60)], reorg: true });
+  assert(page.list.blocksCount === 61, `a reorg to C60 should count 61 blocks, not ${page.list.blocksCount}`);
+  await tick();
+  assert(page.requests.length === 3 && page.requests[2].from === 45 && page.requests[2].fresh, `page 2 should ask for the new chain's blocks from 45 down: ${JSON.stringify(page.requests)}`);
+  page.answer([...chain('A', 0, 55), ...chain('C', 56, 60)]);
+  assert(page.listed() === ids('A', 45, 31), `page 2 should show A45 to A31 after a reorg to C60: ${page.listed()}`);
+  page.close();
+  // and page 5, which a chain of 31 blocks doesn't have, goes to its last page, page 3
+  page = openBlocksList({ page: 5 });
+  page.answer(nodeA);
+  page.answer(nodeA);
+  assert(page.listed() === ids('A', 41, 27), `page 5 should show A41 to A27: ${page.listed()}`);
+  page.receive({ blocks: [...chain('A', 0, 20), ...chain('D', 21, 30)], reorg: true });
+  await tick();
+  assert(page.list.blocksCount === 31 && page.navigated.join() === '/blocks/3', `page 5 should go to page 3 after a reorg to D30: ${page.list.blocksCount} blocks, ${JSON.stringify(page.navigated)}`);
+  page.close();
+}
+
 checkTip();
 checkMempoolBlocks();
 checkCache()
+  .then(checkBlocksList)
   .then(() => console.log('qbit reorg smoke passed'))
   .catch((error) => {
     console.error(error);
