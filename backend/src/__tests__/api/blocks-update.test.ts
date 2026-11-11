@@ -1,6 +1,11 @@
 jest.mock('../../api/bitcoin/bitcoin-api-factory', () => ({
   __esModule: true,
-  default: {},
+  // the configured backend, such as qbit-electrs under esplora, which can lag
+  // the node
+  default: {
+    $getBlockHashTip: jest.fn(),
+    $getBlockHeightTip: jest.fn(),
+  },
   bitcoinCoreApi: {
     $getBlockHashTip: jest.fn(),
     $getBlockHeightTip: jest.fn(),
@@ -77,7 +82,7 @@ jest.mock('../../api/backend-info', () => ({
   default: {},
 }));
 
-import { bitcoinCoreApi } from '../../api/bitcoin/bitcoin-api-factory';
+import bitcoinApi, { bitcoinCoreApi } from '../../api/bitcoin/bitcoin-api-factory';
 import bitcoinClient from '../../api/bitcoin/bitcoin-client';
 import blocks from '../../api/blocks';
 import chainTips from '../../api/chain-tips';
@@ -95,6 +100,7 @@ import HashratesRepository from '../../repositories/HashratesRepository';
 import PricesRepository from '../../repositories/PricesRepository';
 
 const coreApi = jest.mocked(bitcoinCoreApi);
+const backendApi = jest.mocked(bitcoinApi);
 const getBlock = jest.mocked(bitcoinClient.getBlock);
 const getBlockchainInfo = jest.mocked(bitcoinClient.getBlockchainInfo);
 const handleReorg = jest.mocked(websocketHandler.handleReorg);
@@ -128,7 +134,7 @@ const mockNode = (chain: ChainBlock[]): void => {
   coreApi.$getBlockHashTip.mockResolvedValue(chain[chain.length - 1].id);
   coreApi.$getBlockHeightTip.mockResolvedValue(chain[chain.length - 1].height);
   const tipHeight = chain[chain.length - 1].height;
-  getBlockchainInfo.mockResolvedValue({ blocks: tipHeight, headers: tipHeight, initialblockdownload: false });
+  getBlockchainInfo.mockResolvedValue({ blocks: tipHeight, headers: tipHeight, initialblockdownload: false, bestblockhash: chain[chain.length - 1].id });
   coreApi.$getBlockHash.mockImplementation(async (height: number) => {
     const block = byHeight.get(height);
     if (!block) {
@@ -151,6 +157,7 @@ const mockNode = (chain: ChainBlock[]): void => {
 };
 
 const cachedIds = (): string[] => blocks.getBlocks().map(block => block.id);
+const summaryIds = (): string[] => blocks.getBlockSummaries().map(summary => summary.id);
 
 // indexing on, with the database calls of a sync run stubbed
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
@@ -176,12 +183,11 @@ const mockIndexing = () => {
 describe('Blocks $updateBlocks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    for (const call of [coreApi.$getBlockHashTip, coreApi.$getBlockHeightTip, coreApi.$getBlockHash, coreApi.$getBlock, getBlock, getBlockchainInfo]) {
+    for (const call of [coreApi.$getBlockHashTip, coreApi.$getBlockHeightTip, coreApi.$getBlockHash, coreApi.$getBlock, getBlock, getBlockchainInfo, backendApi.$getBlockHashTip, backendApi.$getBlockHeightTip]) {
       call.mockReset();
     }
-    const state = blocks as unknown as { initialSyncComplete: boolean, cacheChecked: boolean, reorgNotificationPending: boolean, currentBlockHeight: number, asertAnchorTip: number };
+    const state = blocks as unknown as { initialSyncComplete: boolean, reorgNotificationPending: boolean, currentBlockHeight: number, asertAnchorTip: number };
     state.initialSyncComplete = true;
-    state.cacheChecked = true;
     state.reorgNotificationPending = false;
     state.currentBlockHeight = 0;
     state.asertAnchorTip = -1;
@@ -522,21 +528,178 @@ describe('Blocks $updateBlocks', () => {
     expect(coreApi.$getBlockHash).not.toHaveBeenCalled();
     expect(coreApi.$getBlock).not.toHaveBeenCalled();
     expect(getBlock).not.toHaveBeenCalled();
+    expect(getBlockchainInfo).not.toHaveBeenCalled();
     expect(handleReorg).not.toHaveBeenCalled();
   });
 
-  test('waits for a node behind on the cached chain once the first sync has completed', async () => {
-    // the cache ends at 103, and the node, at 101, has the cached blocks up to
-    // there: it may only be catching up, as after a restart
-    const chain = chainOf(['p', 'a', 'c', 'd']);
-    blocks.setBlocks(chain.map(cached));
-    mockNode(chain.slice(0, 2));
+  test('takes the tip from the node, not from qbit-electrs, which can lag it', async () => {
+    // qbit-electrs still answers A as its tip, while the node mined E on the
+    // cached D
+    const chain = chainOf(['p', 'a', 'c', 'd', 'e']);
+    blocks.setBlocks(chain.slice(0, 4).map(cached));
+    mockNode(chain);
+    backendApi.$getBlockHeightTip.mockResolvedValue(chain[1].height);
+    backendApi.$getBlockHashTip.mockResolvedValue(chain[1].id);
 
-    await expect(blocks.$updateBlocks()).resolves.toBe(0);
+    await expect(blocks.$updateBlocks()).resolves.toBe(1);
 
     expect(cachedIds()).toEqual(chain.map(block => block.id));
-    expect(blocks.getCurrentBlockHeight()).toBe(103);
     expect(handleReorg).not.toHaveBeenCalled();
+    expect(backendApi.$getBlockHeightTip).not.toHaveBeenCalled();
+    expect(backendApi.$getBlockHashTip).not.toHaveBeenCalled();
+  });
+
+  describe('cached blocks above the node tip, on its chain', () => {
+    // P <- A <- C <- D is cached, and the node is at A
+    const chain = chainOf(['p', 'a', 'c', 'd']);
+    const [p, a, c, d] = chain;
+    const ids = chain.map(block => block.id);
+
+    beforeEach(() => {
+      blocks.setBlocks(chain.map(cached));
+      blocks.setBlockSummaries(chain.map(block => ({ id: block.id, transactions: [] })));
+      mockNode([p, a]);
+    });
+
+    test.each([
+      ['still connecting blocks it has the headers of', { headers: d.height }],
+      ['in initial block download', { initialblockdownload: true }],
+    ])('are kept while the node is %s, as after a restart', async (_, syncing) => {
+      const { setCanonical, deleteHashrates, deleteClusters, reindex } = mockIndexing();
+      jest.replaceProperty(config.REDIS, 'ENABLED', true);
+      getBlockchainInfo.mockResolvedValue({ blocks: a.height, headers: a.height, initialblockdownload: false, bestblockhash: a.id, ...syncing });
+
+      await expect(blocks.$updateBlocks()).resolves.toBe(0);
+
+      expect(cachedIds()).toEqual(ids);
+      expect(summaryIds()).toEqual(ids);
+      expect(blocks.getCurrentBlockHeight()).toBe(d.height);
+      expect(setCanonical).not.toHaveBeenCalled();
+      expect(deleteHashrates).not.toHaveBeenCalled();
+      expect(deleteClusters).not.toHaveBeenCalled();
+      expect(reindex).not.toHaveBeenCalled();
+      expect(chainTips.clearOrphanCacheAboveHeight).not.toHaveBeenCalled();
+      expect(redisCache.$updateBlocks).not.toHaveBeenCalled();
+      expect(diskCache.$saveCacheToDisk).not.toHaveBeenCalled();
+      expect(handleReorg).not.toHaveBeenCalled();
+    });
+
+    test('are dropped once the node reports itself synced, as after invalidateblock, and reach clients as one reorg', async () => {
+      jest.replaceProperty(config.REDIS, 'ENABLED', true);
+      let cachedAtReorg: string[] = [];
+      handleReorg.mockImplementation(() => { cachedAtReorg = cachedIds(); });
+
+      await expect(blocks.$updateBlocks()).resolves.toBe(0);
+
+      expect(cachedIds()).toEqual([p.id, a.id]);
+      expect(summaryIds()).toEqual([p.id, a.id]);
+      expect(blocks.getCurrentBlockHeight()).toBe(a.height);
+      expect(handleReorg).toHaveBeenCalledTimes(1);
+      expect(cachedAtReorg).toEqual([p.id, a.id]);
+      // a restart must not restore C and D
+      expect(jest.mocked(redisCache.$updateBlocks).mock.calls.map(([saved]) => saved.map(block => block.id))).toEqual([[p.id, a.id]]);
+      expect(jest.mocked(redisCache.$updateBlockSummaries).mock.calls.map(([saved]) => saved.map(summary => summary.id))).toEqual([[p.id, a.id]]);
+      expect(diskCache.$saveCacheToDisk).toHaveBeenCalled();
+      // the orphan cache is cleared from C's height, then refilled
+      const clearOrphans = jest.mocked(chainTips.clearOrphanCacheAboveHeight);
+      const refillOrphans = jest.mocked(chainTips.updateOrphanedBlocks);
+      expect(clearOrphans).toHaveBeenCalledWith(a.height);
+      expect(refillOrphans).toHaveBeenCalledTimes(1);
+      expect(refillOrphans.mock.invocationCallOrder[0]).toBeGreaterThan(clearOrphans.mock.invocationCallOrder[0]);
+
+      // the node's next block extends A, so it arrives as a new block
+      const [, , b] = chainOf(['p', 'a', 'b']);
+      mockNode([p, a, b]);
+      await expect(blocks.$updateBlocks()).resolves.toBe(1);
+      expect(cachedIds()).toEqual([p.id, a.id, b.id]);
+      expect(handleReorg).toHaveBeenCalledTimes(1);
+    });
+
+    test('leave no row canonical when blocks are indexed', async () => {
+      const { setCanonical, deleteHashrates, deleteClusters, reindex } = mockIndexing();
+
+      await expect(blocks.$updateBlocks()).resolves.toBe(0);
+
+      expect(setCanonical.mock.calls).toEqual([[null, c.height], [null, d.height]]);
+      expect(reindex.mock.invocationCallOrder[0]).toBeLessThan(setCanonical.mock.invocationCallOrder[0]);
+      expect(deleteHashrates).toHaveBeenCalledWith(cached(c).timestamp - 604800);
+      expect(deleteClusters).toHaveBeenCalledWith(c.height);
+      expect(handleReorg).toHaveBeenCalledTimes(1);
+    });
+
+    test('stay cached when the database fails partway through the drop, until the next run drops them', async () => {
+      // C's height is marked stale, then D's can't be
+      const { setCanonical, reindex } = mockIndexing();
+      setCanonical.mockResolvedValueOnce().mockRejectedValueOnce(new Error('DB unavailable'));
+
+      await expect(blocks.$updateBlocks()).rejects.toThrow('DB unavailable');
+      expect(cachedIds()).toEqual(ids);
+      expect(summaryIds()).toEqual(ids);
+      expect(reindex).toHaveBeenCalled();
+      expect(handleReorg).not.toHaveBeenCalled();
+
+      await expect(blocks.$updateBlocks()).resolves.toBe(0);
+      expect(cachedIds()).toEqual([p.id, a.id]);
+      expect(setCanonical).toHaveBeenLastCalledWith(null, d.height);
+      expect(handleReorg).toHaveBeenCalledTimes(1);
+    });
+
+    test('are kept when the node cannot say whether it is syncing', async () => {
+      getBlockchainInfo.mockRejectedValue(new Error('RPC unavailable'));
+
+      await expect(blocks.$updateBlocks()).rejects.toThrow('RPC unavailable');
+
+      expect(cachedIds()).toEqual(ids);
+      expect(handleReorg).not.toHaveBeenCalled();
+    });
+
+    test('are kept when the node connects them again while the run checks the cache', async () => {
+      // the run reads tip A, and by the time it asks whether the node is
+      // syncing, the node has reconnected C and D, as after reconsiderblock
+      getBlockchainInfo.mockResolvedValue({ blocks: d.height, headers: d.height, initialblockdownload: false, bestblockhash: d.id });
+
+      await expect(blocks.$updateBlocks()).resolves.toBe(0);
+
+      expect(cachedIds()).toEqual(ids);
+      expect(handleReorg).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('a chain wiped while the backend runs', () => {
+    // the backend synced P <- A <- C <- D at 100 to 103, then the node started
+    // a new chain, which is still below the cached blocks
+    const old = chainOf(['p', 'a', 'c', 'd']);
+    const wiped = chainOf(fillsOf('n', 51), 0);
+
+    beforeEach(async () => {
+      blocks.setBlocks(old.slice(0, 3).map(cached));
+      mockNode(old);
+      await expect(blocks.$updateBlocks()).resolves.toBe(1);
+      expect(cachedIds()).toEqual(old.map(block => block.id));
+    });
+
+    test('is followed: the old blocks are dropped and the new chain synced, as for an empty cache', async () => {
+      mockNode(wiped);
+
+      // the node's last INITIAL_BLOCKS_AMOUNT (8) blocks
+      await expect(blocks.$updateBlocks()).resolves.toBe(8);
+
+      expect(cachedIds()).toEqual(wiped.slice(-8).map(block => block.id));
+      expect(blocks.getCurrentBlockHeight()).toBe(50);
+      expect(handleReorg).toHaveBeenCalledTimes(1);
+      expect(chainTips.clearOrphanCacheAboveHeight).toHaveBeenCalledWith(old[0].height - 1);
+    });
+
+    test('is waited for while the new chain is in initial block download', async () => {
+      // a regtest node started again from its genesis block
+      mockNode(wiped.slice(0, 1));
+      getBlockchainInfo.mockResolvedValue({ blocks: 0, headers: 0, initialblockdownload: true, bestblockhash: wiped[0].id });
+
+      await expect(blocks.$updateBlocks()).resolves.toBe(0);
+
+      expect(cachedIds()).toEqual(old.map(block => block.id));
+      expect(handleReorg).not.toHaveBeenCalled();
+    });
   });
 
   test('fails a run whose block does not extend a cached tip the node still has', async () => {
@@ -555,21 +718,21 @@ describe('Blocks $updateBlocks', () => {
 
   describe('a cache loaded with blocks the node does not have', () => {
     beforeEach(() => {
-      const state = blocks as unknown as { initialSyncComplete: boolean, cacheChecked: boolean };
-      state.initialSyncComplete = false;
-      state.cacheChecked = false;
+      (blocks as unknown as { initialSyncComplete: boolean }).initialSyncComplete = false;
     });
 
     test.each([1, 2])('keeps blocks the node may still connect, %d above its tip, and the database and clients as they are', async (behind) => {
       // a restart while the node catches up: the cache ends at 103, and the
-      // node has the cached blocks up to its tip
+      // node has the cached blocks up to its tip, and the headers above it
       const { setCanonical, deleteHashrates, deleteClusters, reindex } = mockIndexing();
       jest.replaceProperty(config.REDIS, 'ENABLED', true);
       const chain = chainOf(['p', 'a', 'c', 'd']);
       const ids = chain.map(block => block.id);
       blocks.setBlocks(chain.map(cached));
       blocks.setBlockSummaries(chain.map(block => ({ id: block.id, transactions: [] })));
-      mockNode(chain.slice(0, chain.length - behind));
+      const node = chain.slice(0, chain.length - behind);
+      mockNode(node);
+      getBlockchainInfo.mockResolvedValue({ blocks: node[node.length - 1].height, headers: 103, initialblockdownload: false, bestblockhash: node[node.length - 1].id });
 
       await expect(blocks.$updateBlocks()).resolves.toBe(0);
 

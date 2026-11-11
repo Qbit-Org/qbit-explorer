@@ -158,6 +158,11 @@ example the container above across runs, set `QBIT_REGTEST_DB_RESET=1`, which
 drops the tables of `QBIT_REGTEST_DB_NAME` before the run. The reset only
 accepts a database whose name starts with `qbit_regtest_`.
 
+With `smoke.env` sourced, the smoke script's last check mines an empty block,
+runs `invalidateblock` on it, and expects the backend's tip to follow the node
+back down within `TIP_WAIT` seconds (default 60). The node ends at the tip it
+had. The check only runs when qbitd reports the `regtest` chain.
+
 To run the browser tests against the stack, source `smoke.env` and let the script
 serve the frontend, which also sets its config to regtest:
 
@@ -524,5 +529,7 @@ DNS seeds are `coherence-testnet4.qbit.org` and `triplet-testnet4.qbit.org`
 (`Qbit-Org/qbit:src/kernel/chainparams.cpp:404-405`).
 
 Do not mine or broadcast during testnet4 validation. The smoke script behind
-`npm run smoke:qbit-regtest` only reads, so the `SKIP_BACKEND=1`
-hosted-endpoint check above is safe to run against testnet4.
+`npm run smoke:qbit-regtest` only reads, except for the `invalidateblock`
+check, which needs the regtest harness's `smoke.env` and a node on `regtest`.
+So the `SKIP_BACKEND=1` hosted-endpoint check above is safe to run against
+testnet4.
