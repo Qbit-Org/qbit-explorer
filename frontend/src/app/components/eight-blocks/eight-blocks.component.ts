@@ -127,7 +127,9 @@ export class EightBlocksComponent implements OnInit, OnDestroy {
         padding: (this.padding || 0) +'px 0px',
       };
 
-      if (params.test === 'true') {
+      // On the server, window.setTimeout runs at once (server.ts), so test
+      // mode would fetch blocks in an endless loop
+      if (params.test === 'true' && this.stateService.isBrowser) {
         if (this.blocksSubscription) {
           this.blocksSubscription.unsubscribe();
         }

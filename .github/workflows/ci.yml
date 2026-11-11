@@ -256,6 +256,20 @@ jobs:
           # sync and downloads the logos from mempool/mining-pool-logos.
           SKIP_SYNC: 1
 
+      # Server-side rendering (#49), on the install production/README.md
+      # uses. build:ssr is the build above plus build:ssr:server. The smoke
+      # starts the server and checks that it renders `/`.
+      - name: SSR Build
+        if: ${{ matrix.flavor == 'prod'}}
+        run: npm run build:ssr:server
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      - name: SSR Smoke
+        if: ${{ matrix.flavor == 'prod'}}
+        timeout-minutes: 5
+        run: npm run smoke:ssr
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
   validate_docker_json:
     if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
     runs-on: blacksmith-4vcpu-ubuntu-2404

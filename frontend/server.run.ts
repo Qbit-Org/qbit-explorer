@@ -3,6 +3,7 @@ import './src/resources/config.js';
 import * as domino from 'domino';
 import * as express from 'express';
 import * as fs from 'fs';
+import { AddressInfo } from 'net';
 import * as path from 'path';
 
 const {readFileSync, existsSync} = require('fs');
@@ -64,12 +65,12 @@ function app() {
     logLevel: 'debug'
   }));
   // proxy API to nginx
-  server.get('/api/**', createProxyMiddleware({
+  server.get('/api/{*path}', createProxyMiddleware({
     // @ts-ignore
     target: win.__env.NGINX_PROTOCOL + '://' + win.__env.NGINX_HOSTNAME + ':' + win.__env.NGINX_PORT,
     changeOrigin: true,
   }));
-  server.get('/resources/**', express.static('./src'));
+  server.get('/resources/{*path}', express.static('./src'));
 
 
   // map / and /en to en-US
@@ -96,8 +97,12 @@ function run() {
   const port = process.env.PORT || 4000;
 
   // Start up the Node server
-  app().listen(port, () => {
-    console.log(`Node Express server listening on port ${port}`);
+  const server = app().listen(port, (error?: Error) => {
+    if (error) {
+      throw error;
+    }
+    // the port it got, which PORT=0 leaves to the system
+    console.log(`Node Express server listening on port ${(server.address() as AddressInfo).port}`);
   });
 }
 

@@ -279,7 +279,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       switchMap((txid) => this.apiService.getTransactionTimes$([txid]).pipe(
         retry({ count: 2, delay: 2000 }),
         // Try again until we either get a valid response, or the transaction is confirmed
-        repeat({ delay: 2000 }),
+        // (in the browser: the server renders once, and repeating would keep its render from finishing)
+        repeat({ delay: 2000, count: this.stateService.isBrowser ? Infinity : 1 }),
         filter((transactionTimes) => transactionTimes?.[0] > 0 || this.tx.status?.confirmed),
         take(1),
       )),
@@ -298,7 +299,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
             .getCpfpinfo$(txId)
             .pipe(retryWhen((errors) => errors.pipe(
               mergeMap((error) => {
-                if (!this.tx?.status || this.tx.status.confirmed) {
+                // the server renders once, and retrying would keep its render from finishing
+                if (!this.tx?.status || this.tx.status.confirmed || !this.stateService.isBrowser) {
                   return throwError(error);
                 } else {
                   return of(null);

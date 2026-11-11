@@ -1,4 +1,5 @@
-import { Injectable } from '@angular/core';
+import { Inject, Injectable, RendererFactory2 } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { map, shareReplay } from 'rxjs/operators';
 import qbitTokens from '../../resources/qbit-design/tokens.json';
@@ -115,8 +116,15 @@ export class QbitDesignService {
 
   constructor(
     private stateService: StateService,
+    @Inject(DOCUMENT) private document: Document,
+    private rendererFactory: RendererFactory2,
   ) {
     this.applyTokens();
+    // The server renders the vendored copy: the refresh interval would keep
+    // its render from ever finishing
+    if (!this.stateService.isBrowser) {
+      return;
+    }
     // With qbit.org's header and footer turned off, nothing here needs its
     // published contract, so this instance doesn't contact it at all
     if (!this.stateService.env.QBIT_SITE_CHROME) {
@@ -217,19 +225,33 @@ export class QbitDesignService {
   // expose the design tokens as CSS custom properties for the header/footer
   // stylesheets, so vendored contract values are never duplicated in SCSS
   private applyTokens(): void {
-    if (typeof document === 'undefined') {
+    const properties: [string, string][] = [
+      ...Object.entries(this.tokens.color).map(([name, value]): [string, string] =>
+        [`--qbit-${name.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}`, value]),
+      ['--qbit-font-sans', this.tokens.font.sans],
+      ['--qbit-font-mono', this.tokens.font.mono],
+      ['--qbit-font-display', this.tokens.font.display],
+      ['--qbit-banner-height', `${this.tokens.header.bannerHeightPx}px`],
+      ['--qbit-header-height', `${this.tokens.header.heightPx}px`],
+      ['--qbit-header-max-width', `${this.tokens.header.maxWidthPx}px`],
+    ];
+    if (this.stateService.isBrowser) {
+      const style = this.document.documentElement.style;
+      for (const [name, value] of properties) {
+        style.setProperty(name, value);
+      }
       return;
     }
-    const style = document.documentElement.style;
-    for (const [name, value] of Object.entries(this.tokens.color)) {
-      style.setProperty(`--qbit-${name.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}`, value);
-    }
-    style.setProperty('--qbit-font-sans', this.tokens.font.sans);
-    style.setProperty('--qbit-font-mono', this.tokens.font.mono);
-    style.setProperty('--qbit-font-display', this.tokens.font.display);
-    style.setProperty('--qbit-banner-height', `${this.tokens.header.bannerHeightPx}px`);
-    style.setProperty('--qbit-header-height', `${this.tokens.header.heightPx}px`);
-    style.setProperty('--qbit-header-max-width', `${this.tokens.header.maxWidthPx}px`);
+    // On the server, domino's style parser throws on custom properties, so
+    // the rendered page gets them in a <style> element. As generate-config.js
+    // does for the pre-boot skeleton, skip any value that could end the rule
+    // or the element.
+    const rules = properties.filter(([, value]) => !/[{};<>]/.test(value)).map(([name, value]) => `${name}:${value}`);
+    const renderer = this.rendererFactory.createRenderer(null, null);
+    const element = renderer.createElement('style');
+    renderer.setAttribute(element, 'id', 'qbit-design-tokens');
+    renderer.appendChild(element, renderer.createText(`:root{${rules.join(';')}}`));
+    renderer.appendChild(this.document.head, element);
   }
 
   private async refreshFromPublished(): Promise<void> {

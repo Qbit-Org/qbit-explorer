@@ -222,7 +222,11 @@ export function sleep$(ms: number): Promise<void> {
   });
 }
 
-export function handleDemoRedirect(route: ActivatedRoute, router: Router) {
+export function handleDemoRedirect(route: ActivatedRoute, router: Router, isBrowser = true) {
+  // the redirect waits 15 seconds, which would hold a server render back
+  if (!isBrowser) {
+    return;
+  }
   route.queryParams
     .subscribe(params => {
       if (params.next) {

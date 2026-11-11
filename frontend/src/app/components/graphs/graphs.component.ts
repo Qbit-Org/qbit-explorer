@@ -24,6 +24,6 @@ export class GraphsComponent implements OnInit {
   ngOnInit(): void {
     this.websocketService.want(['blocks']);
 
-    handleDemoRedirect(this.route, this.router);
+    handleDemoRedirect(this.route, this.router, this.stateService.isBrowser);
   }
 }

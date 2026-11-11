@@ -201,7 +201,8 @@ export class TrackerComponent implements OnInit, OnDestroy {
             .getCpfpinfo$(txId)
             .pipe(retryWhen((errors) => errors.pipe(
               mergeMap((error) => {
-                if (!this.tx?.status || this.tx.status.confirmed) {
+                // the server renders once, and retrying would keep its render from finishing
+                if (!this.tx?.status || this.tx.status.confirmed || !this.stateService.isBrowser) {
                   return throwError(error);
                 } else {
                   return of(null);

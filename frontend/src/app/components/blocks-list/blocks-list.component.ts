@@ -1,7 +1,7 @@
 import { Component, OnInit, ChangeDetectionStrategy, Input, ChangeDetectorRef, Inject, LOCALE_ID } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject, combineLatest, Observable, timer, of, Subscription } from 'rxjs';
-import { debounceTime, delayWhen, filter, map, retryWhen, scan, skip, switchMap, tap, throttleTime } from 'rxjs/operators';
+import { debounceTime, delayWhen, filter, map, retryWhen, scan, skip, switchMap, takeWhile, tap, throttleTime } from 'rxjs/operators';
 import { BlockExtended } from '@interfaces/node-api.interface';
 import { ApiService } from '@app/services/api.service';
 import { StateService } from '@app/services/state.service';
@@ -140,7 +140,8 @@ export class BlocksList implements OnInit {
                 }
                 return blocks;
               }),
-              retryWhen(errors => errors.pipe(delayWhen(() => timer(10000))))
+              // the server renders once: retrying would keep its render from finishing
+              retryWhen(errors => errors.pipe(takeWhile(() => this.stateService.isBrowser), delayWhen(() => timer(10000))))
             );
         })
       ),
