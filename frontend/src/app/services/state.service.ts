@@ -467,7 +467,19 @@ export class StateService {
     }
   }
 
-  resetBlocks(blocks: BlockExtended[]): void {
+  // The list's highest block raises the tip. Only a reorg's list can lower it,
+  // as to a shorter chain: any other list below the tip, as from a backend that
+  // lags the one the page used before, leaves it until that backend passes it.
+  // The tip changes first, so the list's subscribers see the tip that goes with
+  // it, as they do for a new block.
+  resetBlocks(blocks: BlockExtended[], reorg = false): void {
+    const tip = blocks.reduce((max, block) => Math.max(max, block.height), -1);
+    if (reorg && tip < this.latestBlockHeight) {
+      this.latestBlockHeight = tip;
+      this.chainTip$.next(tip);
+    } else {
+      this.updateChainTip(tip);
+    }
     this.blocks = blocks.reverse();
     this.blocksSubject$.next(blocks);
   }

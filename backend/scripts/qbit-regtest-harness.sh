@@ -311,7 +311,6 @@ resolve_harness_dir() {
   local perms
   perms="$(ls -ld "$HARNESS_DIR")"
   [[ -O "$HARNESS_DIR" ]] || die "$HARNESS_DIR is not owned by you; set QBIT_REGTEST_DIR to a directory of your own"
-  # The backend also loads backend/loopback.cjs from here with --require.
   [[ "${perms:5:1}" != w && "${perms:8:1}" != w ]] ||
     die "$HARNESS_DIR is writable by its group or other users; run chmod go-w on it, or use a new directory"
   # The smoke script word-splits QBIT_CLI_ARGS, which holds the datadir.
@@ -666,6 +665,8 @@ expect(config.CORE_RPC.PORT === Number(rpcPort), `CORE_RPC.PORT is not ${rpcPort
 expect(config.ESPLORA.REST_API_URL === esploraUrl, `ESPLORA.REST_API_URL is not ${esploraUrl}`);
 
 config.MEMPOOL.BACKEND = backend;
+// Like every other service, the backend listens on 127.0.0.1 only.
+config.MEMPOOL.HTTP_HOST = '127.0.0.1';
 config.MEMPOOL.CACHE_DIR = `${harnessDir}/backend/cache`;
 // Database readiness waits for the indexer's debug-level completion line.
 config.MEMPOOL.STDOUT_LOG_MIN_PRIORITY = 'debug';
@@ -699,22 +700,6 @@ if (database === '1') {
 const placeholder = JSON.stringify(config).match(/__[A-Z0-9_]+__/);
 expect(placeholder === null, `placeholder ${placeholder} left unset`);
 fs.writeFileSync(output, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-JS
-}
-
-# The backend has no bind-address setting and listens on every interface. This
-# preload gives its port-only listen() calls the loopback host.
-write_loopback_preload() {
-  cat >"$HARNESS_DIR/backend/loopback.cjs" <<'JS'
-'use strict';
-const net = require('net');
-const listen = net.Server.prototype.listen;
-net.Server.prototype.listen = function (...args) {
-  if (typeof args[0] === 'number' && typeof args[1] !== 'string') {
-    args.splice(1, 0, '127.0.0.1');
-  }
-  return listen.apply(this, args);
-};
 JS
 }
 
@@ -758,14 +743,15 @@ check_backend_synced() {
 
 start_backend() {
   write_backend_config
-  write_loopback_preload
   log "starting the backend ($MEMPOOL_API_URL, MEMPOOL.BACKEND=$BACKEND_MODE, database $( ((DATABASE)) && echo on || echo off))"
   # Start node itself, from a directory inside the harness, so the recorded
   # PID is node's from the start.
   export MEMPOOL_CONFIG_FILE="$HARNESS_DIR/mempool-config.json"
   cd "$HARNESS_DIR/backend"
-  # Test-only preload: the backend has no bind-address setting; this keeps it on 127.0.0.1.
-  start_component backend node --require "$HARNESS_DIR/backend/loopback.cjs" "$BACKEND_DIR/dist/index.js"
+  # `down` stops a process it didn't start only if its command line names
+  # $HARNESS_DIR/ (running_pid). --diagnostic-dir does, and sets what node
+  # already uses, its working directory.
+  start_component backend node --diagnostic-dir="$HARNESS_DIR/backend" "$BACKEND_DIR/dist/index.js"
   cd - >/dev/null
   # In esplora mode the backend follows qbit-electrs, so stop early if it exits.
   local watch=(backend qbitd)

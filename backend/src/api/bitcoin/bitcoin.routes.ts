@@ -19,7 +19,7 @@ import difficultyAdjustment from '../difficulty-adjustment';
 import transactionRepository from '../../repositories/TransactionRepository';
 import rbfCache from '../rbf-cache';
 import { calculateMempoolTxCpfp } from '../cpfp';
-import { getAddressLookupError, handleError, isBlockNotFoundError, isTxNotFoundError } from '../../utils/api';
+import { getAddressLookupError, handleError, handleLookupError, isBlockHeightNotFoundError, isBlockNotFoundError, isTxNotFoundError } from '../../utils/api';
 import poolsUpdater from '../../tasks/pools-updater';
 import chainTips from '../chain-tips';
 
@@ -28,6 +28,23 @@ const BLOCK_HASH_REGEX = /^[a-f0-9]{64}$/i;
 const ADDRESS_REGEX = /^[a-z0-9]{2,120}$/i;
 const SCRIPT_HASH_REGEX = /^([a-f0-9]{2})+$/i;
 const RAW_HEX_REGEX = /^(?:[a-f0-9]{2})+$/i;
+
+// How qbit's bech32 addresses begin: qb on mainnet, tq on testnet4, qbrt on regtest
+const BECH32_STARTS = ['qb1', 'tq1', 'qbrt1'];
+
+// qbit-electrs and qbitd give bech32 addresses in lowercase, but one may also
+// be written all in uppercase. So lowercase a prefix that begins like a qbit
+// bech32 address and has no lowercase letter. Any other prefix stays as typed,
+// since base58 is case-sensitive. (A mainnet base58 P2PKH address starts with
+// Q, so an all-uppercase QB1 could begin one too. Such an address still
+// matches once the prefix has a lowercase letter.)
+function lowercaseBech32Prefix(prefix: string): string {
+  const lowercase = prefix.toLowerCase();
+  if (prefix === prefix.toUpperCase() && BECH32_STARTS.some((start) => lowercase.startsWith(start))) {
+    return lowercase;
+  }
+  return prefix;
+}
 
 class BitcoinRoutes {
   public initRoutes(app: Application) {
@@ -76,12 +93,16 @@ class BitcoinRoutes {
       .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId', this.getTransaction)
       .post(config.MEMPOOL.API_URL_PREFIX + 'tx', this.$postTransaction)
       .post(config.MEMPOOL.API_URL_PREFIX + 'txs/test', this.$testTransactions)
-      .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/hex', this.getRawTransaction)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/hex', (req, res) => this.getRawTransaction(req, res, 'hex'))
+      .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/raw', (req, res) => this.getRawTransaction(req, res, 'raw'))
       .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/status', this.getTransactionStatus)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/outspend/:vout', this.getTransactionOutspend)
       .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/outspends', this.getTransactionOutspends)
       .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/merkle-proof', this.getTransactionMerkleProof)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/merkleblock-proof', this.getTransactionMerkleBlockProof)
       .get(config.MEMPOOL.API_URL_PREFIX + 'txs/outspends', this.$getBatchedOutspends)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/header', this.getBlockHeader)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/status', this.getBlockStatus)
       .get(config.MEMPOOL.API_URL_PREFIX + 'blocks/tip/hash', this.getBlockTipHash)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/raw', this.getRawBlock)
       .get(config.MEMPOOL.API_URL_PREFIX + 'block/:hash/txids', this.getTxIdsForBlock)
@@ -91,6 +112,9 @@ class BitcoinRoutes {
       .get(config.MEMPOOL.API_URL_PREFIX + 'block-height/:height', this.getBlockHeight)
       .get(config.MEMPOOL.API_URL_PREFIX + 'address/:address', this.getAddress)
       .get(config.MEMPOOL.API_URL_PREFIX + 'address/:address/txs', this.getAddressTransactions)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'address/:address/txs/chain', this.getAddressChainTransactions)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'address/:address/txs/chain/:lastSeenTxId', this.getAddressChainTransactions)
+      .get(config.MEMPOOL.API_URL_PREFIX + 'address/:address/txs/mempool', this.getAddressMempoolTransactions)
       .get(config.MEMPOOL.API_URL_PREFIX + 'address/:address/txs/summary', this.getAddressTransactionSummary)
       .get(config.MEMPOOL.API_URL_PREFIX + 'address/:address/utxo', this.getAddressUtxo)
       .get(config.MEMPOOL.API_URL_PREFIX + 'scripthash/:scripthash', this.getScriptHash)
@@ -143,7 +167,7 @@ class BitcoinRoutes {
 
   private getTransactionTimes(req: Request, res: Response) {
     if (!req.query.txId || typeof req.query.txId !== 'object') {
-      handleError(req, res, 500, 'invalid txId format');
+      handleError(req, res, 400, 'invalid txId format');
       return;
     }
     const txIds: string[] = [];
@@ -160,7 +184,7 @@ class BitcoinRoutes {
   private async $getBatchedOutspends(req: Request, res: Response): Promise<IEsploraApi.Outspend[][] | void> {
     const txids_csv = req.query.txids;
     if (!txids_csv || typeof txids_csv !== 'string') {
-      handleError(req, res, 500, 'Invalid txids format');
+      handleError(req, res, 400, 'Invalid txids format');
       return;
     }
     const txids = txids_csv.split(',');
@@ -183,7 +207,7 @@ class BitcoinRoutes {
 
   private async $getCpfpInfo(req: Request, res: Response) {
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
 
@@ -238,26 +262,21 @@ class BitcoinRoutes {
 
   private async getTransaction(req: Request, res: Response) {
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
       const transaction = await transactionUtils.$getTransactionExtended(req.params.txId, true, false, false, true);
       res.json(transaction);
     } catch (e) {
-      let statusCode = 500;
-      if (isTxNotFoundError(e)) {
-        statusCode = 404;
-        handleError(req, res, statusCode, 'No such mempool or blockchain transaction');
-        return;
-      }
-      handleError(req, res, statusCode, 'Failed to get transaction');
+      handleLookupError(req, res, e, isTxNotFoundError, 'No such mempool or blockchain transaction', 'Failed to get transaction');
     }
   }
 
-  private async getRawTransaction(req: Request, res: Response) {
+  // tx/:txId/hex answers with the transaction's hex, and esplora's tx/:txId/raw with the same transaction as bytes
+  private async getRawTransaction(req: Request, res: Response, format: 'hex' | 'raw'): Promise<void> {
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
@@ -267,16 +286,15 @@ class BitcoinRoutes {
         handleError(req, res, 500, 'Failed to get raw transaction');
         return;
       }
+      if (format === 'raw') {
+        res.setHeader('content-type', 'application/octet-stream');
+        res.send(Buffer.from(transactionHex, 'hex'));
+        return;
+      }
       res.setHeader('content-type', 'text/plain');
       res.send(transactionHex);
     } catch (e) {
-      let statusCode = 500;
-      if (isTxNotFoundError(e)) {
-        statusCode = 404;
-        handleError(req, res, statusCode, 'No such mempool or blockchain transaction');
-        return;
-      }
-      handleError(req, res, statusCode, 'Failed to get raw transaction');
+      handleLookupError(req, res, e, isTxNotFoundError, 'No such mempool or blockchain transaction', 'Failed to get raw transaction');
     }
   }
 
@@ -350,26 +368,20 @@ class BitcoinRoutes {
 
   private async getTransactionStatus(req: Request, res: Response) {
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
       const transaction = await transactionUtils.$getTransactionExtended(req.params.txId, true);
       res.json(transaction.status);
     } catch (e) {
-      let statusCode = 500;
-      if (isTxNotFoundError(e)) {
-        statusCode = 404;
-        handleError(req, res, statusCode, 'No such mempool or blockchain transaction');
-        return;
-      }
-      handleError(req, res, statusCode, 'Failed to get transaction status');
+      handleLookupError(req, res, e, isTxNotFoundError, 'No such mempool or blockchain transaction', 'Failed to get transaction status');
     }
   }
 
   private async getStrippedBlockTransactions(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     try {
@@ -383,11 +395,11 @@ class BitcoinRoutes {
 
   private async getStrippedBlockTransaction(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     if (!TXID_REGEX.test(req.params.txid)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
@@ -405,7 +417,7 @@ class BitcoinRoutes {
 
   private async getBlock(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     try {
@@ -424,14 +436,17 @@ class BitcoinRoutes {
 
       res.setHeader('Expires', new Date(Date.now() + 1000 * cacheDuration).toUTCString());
       res.json(block);
-    } catch (e: any) {
-      handleError(req, res, e?.response?.status === 404 ? 404 : 500, 'Failed to get block');
+    } catch (e) {
+      // only the block lookup's own not-found is a 404: electrs's 404 in esplora mode, Core's -5 otherwise. A
+      // coinbase Core can't find (txindex off or still building), or Core's -5 for a block electrs has returned
+      // (Core behind electrs), means the block can't be indexed yet, not that it doesn't exist.
+      handleLookupError(req, res, e, isBlockNotFoundError, 'Failed to get block', 'Failed to get block');
     }
   }
 
   private async getBlockHeader(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     try {
@@ -439,13 +454,32 @@ class BitcoinRoutes {
       res.setHeader('content-type', 'text/plain');
       res.send(blockHeader);
     } catch (e) {
-      handleError(req, res, 500, 'Failed to get block header');
+      handleLookupError(req, res, e, isBlockNotFoundError, 'Block not found', 'Failed to get block header');
+    }
+  }
+
+  // Esplora's GET /block/:hash/status. qbit-electrs serves it; the other backends have no equivalent.
+  private async getBlockStatus(req: Request, res: Response): Promise<void> {
+    if (config.MEMPOOL.BACKEND !== 'esplora') {
+      handleError(req, res, 405, 'Block status lookups require mempool/electrs backend.');
+      return;
+    }
+    if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
+      handleError(req, res, 400, `Invalid block hash`);
+      return;
+    }
+    try {
+      const status = await bitcoinApi.$getBlockStatus(req.params.hash);
+      res.json(status);
+    } catch (e) {
+      // electrs answers any well-formed hash, an unknown one with in_best_chain false, so there's no 404 to pass on
+      handleError(req, res, 500, 'Failed to get block status');
     }
   }
 
   private async getBlockAuditSummary(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     try {
@@ -464,11 +498,11 @@ class BitcoinRoutes {
 
   private async $getBlockTxAuditSummary(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     if (!TXID_REGEX.test(req.params.txid)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
@@ -565,7 +599,7 @@ class BitcoinRoutes {
 
   private async getBlockTransactions(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     try {
@@ -588,16 +622,26 @@ class BitcoinRoutes {
       res.json(transactions);
     } catch (e) {
       loadingIndicators.setProgress('blocktxs-' + req.params.hash, 100);
-      handleError(req, res, 500, 'Failed to get block transactions');
+      handleLookupError(req, res, e, isBlockNotFoundError, 'Block not found', 'Failed to get block transactions');
     }
   }
 
   private async getBlockHeight(req: Request, res: Response) {
+    if (!/^\d+$/.test(req.params.height)) {
+      handleError(req, res, 400, 'Invalid block height');
+      return;
+    }
+    // Core's getblockhash takes a 32-bit height, and no block is higher; qbit-electrs answers 404 for such a height
+    const height = Number(req.params.height);
+    if (height > 0x7fffffff) {
+      handleError(req, res, 404, 'Block not found');
+      return;
+    }
     try {
-      const blockHash = await bitcoinApi.$getBlockHash(parseInt(req.params.height, 10));
+      const blockHash = await bitcoinApi.$getBlockHash(height);
       res.send(blockHash);
     } catch (e) {
-      handleError(req, res, 500, 'Failed to get block at height');
+      handleLookupError(req, res, e, isBlockHeightNotFoundError, 'Block not found', 'Failed to get block at height');
     }
   }
 
@@ -660,6 +704,62 @@ class BitcoinRoutes {
         return;
       }
       handleError(req, res, 500, 'Failed to get address transactions');
+    }
+  }
+
+  // Esplora's address/:address/txs/chain[/:last_seen_txid], the confirmed transactions a page at a
+  // time, newest first. qbit-electrs serves it; the other backends have no equivalent.
+  private async getAddressChainTransactions(req: Request, res: Response): Promise<void> {
+    if (config.MEMPOOL.BACKEND !== 'esplora') {
+      handleError(req, res, 405, 'Address chain transaction lookups require mempool/electrs backend.');
+      return;
+    }
+    if (!ADDRESS_REGEX.test(req.params.address)) {
+      handleError(req, res, 400, `Invalid address`);
+      return;
+    }
+    // $getAddressChainTransactions appends it to the electrs request path
+    const lastSeenTxId = req.params.lastSeenTxId;
+    if (lastSeenTxId !== undefined && !TXID_REGEX.test(lastSeenTxId)) {
+      handleError(req, res, 400, `Invalid transaction ID`);
+      return;
+    }
+
+    try {
+      const transactions = await bitcoinApi.$getAddressChainTransactions(req.params.address, lastSeenTxId);
+      res.json(transactions);
+    } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
+      handleError(req, res, 500, 'Failed to get address chain transactions');
+    }
+  }
+
+  // Esplora's address/:address/txs/mempool, the unconfirmed transactions. qbit-electrs serves it;
+  // the other backends have no equivalent.
+  private async getAddressMempoolTransactions(req: Request, res: Response): Promise<void> {
+    if (config.MEMPOOL.BACKEND !== 'esplora') {
+      handleError(req, res, 405, 'Address mempool transaction lookups require mempool/electrs backend.');
+      return;
+    }
+    if (!ADDRESS_REGEX.test(req.params.address)) {
+      handleError(req, res, 400, `Invalid address`);
+      return;
+    }
+
+    try {
+      const transactions = await bitcoinApi.$getAddressMempoolTransactions(req.params.address);
+      res.json(transactions);
+    } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
+      handleError(req, res, 500, 'Failed to get address mempool transactions');
     }
   }
 
@@ -726,7 +826,7 @@ class BitcoinRoutes {
       return;
     }
     if (!SCRIPT_HASH_REGEX.test(req.params.scripthash)) {
-      handleError(req, res, 501, `Invalid scripthash`);
+      handleError(req, res, 400, `Invalid scripthash`);
       return;
     }
 
@@ -736,6 +836,11 @@ class BitcoinRoutes {
       const addressData = await bitcoinApi.$getScriptHash(electrumScripthash);
       res.json(addressData);
     } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;
@@ -750,7 +855,7 @@ class BitcoinRoutes {
       return;
     }
     if (!SCRIPT_HASH_REGEX.test(req.params.scripthash)) {
-      handleError(req, res, 501, `Invalid scripthash`);
+      handleError(req, res, 400, `Invalid scripthash`);
       return;
     }
 
@@ -761,9 +866,18 @@ class BitcoinRoutes {
       if (req.query.after_txid && typeof req.query.after_txid === 'string') {
         lastTxId = req.query.after_txid;
       }
+      if (lastTxId && !TXID_REGEX.test(lastTxId)) {
+        handleError(req, res, 400, `Invalid transaction ID`);
+        return;
+      }
       const transactions = await bitcoinApi.$getScriptHashTransactions(electrumScripthash, lastTxId);
       res.json(transactions);
     } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;
@@ -778,7 +892,7 @@ class BitcoinRoutes {
       return;
     }
     if (!SCRIPT_HASH_REGEX.test(req.params.scripthash)) {
-      handleError(req, res, 501, `Invalid scripthash`);
+      handleError(req, res, 400, `Invalid scripthash`);
       return;
     }
 
@@ -788,6 +902,11 @@ class BitcoinRoutes {
       const addressData = await bitcoinApi.$getScriptHashUtxos(electrumScripthash);
       res.json(addressData);
     } catch (e) {
+      const lookupError = getAddressLookupError(e);
+      if (lookupError) {
+        handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;
@@ -804,8 +923,14 @@ class BitcoinRoutes {
   }
 
   private async getAddressPrefix(req: Request, res: Response) {
+    // search asks for suggestions for whatever is typed, pool names included,
+    // and nothing but address characters can begin an address
+    if (!ADDRESS_REGEX.test(req.params.prefix)) {
+      res.send([]);
+      return;
+    }
     try {
-      const addressPrefix = await bitcoinApi.$getAddressPrefix(req.params.prefix);
+      const addressPrefix = await bitcoinApi.$getAddressPrefix(lowercaseBech32Prefix(req.params.prefix));
       res.send(addressPrefix);
     } catch (e) {
       handleError(req, res, 500, 'Failed to get address prefix');
@@ -917,7 +1042,7 @@ class BitcoinRoutes {
 
   private async getRawBlock(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     try {
@@ -925,21 +1050,20 @@ class BitcoinRoutes {
       res.setHeader('content-type', 'application/octet-stream');
       res.send(result);
     } catch (e) {
-      const notFound = (e as { response?: { status?: number } })?.response?.status === 404;
-      handleError(req, res, notFound ? 404 : 500, 'Failed to get raw block');
+      handleLookupError(req, res, e, isBlockNotFoundError, 'Failed to get raw block', 'Failed to get raw block');
     }
   }
 
   private async getTxIdsForBlock(req: Request, res: Response) {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     try {
       const result = await bitcoinApi.$getTxIdsForBlock(req.params.hash);
       res.json(result);
     } catch (e) {
-      handleError(req, res, 500, 'Failed to get txids for block');
+      handleLookupError(req, res, e, isBlockNotFoundError, 'Block not found', 'Failed to get txids for block');
     }
   }
 
@@ -947,7 +1071,7 @@ class BitcoinRoutes {
   // etching transactions with it, so without it mints and transfers cannot be decoded.
   private async getTxIdForBlockIndex(req: Request, res: Response): Promise<void> {
     if (!BLOCK_HASH_REGEX.test(req.params.hash)) {
-      handleError(req, res, 501, `Invalid block hash`);
+      handleError(req, res, 400, `Invalid block hash`);
       return;
     }
     const index = /^\d+$/.test(req.params.index) ? Number(req.params.index) : NaN;
@@ -988,7 +1112,7 @@ class BitcoinRoutes {
 
   private async getRbfHistory(req: Request, res: Response) {
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
@@ -1023,7 +1147,7 @@ class BitcoinRoutes {
 
   private async getCachedTx(req: Request, res: Response) {
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
@@ -1040,27 +1164,84 @@ class BitcoinRoutes {
 
   private async getTransactionOutspends(req: Request, res: Response) {
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
       const result = await bitcoinApi.$getOutspends(req.params.txId);
       res.json(result);
     } catch (e) {
-      handleError(req, res, 500, 'Failed to get transaction outspends');
+      handleLookupError(req, res, e, isTxNotFoundError, 'No such mempool or blockchain transaction', 'Failed to get transaction outspends');
+    }
+  }
+
+  // Esplora's GET /tx/:txid/outspend/:vout. The bitcoind backend's $getOutspend reads only the confirmed UTXO set,
+  // and would call an unconfirmed output spent, so under the none and electrum backends this answers as
+  // tx/:txid/outspends does.
+  private async getTransactionOutspend(req: Request, res: Response): Promise<void> {
+    if (!TXID_REGEX.test(req.params.txId)) {
+      handleError(req, res, 400, `Invalid transaction ID`);
+      return;
+    }
+    // qbit-electrs reads the output index as an unsigned 32-bit number
+    const vout = /^\d+$/.test(req.params.vout) ? Number(req.params.vout) : NaN;
+    if (!Number.isSafeInteger(vout) || vout > 0xffffffff) {
+      handleError(req, res, 400, 'Invalid output index');
+      return;
+    }
+    try {
+      // an output with no spend, or no such output, answers { spent: false }, as electrs does
+      const outspend = config.MEMPOOL.BACKEND === 'esplora'
+        ? await bitcoinApi.$getOutspend(req.params.txId, vout)
+        : (await bitcoinApi.$getOutspends(req.params.txId))[vout] ?? { spent: false };
+      res.json(outspend);
+    } catch (e) {
+      handleLookupError(req, res, e, isTxNotFoundError, 'No such mempool or blockchain transaction', 'Failed to get transaction outspend');
     }
   }
 
   private async getTransactionMerkleProof(req: Request, res: Response): Promise<void> {
+    // the esplora and electrum backends get merkle proofs from their indexers; bitcoind has none to give
+    if (config.MEMPOOL.BACKEND === 'none') {
+      handleError(req, res, 405, 'Merkle proofs cannot be used with bitcoind as backend.');
+      return;
+    }
     if (!TXID_REGEX.test(req.params.txId)) {
-      handleError(req, res, 501, `Invalid transaction ID`);
+      handleError(req, res, 400, `Invalid transaction ID`);
       return;
     }
     try {
       const result = await bitcoinApi.$getTransactionMerkleProof(req.params.txId);
       res.json(result);
     } catch (e) {
-      handleError(req, res, 500, e instanceof Error ? e.message : 'Failed to get transaction merkle proof');
+      // electrs answers 404 for a transaction it doesn't know and for one in the mempool
+      handleLookupError(req, res, e, isTxNotFoundError, 'Transaction not found or is unconfirmed', 'Failed to get transaction merkle proof');
+    }
+  }
+
+  // Esplora's GET /tx/:txid/merkleblock-proof: a hex-encoded merkle block whose header is the block's 80-byte
+  // header, without AuxPoW data. qbit-electrs serves it; the other backends have no equivalent.
+  private async getTransactionMerkleBlockProof(req: Request, res: Response): Promise<void> {
+    if (config.MEMPOOL.BACKEND !== 'esplora') {
+      handleError(req, res, 405, 'Merkle block proofs require mempool/electrs backend.');
+      return;
+    }
+    if (!TXID_REGEX.test(req.params.txId)) {
+      handleError(req, res, 400, `Invalid transaction ID`);
+      return;
+    }
+    try {
+      const proof: unknown = await bitcoinApi.$getTransactionMerkleBlockProof(req.params.txId);
+      // Never answer 200 with an empty or non-hex body
+      if (typeof proof !== 'string' || !RAW_HEX_REGEX.test(proof)) {
+        handleError(req, res, 500, 'Failed to get transaction merkleblock proof');
+        return;
+      }
+      res.setHeader('content-type', 'text/plain');
+      res.send(proof);
+    } catch (e) {
+      // electrs answers 404 for a transaction it doesn't know and for one in the mempool
+      handleLookupError(req, res, e, isTxNotFoundError, 'Transaction not found or is unconfirmed', 'Failed to get transaction merkleblock proof');
     }
   }
 

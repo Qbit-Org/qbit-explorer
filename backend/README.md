@@ -99,7 +99,7 @@ Edit `mempool-config.json` as needed.
 
 In particular, make sure:
 - `NETWORK` in `MEMPOOL` matches the qbitd network, for example `mainnet`, `testnet4`, or `regtest`
-- the correct qbitd RPC host, port, and credentials are specified in `CORE_RPC` (the sample uses mainnet port 8352)
+- the correct qbitd RPC host, port, and credentials are specified in `CORE_RPC` (the sample uses mainnet port 8352): a user name and password, or `COOKIE` set to `true` and `COOKIE_PATH` to qbitd's RPC cookie file
 - the correct `BACKEND` is specified in `MEMPOOL`:
   - "esplora" if you're using the qbit-electrs Esplora REST API (`ESPLORA.REST_API_URL`)
   - "electrum" if you're using the qbit-electrs Electrum RPC (`ELECTRUM.HOST`, `ELECTRUM.PORT`, `ELECTRUM.TLS_ENABLED`)
@@ -117,6 +117,7 @@ You can also set env var `MEMPOOL_CONFIG_FILE` to specify a custom config file l
 ```
 MEMPOOL_CONFIG_FILE=/path/to/mempool-config.json npm run start
 ```
+A relative path is resolved against `backend/`, the directory `npm run start` runs in. Earlier versions resolved it against `backend/dist/`: if no file exists at the new location but one does there, the backend reads that one and logs a deprecation warning.
 
 When it's running, you should see it polling the mempool, with output like this:
 

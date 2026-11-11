@@ -1,4 +1,3 @@
-import * as bitcoinjs from 'bitcoinjs-lib';
 import { AbstractBitcoinApi, HealthCheckHost } from './bitcoin-api-abstract-factory';
 import { IBitcoinApi, SubmitPackageResult, TestMempoolAcceptResult } from './bitcoin-api.interface';
 import { IEsploraApi } from './esplora-api.interface';
@@ -7,6 +6,13 @@ import mempool from '../mempool';
 import { TransactionExtended } from '../../mempool.interfaces';
 import transactionUtils from '../transaction-utils';
 import { Common } from '../common';
+
+const MAX_SCRIPT_SIZE = 10_000; // qbit's MAX_SCRIPT_SIZE, as Bitcoin's
+
+// Core's CScript::IsUnspendable: a script that starts with OP_RETURN, or is longer than MAX_SCRIPT_SIZE
+function isUnspendableScript(scriptHex: string): boolean {
+  return scriptHex.startsWith('6a') || scriptHex.length / 2 > MAX_SCRIPT_SIZE;
+}
 
 class BitcoinApi implements AbstractBitcoinApi {
   private rawMempoolCache: IBitcoinApi.RawMempool | null = null;
@@ -92,11 +98,23 @@ class BitcoinApi implements AbstractBitcoinApi {
     return this.bitcoindClient.getRawTransaction(txId, true)
       .then((transaction: IBitcoinApi.Transaction) => {
         return transaction.hex;
+      })
+      .catch((e: Error) => {
+        // as in $getRawTransaction: Core won't return the genesis coinbase as a transaction
+        if (e.message.startsWith('The genesis block coinbase')) {
+          return this.$returnCoinbaseTransactionHex();
+        }
+        throw e;
       });
   }
 
   $getTransactionMerkleProof(txId: string): Promise<IEsploraApi.MerkleProof> {
     throw new Error('Method getTransactionMerkleProof not supported by the Bitcoin RPC API.');
+  }
+
+  // the route answers 405 under the none and electrum backends
+  $getTransactionMerkleBlockProof(): Promise<string> {
+    throw new Error('Method getTransactionMerkleBlockProof not supported by the Bitcoin RPC API.');
   }
 
   $getBlockHeightTip(): Promise<number> {
@@ -152,12 +170,25 @@ class BitcoinApi implements AbstractBitcoinApi {
       .then((block: IBitcoinApi.Block) => BitcoinApi.convertBlock(block));
   }
 
+  // the route answers 405 under the none and electrum backends
+  $getBlockStatus(): Promise<IEsploraApi.BlockStatus> {
+    throw new Error('Method getBlockStatus not supported by the Bitcoin RPC API.');
+  }
+
   $getAddress(address: string): Promise<IEsploraApi.Address> {
     throw new Error('Method getAddress not supported by the Bitcoin RPC API.');
   }
 
   $getAddressTransactions(address: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]> {
     throw new Error('Method getAddressTransactions not supported by the Bitcoin RPC API.');
+  }
+
+  $getAddressChainTransactions(address: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]> {
+    throw new Error('Method getAddressChainTransactions not supported by the Bitcoin RPC API.');
+  }
+
+  $getAddressMempoolTransactions(address: string): Promise<IEsploraApi.Transaction[]> {
+    throw new Error('Method getAddressMempoolTransactions not supported by the Bitcoin RPC API.');
   }
 
   $getAddressUtxos(address: string): Promise<IEsploraApi.UTXO[]> {
@@ -180,7 +211,7 @@ class BitcoinApi implements AbstractBitcoinApi {
     return this.bitcoindClient.getRawMemPool();
   }
 
-  $getAddressPrefix(prefix: string): string[] {
+  async $getAddressPrefix(prefix: string): Promise<string[]> {
     const found: { [address: string]: string } = {};
     const mp = mempool.getMempool();
     for (const tx in mp) {
@@ -236,7 +267,15 @@ class BitcoinApi implements AbstractBitcoinApi {
     const outSpends: IEsploraApi.Outspend[] = [];
     const tx = await this.$getRawTransaction(txId, true, false);
     for (let i = 0; i < tx.vout.length; i++) {
+      // with skipConversion, $getRawTransaction answers with Core's own output fields
+      const script = (tx.vout[i] as unknown as IBitcoinApi.Vout).scriptPubKey?.hex ?? '';
       if (tx.status && tx.status.block_height === 0) {
+        outSpends.push({
+          spent: false
+        });
+      } else if (isUnspendableScript(script)) {
+        // Core never adds an unspendable output to its UTXO set, so gettxout has nothing for it. Nothing can
+        // spend it either, and electrs answers spent false.
         outSpends.push({
           spent: false
         });
@@ -421,6 +460,14 @@ class BitcoinApi implements AbstractBitcoinApi {
             confirmations: blocks.getCurrentBlockHeight() + 1,
             blocktime: block.time }), false);
         })
+    );
+  }
+
+  // the genesis block's coinbase, which Core's getblock returns as part of the block
+  protected $returnCoinbaseTransactionHex(): Promise<string> {
+    return this.bitcoindClient.getBlockHash(0).then((hash: string) =>
+      this.bitcoindClient.getBlock(hash, 2)
+        .then((block: IBitcoinApi.VerboseBlock) => block.tx[0].hex)
     );
   }
 

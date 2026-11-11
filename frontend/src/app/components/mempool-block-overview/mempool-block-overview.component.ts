@@ -39,6 +39,7 @@ export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChang
   poolDirection: string = 'left';
 
   blockSub: Subscription;
+  chainTipSubscription: Subscription;
   firstLoad: boolean = true;
 
   constructor(
@@ -54,6 +55,13 @@ export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChang
       this.chainDirection = ltr ? 'left' : 'right';
       this.poolDirection = ltr ? 'right' : 'left';
       this.cd.markForCheck();
+    });
+    // follow a reorg to a shorter chain down, so that the next block counts as
+    // mined (not the -1 of a network change, as upstream)
+    this.chainTipSubscription = this.stateService.chainTip$.subscribe((height) => {
+      if (height >= 0 && height < this.lastBlockHeight) {
+        this.lastBlockHeight = height;
+      }
     });
   }
 
@@ -124,6 +132,7 @@ export class MempoolBlockOverviewComponent implements OnInit, OnDestroy, OnChang
     this.blockGraph?.destroy();
     this.blockSub.unsubscribe();
     this.timeLtrSubscription.unsubscribe();
+    this.chainTipSubscription.unsubscribe();
     this.websocketService.stopTrackMempoolBlock();
   }
 

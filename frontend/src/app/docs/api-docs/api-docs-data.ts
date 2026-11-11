@@ -313,7 +313,8 @@ export const wsApiDocsData = [
     description: {
       default: 'Subscribe to a single address to receive live updates on new transactions having that address in input or output. <code>address-transactions</code> field contains new mempool transactions, and <code>block-transactions</code> contains new confirmed transactions.'
     },
-    payload: '{ "track-address": "bc1qeldw4mqns26wew8swgpkt3fs364w3ehs046w2f" }',
+    payload: '{ "track-address": "qb1zzud7tnvrn2jwm3kf07v2e2sewfrzcgja592hyyyz6hnlgtmjuwps3gpfcs" }',
+    payloadTestnet: '{ "track-address": "tq1zmmyaxttf66n3hj33wu7e3y8xac0pqa4xmlkh7sm4u2kg4857yqyspypnv8" }',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
     showJsExamples: false,
     codeExample: {
@@ -327,88 +328,81 @@ export const wsApiDocsData = [
           response: `{
   "block-transactions": [
     {
-      "txid": "9d3ea0d131c45450c135d549b62032019bc47a80368e14edc72caf38f5a88033",
-      "version": 1,
-      "locktime": 0,
+      "txid": "8c43bfe61fe2a3aa14ff1e77e27b15e9e1c87d3763e9abb152bf26e6786d1b17",
+      "version": 2,
+      "locktime": 169726,
       "vin": [
         {
-          "txid": "69da555a9c69788a3a081958457894e56b1ee6766bc72cecf881b1b4f327f78b",
-          "vout": 0,
-          "prevout": {
-            "scriptpubkey": "a914c9848245ae4f5d5934b5cbdfb79e04cdd337470b87",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 c9848245ae4f5d5934b5cbdfb79e04cdd337470b OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3L4YUynB4X44rJBY9CmiLMN8Wjti49JCYB",
-            "value": 24962957
-          },
-          "scriptsig": "0048304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f0147304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e014c695221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_72 304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f01 OP_PUSHBYTES_71 304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e01 OP_PUSHDATA1 5221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c0 OP_PUSHBYTES_33 03556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb695 OP_PUSHBYTES_33 031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb OP_PUSHNUM_3 OP_CHECKMULTISIG"
-        },
-        ...
-        {
-          "txid": "43852d32c7ae6d362d446d090daa4d389f78ec77e6693f9248cd924dc0b1ecc3",
+          "txid": "e243f58bb12e70b1513b967bfbd186c557fc8156b0d69629a83af8bf162426ba",
           "vout": 1,
           "prevout": {
-            "scriptpubkey": "a914a3aff5f5765f167c1582fd85517ddde83174118187",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 a3aff5f5765f167c1582fd85517ddde831741181 OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3GcWrnGFoNzbn1KaiP5czS5xPELdWcgDX2",
-            "value": 1719827
+            "scriptpubkey": "5220e464c96a52f55f050aca4689d6d5893440ec1f806e650ada8dbfc2a7f4cb451d",
+            "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 e464c96a52f55f050aca4689d6d5893440ec1f806e650ada8dbfc2a7f4cb451d",
+            "scriptpubkey_type": "v2_p2mr",
+            "scriptpubkey_address": "qb1zu3jvj6jj740s2zk2g6yad4vfx3qwc8uqdejs4k5dhlp20axtg5ws0uvarv",
+            "value": 9200638
           },
-          "scriptsig": "0047304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201483045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff144014c69522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_71 304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201 OP_PUSHBYTES_72 3045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff14401 OP_PUSHDATA1 522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
+          "scriptsig": "",
+          "scriptsig_asm": "",
+          "witness": [
+            "2b3b51684081d227f7bfaede9c74a7e14880f4a4519599c885acc40d842cf7c8...",
+            "205d502f3fbaa9cae26a73050b15690de11ee8fd8da969e467b87b1912aa39faf0b3",
+            "c1"
+          ],
           "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 03650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b28 OP_PUSHBYTES_33 02510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a OP_PUSHBYTES_33 02985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f8 OP_PUSHNUM_3 OP_CHECKMULTISIG"
+          "sequence": 4294967293,
+          "inner_witnessscript_asm": "OP_PUSHBYTES_32 5d502f3fbaa9cae26a73050b15690de11ee8fd8da969e467b87b1912aa39faf0 OP_CHECKSIGPQC"
         }
       ],
       "vout": [
         {
-          "scriptpubkey": "0014292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_type": "v0_p2wpkh",
-          "scriptpubkey_address": "bc1q9yhuu4yty2xd8hmrxnw4yhavvtn7khm62uw38p",
-          "value": 57000
+          "scriptpubkey": "6a4dc8137b2270223a22716269742d3230222c226f70223a226d696e74222c22...",
+          "scriptpubkey_asm": "OP_RETURN OP_PUSHDATA2 7b2270223a22716269742d3230222c226f70223a226d696e74222c227469636b...",
+          "scriptpubkey_type": "op_return",
+          "value": 0
         },
-        ...
         {
-          "scriptpubkey": "0020e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_32 e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_type": "v0_p2wsh",
-          "scriptpubkey_address": "bc1quhruqrghgcca950rvhtrg7cpd7u8k6svpzgzmrjy8xyukacl5lkq0r8l2d",
-          "value": 17343523
+          "scriptpubkey": "5220171be5cd839aa4edc6c97f98acaa1972462c225da155721082d5e7f42f72e383",
+          "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 171be5cd839aa4edc6c97f98acaa1972462c225da155721082d5e7f42f72e383",
+          "scriptpubkey_type": "v2_p2mr",
+          "scriptpubkey_address": "qb1zzud7tnvrn2jwm3kf07v2e2sewfrzcgja592hyyyz6hnlgtmjuwps3gpfcs",
+          "value": 700000
+        },
+        {
+          "scriptpubkey": "5220e464c96a52f55f050aca4689d6d5893440ec1f806e650ada8dbfc2a7f4cb451d",
+          "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 e464c96a52f55f050aca4689d6d5893440ec1f806e650ada8dbfc2a7f4cb451d",
+          "scriptpubkey_type": "v2_p2mr",
+          "scriptpubkey_address": "qb1zu3jvj6jj740s2zk2g6yad4vfx3qwc8uqdejs4k5dhlp20axtg5ws0uvarv",
+          "value": 8482758
         }
       ],
-      "size": 5514,
-      "weight": 22056,
-      "sigops": 208,
-      "fee": 44000,
+      "size": 8939,
+      "weight": 8939,
+      "vsize": 8939,
+      "sigops": 0,
+      "fee": 17880,
       "status": {
         "confirmed": true,
-        "block_height": 875602,
-        "block_hash": "000000000000000000016c0639b6c1a34d6659c231aa2de5849ab3377ed75020",
-        "block_time": 1734704791
+        "block_height": 169728,
+        "block_hash": "158bc4ec23d2555251ea2f4642ed82dbf94a880bd3777abd23b7e39001660f67",
+        "block_time": 1794336387
       },
-      "order": 864069877,
-      "vsize": 5514,
-      "adjustedVsize": 5514,
-      "feePerVsize": 7.979688066739209,
-      "adjustedFeePerVsize": 7.979688066739209,
-      "effectiveFeePerVsize": 7.979688066739209,
-      "firstSeen": 1734704590,
-      "inputs": [],
+      "order": 387673464,
+      "adjustedVsize": 8939,
+      "feePerVsize": 2.00022373867323,
+      "adjustedFeePerVsize": 2.00022373867323,
+      "effectiveFeePerVsize": 2.00022373867323,
+      "firstSeen": 1794336380,
+      "uid": 3,
       "cpfpDirty": false,
       "ancestors": [],
       "descendants": [],
       "bestDescendant": null,
       "position": {
         "block": 0,
-        "vsize": 191567
+        "vsize": 83320.5
       },
-      "flags": 1099511659526
+      "flags": 16809993
     }
   ]
 }`
@@ -420,278 +414,81 @@ export const wsApiDocsData = [
           response: `{
   "block-transactions": [
     {
-      "txid": "9d3ea0d131c45450c135d549b62032019bc47a80368e14edc72caf38f5a88033",
-      "version": 1,
-      "locktime": 0,
+      "txid": "5e914ae59827ffc237165b22e3b926758e05f60775a37f9df64783139f685b3b",
+      "version": 2,
+      "locktime": 202431,
       "vin": [
         {
-          "txid": "69da555a9c69788a3a081958457894e56b1ee6766bc72cecf881b1b4f327f78b",
-          "vout": 0,
-          "prevout": {
-            "scriptpubkey": "a914c9848245ae4f5d5934b5cbdfb79e04cdd337470b87",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 c9848245ae4f5d5934b5cbdfb79e04cdd337470b OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3L4YUynB4X44rJBY9CmiLMN8Wjti49JCYB",
-            "value": 24962957
-          },
-          "scriptsig": "0048304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f0147304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e014c695221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_72 304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f01 OP_PUSHBYTES_71 304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e01 OP_PUSHDATA1 5221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c0 OP_PUSHBYTES_33 03556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb695 OP_PUSHBYTES_33 031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb OP_PUSHNUM_3 OP_CHECKMULTISIG"
-        },
-        ...
-        {
-          "txid": "43852d32c7ae6d362d446d090daa4d389f78ec77e6693f9248cd924dc0b1ecc3",
+          "txid": "56258a216f705a61820a6fa9b05c1e4c32c5962560f403233e883e421ed75e0f",
           "vout": 1,
           "prevout": {
-            "scriptpubkey": "a914a3aff5f5765f167c1582fd85517ddde83174118187",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 a3aff5f5765f167c1582fd85517ddde831741181 OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3GcWrnGFoNzbn1KaiP5czS5xPELdWcgDX2",
-            "value": 1719827
+            "scriptpubkey": "522023c72d9d72aeb3385c378c929b218dd616b3088630d6a22cfc07c91426f1b81c",
+            "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 23c72d9d72aeb3385c378c929b218dd616b3088630d6a22cfc07c91426f1b81c",
+            "scriptpubkey_type": "v2_p2mr",
+            "scriptpubkey_address": "tq1zy0rjm8tj46enshph3jffkgvd6cttxzyxxrt2yt8uqly3gfh3hqwqqkw8as",
+            "value": 6199992272
           },
-          "scriptsig": "0047304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201483045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff144014c69522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_71 304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201 OP_PUSHBYTES_72 3045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff14401 OP_PUSHDATA1 522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
+          "scriptsig": "",
+          "scriptsig_asm": "",
+          "witness": [
+            "92817a68783ff1de63ceb1a62a2fb770cf7d08e41e5917320c85123704d2d33d...",
+            "20e183fb4575a25038c5a1cf4ac0dbbb013fe42bfc01080db45cf0b93118a2a47eb3",
+            "c1"
+          ],
           "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 03650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b28 OP_PUSHBYTES_33 02510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a OP_PUSHBYTES_33 02985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f8 OP_PUSHNUM_3 OP_CHECKMULTISIG"
+          "sequence": 4294967293,
+          "inner_witnessscript_asm": "OP_PUSHBYTES_32 e183fb4575a25038c5a1cf4ac0dbbb013fe42bfc01080db45cf0b93118a2a47e OP_CHECKSIGPQC"
         }
       ],
       "vout": [
         {
-          "scriptpubkey": "0014292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_type": "v0_p2wpkh",
-          "scriptpubkey_address": "bc1q9yhuu4yty2xd8hmrxnw4yhavvtn7khm62uw38p",
-          "value": 57000
+          "scriptpubkey": "5220b445fb0581c4c2fdfa057790604da9e7f5f77842b4ab27ee88010f76d3d2a658",
+          "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 b445fb0581c4c2fdfa057790604da9e7f5f77842b4ab27ee88010f76d3d2a658",
+          "scriptpubkey_type": "v2_p2mr",
+          "scriptpubkey_address": "tq1zk3zlkpvpcnp0m7s9w7gxqndful6lw7zzkj4j0m5gqy8hd57j5evq4v7t3f",
+          "value": 6099991306
         },
-        ...
         {
-          "scriptpubkey": "0020e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_32 e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_type": "v0_p2wsh",
-          "scriptpubkey_address": "bc1quhruqrghgcca950rvhtrg7cpd7u8k6svpzgzmrjy8xyukacl5lkq0r8l2d",
-          "value": 17343523
+          "scriptpubkey": "5220dec9d32d69d6a71bca31773d9890e6ee1e1076a6dfed7f4375e2ac8a9e9e2009",
+          "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 dec9d32d69d6a71bca31773d9890e6ee1e1076a6dfed7f4375e2ac8a9e9e2009",
+          "scriptpubkey_type": "v2_p2mr",
+          "scriptpubkey_address": "tq1zmmyaxttf66n3hj33wu7e3y8xac0pqa4xmlkh7sm4u2kg4857yqyspypnv8",
+          "value": 100000000
         }
       ],
-      "size": 5514,
-      "weight": 22056,
-      "sigops": 208,
-      "fee": 44000,
+      "size": 3860,
+      "weight": 3860,
+      "vsize": 3860,
+      "sigops": 0,
+      "fee": 966,
       "status": {
         "confirmed": true,
-        "block_height": 875602,
-        "block_hash": "000000000000000000016c0639b6c1a34d6659c231aa2de5849ab3377ed75020",
-        "block_time": 1734704791
+        "block_height": 202432,
+        "block_hash": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+        "block_time": 1793838527
       },
-      "order": 864069877,
-      "vsize": 5514,
-      "adjustedVsize": 5514,
-      "feePerVsize": 7.979688066739209,
-      "adjustedFeePerVsize": 7.979688066739209,
-      "effectiveFeePerVsize": 7.979688066739209,
-      "firstSeen": 1734704590,
-      "inputs": [],
+      "order": 995846303,
+      "adjustedVsize": 3860,
+      "feePerVsize": 0.25025906735751297,
+      "adjustedFeePerVsize": 0.25025906735751297,
+      "effectiveFeePerVsize": 0.25025906735751297,
+      "firstSeen": 1793838503,
+      "uid": 1,
       "cpfpDirty": false,
       "ancestors": [],
       "descendants": [],
       "bestDescendant": null,
       "position": {
         "block": 0,
-        "vsize": 191567
+        "vsize": 5890
       },
-      "flags": 1099511659526
+      "flags": 32777
     }
   ]
 }`
         },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "block-transactions": [
-    {
-      "txid": "9d3ea0d131c45450c135d549b62032019bc47a80368e14edc72caf38f5a88033",
-      "version": 1,
-      "locktime": 0,
-      "vin": [
-        {
-          "txid": "69da555a9c69788a3a081958457894e56b1ee6766bc72cecf881b1b4f327f78b",
-          "vout": 0,
-          "prevout": {
-            "scriptpubkey": "a914c9848245ae4f5d5934b5cbdfb79e04cdd337470b87",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 c9848245ae4f5d5934b5cbdfb79e04cdd337470b OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3L4YUynB4X44rJBY9CmiLMN8Wjti49JCYB",
-            "value": 24962957
-          },
-          "scriptsig": "0048304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f0147304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e014c695221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_72 304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f01 OP_PUSHBYTES_71 304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e01 OP_PUSHDATA1 5221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c0 OP_PUSHBYTES_33 03556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb695 OP_PUSHBYTES_33 031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb OP_PUSHNUM_3 OP_CHECKMULTISIG"
-        },
-        ...
-        {
-          "txid": "43852d32c7ae6d362d446d090daa4d389f78ec77e6693f9248cd924dc0b1ecc3",
-          "vout": 1,
-          "prevout": {
-            "scriptpubkey": "a914a3aff5f5765f167c1582fd85517ddde83174118187",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 a3aff5f5765f167c1582fd85517ddde831741181 OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3GcWrnGFoNzbn1KaiP5czS5xPELdWcgDX2",
-            "value": 1719827
-          },
-          "scriptsig": "0047304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201483045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff144014c69522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_71 304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201 OP_PUSHBYTES_72 3045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff14401 OP_PUSHDATA1 522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
-          "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 03650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b28 OP_PUSHBYTES_33 02510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a OP_PUSHBYTES_33 02985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f8 OP_PUSHNUM_3 OP_CHECKMULTISIG"
-        }
-      ],
-      "vout": [
-        {
-          "scriptpubkey": "0014292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_type": "v0_p2wpkh",
-          "scriptpubkey_address": "bc1q9yhuu4yty2xd8hmrxnw4yhavvtn7khm62uw38p",
-          "value": 57000
-        },
-        ...
-        {
-          "scriptpubkey": "0020e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_32 e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_type": "v0_p2wsh",
-          "scriptpubkey_address": "bc1quhruqrghgcca950rvhtrg7cpd7u8k6svpzgzmrjy8xyukacl5lkq0r8l2d",
-          "value": 17343523
-        }
-      ],
-      "size": 5514,
-      "weight": 22056,
-      "sigops": 208,
-      "fee": 44000,
-      "status": {
-        "confirmed": true,
-        "block_height": 875602,
-        "block_hash": "000000000000000000016c0639b6c1a34d6659c231aa2de5849ab3377ed75020",
-        "block_time": 1734704791
-      },
-      "order": 864069877,
-      "vsize": 5514,
-      "adjustedVsize": 5514,
-      "feePerVsize": 7.979688066739209,
-      "adjustedFeePerVsize": 7.979688066739209,
-      "effectiveFeePerVsize": 7.979688066739209,
-      "firstSeen": 1734704590,
-      "inputs": [],
-      "cpfpDirty": false,
-      "ancestors": [],
-      "descendants": [],
-      "bestDescendant": null,
-      "position": {
-        "block": 0,
-        "vsize": 191567
-      },
-      "flags": 1099511659526
-    }
-  ]
-}`
-        },
-        codeSampleLiquid: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "block-transactions": [
-    {
-      "txid": "9d3ea0d131c45450c135d549b62032019bc47a80368e14edc72caf38f5a88033",
-      "version": 1,
-      "locktime": 0,
-      "vin": [
-        {
-          "txid": "69da555a9c69788a3a081958457894e56b1ee6766bc72cecf881b1b4f327f78b",
-          "vout": 0,
-          "prevout": {
-            "scriptpubkey": "a914c9848245ae4f5d5934b5cbdfb79e04cdd337470b87",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 c9848245ae4f5d5934b5cbdfb79e04cdd337470b OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3L4YUynB4X44rJBY9CmiLMN8Wjti49JCYB",
-            "value": 24962957
-          },
-          "scriptsig": "0048304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f0147304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e014c695221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_72 304502210099219ee0cd5da341650078e3c63885b3cc2211069f2551cf436e0100f421e1760220349b4ec284255b458d6da539fa17314e8330459e0a653c254f775d4ec8f32b3f01 OP_PUSHBYTES_71 304402203a8353c5ee76a2e266432e5f993f882e05725297e64c0833cf44719f7dda8d3b022058a2f72e7739efd21657b4943cac60a0a3c749e712787f0e85726da4c3adcf8e01 OP_PUSHDATA1 5221027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c02103556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb69521031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb53ae",
-          "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 027f2a0df8e86535d08ca3e766a178f90c813d2dd1d55b0166e82518efbffb18c0 OP_PUSHBYTES_33 03556a35844b517e2fc8216701e2e0a64dbcbe62ad420ac6dd73dc79e69efeb695 OP_PUSHBYTES_33 031ef21bd55171032b7aec21ec82932735fb986f1d4d8611feee62ab38acf4a6bb OP_PUSHNUM_3 OP_CHECKMULTISIG"
-        },
-        ...
-        {
-          "txid": "43852d32c7ae6d362d446d090daa4d389f78ec77e6693f9248cd924dc0b1ecc3",
-          "vout": 1,
-          "prevout": {
-            "scriptpubkey": "a914a3aff5f5765f167c1582fd85517ddde83174118187",
-            "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 a3aff5f5765f167c1582fd85517ddde831741181 OP_EQUAL",
-            "scriptpubkey_type": "p2sh",
-            "scriptpubkey_address": "3GcWrnGFoNzbn1KaiP5czS5xPELdWcgDX2",
-            "value": 1719827
-          },
-          "scriptsig": "0047304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201483045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff144014c69522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
-          "scriptsig_asm": "OP_0 OP_PUSHBYTES_71 304402205f83d22a0476158aa0986682c96ce2b2dab26c814968dba62905cdfeef1b3ac7022059438a3439bb18bd49242010c8a276ea6f1810d523042e679fa6679d60e89e0201 OP_PUSHBYTES_72 3045022100eb085df09e0fb4894090a5f39b9f2188392f7ac2847ed8255629baffc7371f170220120463b91d6c4bb8968fb3eda9012b88d13d8ca71de28e7a64b1dd88282ff14401 OP_PUSHDATA1 522103650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b282102510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a2102985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f853ae",
-          "is_coinbase": false,
-          "sequence": 4294967295,
-          "inner_redeemscript_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_33 03650083cbc9cd1da1224e0780bce1ee8abd5150c5252defd0edeccd3521610b28 OP_PUSHBYTES_33 02510ab30a6a97464ef0d61f71ec8b1d2325f12934ff15ba73579bfd0ac5f4fc1a OP_PUSHBYTES_33 02985b3be77f56a9a29c5f68d3c893d6c4d76ec8c07792f0291d375c29b71ee2f8 OP_PUSHNUM_3 OP_CHECKMULTISIG"
-        }
-      ],
-      "vout": [
-        {
-          "scriptpubkey": "0014292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 292fce548b228cd3df6334dd525fac62e7eb5f7a",
-          "scriptpubkey_type": "v0_p2wpkh",
-          "scriptpubkey_address": "bc1q9yhuu4yty2xd8hmrxnw4yhavvtn7khm62uw38p",
-          "value": 57000
-        },
-        ...
-        {
-          "scriptpubkey": "0020e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_32 e5c7c00d174631d2d1e365d6347b016fb87b6a0c08902d8e443989cb771fa7ec",
-          "scriptpubkey_type": "v0_p2wsh",
-          "scriptpubkey_address": "bc1quhruqrghgcca950rvhtrg7cpd7u8k6svpzgzmrjy8xyukacl5lkq0r8l2d",
-          "value": 17343523
-        }
-      ],
-      "size": 5514,
-      "weight": 22056,
-      "sigops": 208,
-      "fee": 44000,
-      "status": {
-        "confirmed": true,
-        "block_height": 875602,
-        "block_hash": "000000000000000000016c0639b6c1a34d6659c231aa2de5849ab3377ed75020",
-        "block_time": 1734704791
-      },
-      "order": 864069877,
-      "vsize": 5514,
-      "adjustedVsize": 5514,
-      "feePerVsize": 7.979688066739209,
-      "adjustedFeePerVsize": 7.979688066739209,
-      "effectiveFeePerVsize": 7.979688066739209,
-      "firstSeen": 1734704590,
-      "inputs": [],
-      "cpfpDirty": false,
-      "ancestors": [],
-      "descendants": [],
-      "bestDescendant": null,
-      "position": {
-        "block": 0,
-        "vsize": 191567
-      },
-      "flags": 1099511659526
-    }
-  ]
-}`
-        }
+        codeSampleSignet: emptyCodeSample,
+        codeSampleLiquid: emptyCodeSample,
       }
     }
   },
@@ -701,12 +498,18 @@ export const wsApiDocsData = [
     fragment: 'track-addresses',
     title: 'Track Addresses',
     description: {
-      default: 'Subscribe to multiple addresses to receive live updates on new transactions having these addresses in input or output. Limits on the maximum number of tracked addresses may apply on this instance.'
+      default: 'Subscribe to multiple addresses to receive live updates on new transactions having these addresses in input or output. <code>multi-address-transactions</code> is keyed by address, and lists only the addresses that have new transactions. A connection can track up to <code>MEMPOOL.MAX_TRACKED_ADDRESSES</code> addresses, 1 by default; a longer list gets a <code>track-addresses-error</code> instead.'
     },
     payload: `{
   "track-addresses": [
-    "bc1qeldw4mqns26wew8swgpkt3fs364w3ehs046w2f",
-    "bc1qjj09853tfpztjgrk4jeyzj4ml59fv9cmslv3c4gxxf57u0k3kxmqllx29y"
+    "qb1zzud7tnvrn2jwm3kf07v2e2sewfrzcgja592hyyyz6hnlgtmjuwps3gpfcs",
+    "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh"
+  ]
+}`,
+    payloadTestnet: `{
+  "track-addresses": [
+    "tq1zmmyaxttf66n3hj33wu7e3y8xac0pqa4xmlkh7sm4u2kg4857yqyspypnv8",
+    "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng"
   ]
 }`,
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -721,73 +524,84 @@ export const wsApiDocsData = [
           curl: [],
           response: `{
   "multi-address-transactions": {
-    "bc1qjj09853tfpztjgrk4jeyzj4ml59fv9cmslv3c4gxxf57u0k3kxmqllx29y": {
-      "mempool": [],
-      "confirmed": [
+    "qb1zzud7tnvrn2jwm3kf07v2e2sewfrzcgja592hyyyz6hnlgtmjuwps3gpfcs": {
+      "mempool": [
         {
-          "txid": "1e4764f908f19b74284a889478b95d013c1bd36dc832dcb7eb36fe1801fed404",
+          "txid": "eb2c41a5d93dc1feb32305154836de769b40a621047b3a8c625feaac5a4388ae",
           "version": 2,
-          "locktime": 875625,
+          "locktime": 169731,
           "vin": [
             {
-              "txid": "ce361fed5996aec6d440556383164e9e4e5b8be8c2a213c4b36ae711efda3b3f",
-              "vout": 1,
+              "txid": "f1d0ab221cb6cfb032bad1b9282807fc70847da34551c1476281890fb71f02fe",
+              "vout": 0,
               "prevout": {
-                "scriptpubkey": "0014257ba1ebc987831dbe8ee560419282483bf68588",
-                "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 257ba1ebc987831dbe8ee560419282483bf68588",
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "bc1qy4a6r67fs7p3m05wu4syry5zfqaldpvg8vsqzz",
-                "value": 1831200
+                "scriptpubkey": "5220380bd9bfe003ff22cad11037cf100802506796b67a7609b498872d1e4d5ee706",
+                "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 380bd9bfe003ff22cad11037cf100802506796b67a7609b498872d1e4d5ee706",
+                "scriptpubkey_type": "v2_p2mr",
+                "scriptpubkey_address": "qb1z8q9an0lqq0lj9jk3zqmu7yqgqfgx094k0fmqndycsuk3un27uurqf7l3cv",
+                "value": 9254278
               },
               "scriptsig": "",
               "scriptsig_asm": "",
               "witness": [
-                "3044022028363f66fe74bdddf46d204cbf9844d4ef99d6fcb801f93f3ea1666ff51514340220058eb99790dd002323bd12afa0b62903cf72465d48c40cb11366dfa4eebbd87a01",
-                "020e625e13a81995f29ee828e31500b8454bd0b115f84dfa07d994eecd733efffa"
+                "254068f23d37f95f7020e5c1620bc70f483f885d348e28edb314ecc852eea78f...",
+                "20e773c7ac40467ea2f9d81299557b531dc24e3b83e9fb1ece9c1be0c58ad293c1b3",
+                "c1"
               ],
               "is_coinbase": false,
-              "sequence": 4294967294
-            },
-            ...
+              "sequence": 4294967293,
+              "inner_witnessscript_asm": "OP_PUSHBYTES_32 e773c7ac40467ea2f9d81299557b531dc24e3b83e9fb1ece9c1be0c58ad293c1 OP_CHECKSIGPQC"
+            }
           ],
           "vout": [
             {
-              "scriptpubkey": "0020949e53d22b4844b92076acb2414abbfd0a96171b87d91c55063269ee3ed1b1b6",
-              "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_32 949e53d22b4844b92076acb2414abbfd0a96171b87d91c55063269ee3ed1b1b6",
-              "scriptpubkey_type": "v0_p2wsh",
-              "scriptpubkey_address": "bc1qjj09853tfpztjgrk4jeyzj4ml59fv9cmslv3c4gxxf57u0k3kxmqllx29y",
-              "value": 2546637
+              "scriptpubkey": "6a4dc8137b2270223a22716269742d3230222c226f70223a226d696e74222c22...",
+              "scriptpubkey_asm": "OP_RETURN OP_PUSHDATA2 7b2270223a22716269742d3230222c226f70223a226d696e74222c227469636b...",
+              "scriptpubkey_type": "op_return",
+              "value": 0
+            },
+            {
+              "scriptpubkey": "5220380bd9bfe003ff22cad11037cf100802506796b67a7609b498872d1e4d5ee706",
+              "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 380bd9bfe003ff22cad11037cf100802506796b67a7609b498872d1e4d5ee706",
+              "scriptpubkey_type": "v2_p2mr",
+              "scriptpubkey_address": "qb1z8q9an0lqq0lj9jk3zqmu7yqgqfgx094k0fmqndycsuk3un27uurqf7l3cv",
+              "value": 8536398
+            },
+            {
+              "scriptpubkey": "5220171be5cd839aa4edc6c97f98acaa1972462c225da155721082d5e7f42f72e383",
+              "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 171be5cd839aa4edc6c97f98acaa1972462c225da155721082d5e7f42f72e383",
+              "scriptpubkey_type": "v2_p2mr",
+              "scriptpubkey_address": "qb1zzud7tnvrn2jwm3kf07v2e2sewfrzcgja592hyyyz6hnlgtmjuwps3gpfcs",
+              "value": 700000
             }
           ],
-          "size": 351,
-          "weight": 756,
-          "sigops": 2,
-          "fee": 4206,
+          "size": 8939,
+          "weight": 8939,
+          "vsize": 8939,
+          "sigops": 0,
+          "fee": 17880,
           "status": {
-            "confirmed": true,
-            "block_height": 875626,
-            "block_hash": "0000000000000000000086de1f4815ff0f7f0411d846301c5efa1e437130dc22",
-            "block_time": 1734720142
+            "confirmed": false
           },
-          "order": 81067521,
-          "vsize": 189,
-          "adjustedVsize": 189,
-          "feePerVsize": 22.253968253968253,
-          "adjustedFeePerVsize": 22.253968253968253,
-          "effectiveFeePerVsize": 22.253968253968253,
-          "firstSeen": 1734719830,
-          "inputs": [],
+          "order": 2928165722,
+          "adjustedVsize": 8939,
+          "feePerVsize": 2.00022373867323,
+          "adjustedFeePerVsize": 2.00022373867323,
+          "effectiveFeePerVsize": 2.00022373867323,
+          "firstSeen": 1794336645,
+          "uid": 22,
           "cpfpDirty": false,
           "ancestors": [],
           "descendants": [],
           "bestDescendant": null,
           "position": {
             "block": 0,
-            "vsize": 134866.5
+            "vsize": 81778.5
           },
-          "flags": 1099511640074
+          "flags": 16809993
         }
       ],
+      "confirmed": [],
       "removed": []
     }
   }
@@ -799,324 +613,85 @@ export const wsApiDocsData = [
           curl: [],
           response: `{
   "multi-address-transactions": {
-    "bc1qjj09853tfpztjgrk4jeyzj4ml59fv9cmslv3c4gxxf57u0k3kxmqllx29y": {
-      "mempool": [],
-      "confirmed": [
+    "tq1zmmyaxttf66n3hj33wu7e3y8xac0pqa4xmlkh7sm4u2kg4857yqyspypnv8": {
+      "mempool": [
         {
-          "txid": "1e4764f908f19b74284a889478b95d013c1bd36dc832dcb7eb36fe1801fed404",
+          "txid": "5e914ae59827ffc237165b22e3b926758e05f60775a37f9df64783139f685b3b",
           "version": 2,
-          "locktime": 875625,
+          "locktime": 202431,
           "vin": [
             {
-              "txid": "ce361fed5996aec6d440556383164e9e4e5b8be8c2a213c4b36ae711efda3b3f",
+              "txid": "56258a216f705a61820a6fa9b05c1e4c32c5962560f403233e883e421ed75e0f",
               "vout": 1,
               "prevout": {
-                "scriptpubkey": "0014257ba1ebc987831dbe8ee560419282483bf68588",
-                "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 257ba1ebc987831dbe8ee560419282483bf68588",
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "bc1qy4a6r67fs7p3m05wu4syry5zfqaldpvg8vsqzz",
-                "value": 1831200
+                "scriptpubkey": "522023c72d9d72aeb3385c378c929b218dd616b3088630d6a22cfc07c91426f1b81c",
+                "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 23c72d9d72aeb3385c378c929b218dd616b3088630d6a22cfc07c91426f1b81c",
+                "scriptpubkey_type": "v2_p2mr",
+                "scriptpubkey_address": "tq1zy0rjm8tj46enshph3jffkgvd6cttxzyxxrt2yt8uqly3gfh3hqwqqkw8as",
+                "value": 6199992272
               },
               "scriptsig": "",
               "scriptsig_asm": "",
               "witness": [
-                "3044022028363f66fe74bdddf46d204cbf9844d4ef99d6fcb801f93f3ea1666ff51514340220058eb99790dd002323bd12afa0b62903cf72465d48c40cb11366dfa4eebbd87a01",
-                "020e625e13a81995f29ee828e31500b8454bd0b115f84dfa07d994eecd733efffa"
+                "92817a68783ff1de63ceb1a62a2fb770cf7d08e41e5917320c85123704d2d33d...",
+                "20e183fb4575a25038c5a1cf4ac0dbbb013fe42bfc01080db45cf0b93118a2a47eb3",
+                "c1"
               ],
               "is_coinbase": false,
-              "sequence": 4294967294
-            },
-            ...
-          ],
-          "vout": [
-            {
-              "scriptpubkey": "0020949e53d22b4844b92076acb2414abbfd0a96171b87d91c55063269ee3ed1b1b6",
-              "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_32 949e53d22b4844b92076acb2414abbfd0a96171b87d91c55063269ee3ed1b1b6",
-              "scriptpubkey_type": "v0_p2wsh",
-              "scriptpubkey_address": "bc1qjj09853tfpztjgrk4jeyzj4ml59fv9cmslv3c4gxxf57u0k3kxmqllx29y",
-              "value": 2546637
-            }
-          ],
-          "size": 351,
-          "weight": 756,
-          "sigops": 2,
-          "fee": 4206,
-          "status": {
-            "confirmed": true,
-            "block_height": 875626,
-            "block_hash": "0000000000000000000086de1f4815ff0f7f0411d846301c5efa1e437130dc22",
-            "block_time": 1734720142
-          },
-          "order": 81067521,
-          "vsize": 189,
-          "adjustedVsize": 189,
-          "feePerVsize": 22.253968253968253,
-          "adjustedFeePerVsize": 22.253968253968253,
-          "effectiveFeePerVsize": 22.253968253968253,
-          "firstSeen": 1734719830,
-          "inputs": [],
-          "cpfpDirty": false,
-          "ancestors": [],
-          "descendants": [],
-          "bestDescendant": null,
-          "position": {
-            "block": 0,
-            "vsize": 134866.5
-          },
-          "flags": 1099511640074
-        }
-      ],
-      "removed": []
-    }
-  }
-}`
-        },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "multi-address-transactions": {
-    "bc1qjj09853tfpztjgrk4jeyzj4ml59fv9cmslv3c4gxxf57u0k3kxmqllx29y": {
-      "mempool": [],
-      "confirmed": [
-        {
-          "txid": "1e4764f908f19b74284a889478b95d013c1bd36dc832dcb7eb36fe1801fed404",
-          "version": 2,
-          "locktime": 875625,
-          "vin": [
-            {
-              "txid": "ce361fed5996aec6d440556383164e9e4e5b8be8c2a213c4b36ae711efda3b3f",
-              "vout": 1,
-              "prevout": {
-                "scriptpubkey": "0014257ba1ebc987831dbe8ee560419282483bf68588",
-                "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 257ba1ebc987831dbe8ee560419282483bf68588",
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "bc1qy4a6r67fs7p3m05wu4syry5zfqaldpvg8vsqzz",
-                "value": 1831200
-              },
-              "scriptsig": "",
-              "scriptsig_asm": "",
-              "witness": [
-                "3044022028363f66fe74bdddf46d204cbf9844d4ef99d6fcb801f93f3ea1666ff51514340220058eb99790dd002323bd12afa0b62903cf72465d48c40cb11366dfa4eebbd87a01",
-                "020e625e13a81995f29ee828e31500b8454bd0b115f84dfa07d994eecd733efffa"
-              ],
-              "is_coinbase": false,
-              "sequence": 4294967294
-            },
-            ...
-          ],
-          "vout": [
-            {
-              "scriptpubkey": "0020949e53d22b4844b92076acb2414abbfd0a96171b87d91c55063269ee3ed1b1b6",
-              "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_32 949e53d22b4844b92076acb2414abbfd0a96171b87d91c55063269ee3ed1b1b6",
-              "scriptpubkey_type": "v0_p2wsh",
-              "scriptpubkey_address": "bc1qjj09853tfpztjgrk4jeyzj4ml59fv9cmslv3c4gxxf57u0k3kxmqllx29y",
-              "value": 2546637
-            }
-          ],
-          "size": 351,
-          "weight": 756,
-          "sigops": 2,
-          "fee": 4206,
-          "status": {
-            "confirmed": true,
-            "block_height": 875626,
-            "block_hash": "0000000000000000000086de1f4815ff0f7f0411d846301c5efa1e437130dc22",
-            "block_time": 1734720142
-          },
-          "order": 81067521,
-          "vsize": 189,
-          "adjustedVsize": 189,
-          "feePerVsize": 22.253968253968253,
-          "adjustedFeePerVsize": 22.253968253968253,
-          "effectiveFeePerVsize": 22.253968253968253,
-          "firstSeen": 1734719830,
-          "inputs": [],
-          "cpfpDirty": false,
-          "ancestors": [],
-          "descendants": [],
-          "bestDescendant": null,
-          "position": {
-            "block": 0,
-            "vsize": 134866.5
-          },
-          "flags": 1099511640074
-        }
-      ],
-      "removed": []
-    }
-  }
-}`
-        },
-        codeSampleLiquid: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "multi-address-transactions": {
-    "ex1qzq0h0wvnnh9xpd508fzxaft0nu9wjmdvzalu6f": {
-      "mempool": [],
-      "confirmed": [
-        {
-          "txid": "d61ad73b64895ccabd32816643554c676891bdb52da0fba2b37079e04c4c4b2c",
-          "version": 2,
-          "locktime": 3171528,
-          "vin": [
-            {
-              "txid": "4847a0627952a0bcad6c8947d46a0e5b13eefbcfbf76246ea16a1a7c82bcc49b",
-              "vout": 2,
-              "prevout": {
-                "scriptpubkey": "00144d72c2967e1a581c0e71e82d65e99523a9149d02",
-                "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 4d72c2967e1a581c0e71e82d65e99523a9149d02",
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "ex1qf4ev99n7rfvpcrn3aqkkt6v4yw53f8gznv9paa",
-                "valuecommitment": "09af208bbc0b9809aff4368dee81f74f178f77f844e7dfc5d70615bc757fa8b2f9",
-                "assetcommitment": "0a2ca17c42fadd887373c371e44cf49c6cd64c3081e23eef3275bdace0b8c674b5"
-              },
-              "scriptsig": "",
-              "scriptsig_asm": "",
-              "witness": [
-                "30440220653c6e1bd3de5bd9a56cbb6eb246834724667a5c5d12dc07107edc7c72bd6634022008d1f770dc9ba624bb250bba3a5254aa633f01a9bcb2a85aedc5b251e338b7b301",
-                "03fb2f0245e19f9e886fce54894558bbbcf50bf9576245e60a4c9780f7447eaf22"
-              ],
-              "is_coinbase": false,
-              "sequence": 4294967294,
-              "is_pegin": false
-            },
-            {
-              "txid": "ea5f690853ece5549807862a153357092c4f7dbe10886b86b84f87a3201dd8dc",
-              "vout": 0,
-              "prevout": {
-                "scriptpubkey": "0014a5996021b4001325b1aa85c3bf400516855a6e05",
-                "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 a5996021b4001325b1aa85c3bf400516855a6e05",
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "ex1q5kvkqgd5qqfjtvd2shpm7sq9z6z45ms9ma7ywz",
-                "valuecommitment": "09f36fde0f51390cdf2ee6830b3c696569c3f9c5855ce26bd4f6d0280a83b86ecf",
-                "assetcommitment": "0bfcd8fcfaebfa41b596a89aa55fbf2eaa8c383ec71e8d9d0d461ea645d8d1bc45"
-              },
-              "scriptsig": "",
-              "scriptsig_asm": "",
-              "witness": [
-                "30440220033208f3e37c35009ba00472a67899222afbd5cc12b0d3906d2eec6f50a058510220607d4c5de43459e38158ee1cbe5e6a74c155041cecdbf961a077a952ee1e543601",
-                "0394d6ecb2f5db9fdeb0f7ac5301ea148704fc6986fdb8181bddc1d2eec9e99c32"
-              ],
-              "is_coinbase": false,
-              "sequence": 4294967294,
-              "is_pegin": false
-            },
-            {
-              "txid": "23e63b888d5da3ce1193bb4a74a0762d78904cfa7a6307ff47e91054d961208b",
-              "vout": 2,
-              "prevout": {
-                "scriptpubkey": "00144990783e871e57fa2499f00c5f6f4ddc2602e7c8",
-                "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 4990783e871e57fa2499f00c5f6f4ddc2602e7c8",
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "ex1qfxg8s058retl5fye7qx97m6dmsnq9e7gq0dcee",
-                "valuecommitment": "0816440695f0c47ce471c7e10a93d36aee4554b46ed269bfa8390dd9db69409537",
-                "assetcommitment": "0a5a0eb7cab779cb6ce5d6517c73e244075eea15fbd54a7beb34710862aef58359"
-              },
-              "scriptsig": "",
-              "scriptsig_asm": "",
-              "witness": [
-                "3044022051e5482a486f55cfd5ae25062b0252e13de9bfa11a9c7e5f608ac6e03c62dc8902201d2b47a27fc07999973ec44e4569b4b3fcc338b1c3977173cfeab9cccde0b3e301",
-                "025991a68daafc95494019c228855999db8f19c872fd3f58bac6ff149db7b53cff"
-              ],
-              "is_coinbase": false,
-              "sequence": 4294967294,
-              "is_pegin": false
-            },
-            {
-              "txid": "2bbeb9440d3c08a1d3cd9acf5959ee740a6a64ffcaa4aa2b43e30026a2a40334",
-              "vout": 2,
-              "prevout": {
-                "scriptpubkey": "00144d72c2967e1a581c0e71e82d65e99523a9149d02",
-                "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 4d72c2967e1a581c0e71e82d65e99523a9149d02",
-                "scriptpubkey_type": "v0_p2wpkh",
-                "scriptpubkey_address": "ex1qf4ev99n7rfvpcrn3aqkkt6v4yw53f8gznv9paa",
-                "valuecommitment": "09d0c574d61d50065a2e398fb7252315b65176bf97de1d180d337f3aadfaa0e53e",
-                "assetcommitment": "0b82ede6b9a6cb9505a7f6bcc76f72caa3228de193debf4e586d60baebeaef0ab5"
-              },
-              "scriptsig": "",
-              "scriptsig_asm": "",
-              "witness": [
-                "3044022033ab9ea81a21b0f917792097ed69ab3724957a5e5d3a0430a0b2a16e0a74d8750220202859dc7e53998f5dc4b424321b7a711e3ff6517422a099504b337e30ec8acb01",
-                "03fb2f0245e19f9e886fce54894558bbbcf50bf9576245e60a4c9780f7447eaf22"
-              ],
-              "is_coinbase": false,
-              "sequence": 4294967294,
-              "is_pegin": false
+              "sequence": 4294967293,
+              "inner_witnessscript_asm": "OP_PUSHBYTES_32 e183fb4575a25038c5a1cf4ac0dbbb013fe42bfc01080db45cf0b93118a2a47e OP_CHECKSIGPQC"
             }
           ],
           "vout": [
             {
-              "scriptpubkey": "a914e185d1192f34d55ba3fbd15408168f339683d80287",
-              "scriptpubkey_asm": "OP_HASH160 OP_PUSHBYTES_20 e185d1192f34d55ba3fbd15408168f339683d802 OP_EQUAL",
-              "scriptpubkey_type": "p2sh",
-              "scriptpubkey_address": "H3jyk9ipDU5efhHW9n52xCY78HNFAQTy78",
-              "valuecommitment": "08f676101a27d784f1f89765ff33ad5a1e95ab2081da76b29ef97bdfaf309e1318",
-              "assetcommitment": "0a115106f540daae5a0a7cf66dcf07a69dc2faffb917e82f340bcdfc7da143228b"
+              "scriptpubkey": "5220b445fb0581c4c2fdfa057790604da9e7f5f77842b4ab27ee88010f76d3d2a658",
+              "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 b445fb0581c4c2fdfa057790604da9e7f5f77842b4ab27ee88010f76d3d2a658",
+              "scriptpubkey_type": "v2_p2mr",
+              "scriptpubkey_address": "tq1zk3zlkpvpcnp0m7s9w7gxqndful6lw7zzkj4j0m5gqy8hd57j5evq4v7t3f",
+              "value": 6099991306
             },
             {
-              "scriptpubkey": "0014101f77b9939dca60b68f3a446ea56f9f0ae96dac",
-              "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 101f77b9939dca60b68f3a446ea56f9f0ae96dac",
-              "scriptpubkey_type": "v0_p2wpkh",
-              "scriptpubkey_address": "ex1qzq0h0wvnnh9xpd508fzxaft0nu9wjmdvzalu6f",
-              "valuecommitment": "09bec5886710680e125b52ac99f6aee452984847cddc57abaa96eb8cc360f80104",
-              "assetcommitment": "0adfd85f43988146c1878e98bc5e6206f368280cb03760c37e86ec0bd39005d0cd"
-            },
-            {
-              "scriptpubkey": "00140fe27684e78285d508073f2b8a3a6c884515d1a9",
-              "scriptpubkey_asm": "OP_0 OP_PUSHBYTES_20 0fe27684e78285d508073f2b8a3a6c884515d1a9",
-              "scriptpubkey_type": "v0_p2wpkh",
-              "scriptpubkey_address": "ex1qpl38dp88s2za2zq88u4c5wnv3pz3t5dfha22k9",
-              "valuecommitment": "08bef8c28296cf050802c943d46aa539d2f5280e9b9471db928746480815cf5457",
-              "assetcommitment": "0a5a032f72df6fba7f1acd7230f44cdf41ce27926e48e262ffdfea18efd19e0439"
-            },
-            {
-              "scriptpubkey": "",
-              "scriptpubkey_asm": "",
-              "scriptpubkey_type": "fee",
-              "value": 394,
-              "asset": "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d"
+              "scriptpubkey": "5220dec9d32d69d6a71bca31773d9890e6ee1e1076a6dfed7f4375e2ac8a9e9e2009",
+              "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 dec9d32d69d6a71bca31773d9890e6ee1e1076a6dfed7f4375e2ac8a9e9e2009",
+              "scriptpubkey_type": "v2_p2mr",
+              "scriptpubkey_address": "tq1zmmyaxttf66n3hj33wu7e3y8xac0pqa4xmlkh7sm4u2kg4857yqyspypnv8",
+              "value": 100000000
             }
           ],
-          "size": 13955,
-          "weight": 15713,
+          "size": 3860,
+          "weight": 3860,
+          "vsize": 3860,
           "sigops": 0,
-          "fee": 394,
+          "fee": 966,
           "status": {
-            "confirmed": true,
-            "block_height": 3171530,
-            "block_hash": "400270631b0f66d70cd6a045f36bb3f37c9076688fd496669d5da2a7245392d9",
-            "block_time": 1734720368
+            "confirmed": false
           },
-          "order": 743132236,
-          "vsize": 3929,
-          "adjustedVsize": 3928.25,
-          "feePerVsize": 0.10029911538216763,
-          "adjustedFeePerVsize": 0.10029911538216763,
-          "effectiveFeePerVsize": 0.10027996945787732,
-          "firstSeen": 1734720314,
-          "inputs": [],
+          "order": 995846303,
+          "adjustedVsize": 3860,
+          "feePerVsize": 0.25025906735751297,
+          "adjustedFeePerVsize": 0.25025906735751297,
+          "effectiveFeePerVsize": 0.25025906735751297,
+          "firstSeen": 1793838503,
+          "uid": 1,
           "cpfpDirty": false,
           "ancestors": [],
           "descendants": [],
           "bestDescendant": null,
           "position": {
             "block": 0,
-            "vsize": 6972.5
+            "vsize": 5890
           },
-          "flags": 1099511633962,
-          "cpfpChecked": true,
-          "cpfpUpdated": 1734720355424
+          "flags": 32777
         }
       ],
+      "confirmed": [],
       "removed": []
     }
   }
 }`
-        }
+        },
+        codeSampleSignet: emptyCodeSample,
+        codeSampleLiquid: emptyCodeSample,
       }
     }
   },
@@ -1503,72 +1078,152 @@ export const wsApiDocsData = [
           curl: [],
           response: `{
   "mempool-transactions": {
-    "sequence": 81419,
+    "sequence": 27517,
     "added": [
       {
-        "txid": "6229c0784bc776be22a5ee84e0e3d9b8f9e17843f079a8444b03bdc98b77d229",
+        "txid": "ed7002d770c0ab7237dcd455143e4b4dad3f5baf271c26e50811774129c00e1d",
         "version": 2,
         "locktime": 0,
         "vin": [
           {
-            "txid": "b4b324e3bff7ee0a7e664e8c03df1fe3a0bd53e5685ea6b10abb5f89ba1b2ead",
-            "vout": 5,
+            "txid": "385a7534628d477f082ad1ce69ec0942c277b0b8dfb919efa25d7b5d91b06494",
+            "vout": 1,
             "prevout": {
-              "scriptpubkey": "76a914b54afb58f0faa9d1bde2ed755bc56ef1e4a4e24188ac",
-              "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 b54afb58f0faa9d1bde2ed755bc56ef1e4a4e241 OP_EQUALVERIFY OP_CHECKSIG",
-              "scriptpubkey_type": "p2pkh",
-              "scriptpubkey_address": "1HXb8YtsgBhFWdYezjd6bt7Dw4UGKyZo54",
-              "value": 17000
+              "scriptpubkey": "52201a74eef1ece2de54703b7e1bdf69e7fa129720856b9b59b4f83d289f489ae5ba",
+              "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 1a74eef1ece2de54703b7e1bdf69e7fa129720856b9b59b4f83d289f489ae5ba",
+              "scriptpubkey_type": "v2_p2mr",
+              "scriptpubkey_address": "qb1zrf6wau0vut09gupm0cda7608lgffwgy9dwd4nd8c855f7jy6ukaqfg84y5",
+              "value": 29951656
             },
-            "scriptsig": "4830450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a83649404012103cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
-            "scriptsig_asm": "OP_PUSHBYTES_72 30450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a8364940401 OP_PUSHBYTES_33 03cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
+            "scriptsig": "",
+            "scriptsig_asm": "",
+            "witness": [
+              "9656418e24af6de0b315176d116cb18887585f48fe8bb2e0b526be97a4392cb2...",
+              "206852258a76abc6afd1a0e4b529a7126d74df38ae19f9a38248f3aea017fe9dcfb3",
+              "c1"
+            ],
             "is_coinbase": false,
-            "sequence": 4294967293
+            "sequence": 4294967293,
+            "inner_witnessscript_asm": "OP_PUSHBYTES_32 6852258a76abc6afd1a0e4b529a7126d74df38ae19f9a38248f3aea017fe9dcf OP_CHECKSIGPQC"
           }
         ],
         "vout": [
           {
-            "scriptpubkey": "76a91401603bd82a5d5a6e8c6df5d9ae662b9fc5db60f288ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 01603bd82a5d5a6e8c6df5d9ae662b9fc5db60f2 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "18GxdcLgNtRUc8v5TNJtPnvoi8jMVWxvb",
-            "value": 10419
+            "scriptpubkey": "52201f7c544408a7f8bae5c919726f61179cb8f4c5026b0fc43aa1703ab6aca9560e",
+            "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 1f7c544408a7f8bae5c919726f61179cb8f4c5026b0fc43aa1703ab6aca9560e",
+            "scriptpubkey_type": "v2_p2mr",
+            "scriptpubkey_address": "qb1zra79g3qg5lut4ewfr9ex7cghnju0f3gzdv8ugw4pwqatdt9f2c8q46klac",
+            "value": 26612
           },
           {
-            "scriptpubkey": "76a914338ad842d236486627834bf9f5e182c7a8aa937188ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 338ad842d236486627834bf9f5e182c7a8aa9371 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "15hXntT6oUKNhtk4FWvuGPQJDX47wpbAaa",
-            "value": 5396
+            "scriptpubkey": "52201a74eef1ece2de54703b7e1bdf69e7fa129720856b9b59b4f83d289f489ae5ba",
+            "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 1a74eef1ece2de54703b7e1bdf69e7fa129720856b9b59b4f83d289f489ae5ba",
+            "scriptpubkey_type": "v2_p2mr",
+            "scriptpubkey_address": "qb1zrf6wau0vut09gupm0cda7608lgffwgy9dwd4nd8c855f7jy6ukaqfg84y5",
+            "value": 29921184
           }
         ],
-        "size": 226,
-        "weight": 904,
-        "sigops": 8,
-        "fee": 1185,
+        "size": 3860,
+        "weight": 3860,
+        "vsize": 3860,
+        "sigops": 0,
+        "fee": 3860,
         "status": {
           "confirmed": false
         },
-        "order": 701659019,
-        "vsize": 226,
-        "adjustedVsize": 226,
-        "feePerVsize": 5.243362831858407,
-        "adjustedFeePerVsize": 5.243362831858407,
-        "effectiveFeePerVsize": 5.243362831858407,
-        "firstSeen": 1734893382,
-        "uid": 429139,
-        "inputs": [],
-        "cpfpDirty": false,
+        "order": 487505961,
+        "adjustedVsize": 3860,
+        "feePerVsize": 1,
+        "adjustedFeePerVsize": 1,
+        "effectiveFeePerVsize": 1.0000488495921058,
+        "firstSeen": 1794338707,
+        "uid": 6,
+        "cpfpDirty": true,
         "ancestors": [],
-        "descendants": [],
+        "descendants": [
+          {
+            "txid": "59003040cd5a123d971e42d9d58cfc0437ec893f64892676fac11fb02bfde9ba",
+            "fee": 16612,
+            "weight": 16611
+          }
+        ],
         "bestDescendant": null,
+        "cpfpChecked": true,
+        "lastBoosted": 1794338707,
         "position": {
           "block": 0,
-          "vsize": 125270
+          "vsize": 53028
         },
-        "flags": 1099511628809
+        "flags": 98313
       },
-      ...
+      {
+        "txid": "59003040cd5a123d971e42d9d58cfc0437ec893f64892676fac11fb02bfde9ba",
+        "version": 2,
+        "locktime": 0,
+        "vin": [
+          {
+            "txid": "ed7002d770c0ab7237dcd455143e4b4dad3f5baf271c26e50811774129c00e1d",
+            "vout": 0,
+            "prevout": {
+              "scriptpubkey": "52201f7c544408a7f8bae5c919726f61179cb8f4c5026b0fc43aa1703ab6aca9560e",
+              "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 1f7c544408a7f8bae5c919726f61179cb8f4c5026b0fc43aa1703ab6aca9560e",
+              "scriptpubkey_type": "v2_p2mr",
+              "scriptpubkey_address": "qb1zra79g3qg5lut4ewfr9ex7cghnju0f3gzdv8ugw4pwqatdt9f2c8q46klac",
+              "value": 26612
+            },
+            "scriptsig": "",
+            "scriptsig_asm": "",
+            "witness": [
+              "449991e16a639c238ea883cff74464f43fe2b70fb9403d3bfba028b8f409b86e...",
+              "201fc63ba6a3915789e2898705a25b925de1254205772d267865d6c31bb098dc...",
+              "c1"
+            ],
+            "is_coinbase": false,
+            "sequence": 4294967293,
+            "inner_witnessscript_asm": "OP_PUSHBYTES_32 1fc63ba6a3915789e2898705a25b925de1254205772d267865d6c31bb098dc1c OP_CHECKSIGPQC OP_0 OP_IF OP_PUSHBYTES_3 6f7264 OP_PUSHBYTES_1 01 OP_PUSHBYTES_23 746578742f68746d6c3b636861727365743d7..."
+          }
+        ],
+        "vout": [
+          {
+            "scriptpubkey": "52201a74eef1ece2de54703b7e1bdf69e7fa129720856b9b59b4f83d289f489ae5ba",
+            "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 1a74eef1ece2de54703b7e1bdf69e7fa129720856b9b59b4f83d289f489ae5ba",
+            "scriptpubkey_type": "v2_p2mr",
+            "scriptpubkey_address": "qb1zrf6wau0vut09gupm0cda7608lgffwgy9dwd4nd8c855f7jy6ukaqfg84y5",
+            "value": 10000
+          }
+        ],
+        "size": 16611,
+        "weight": 16611,
+        "vsize": 16611,
+        "sigops": 0,
+        "fee": 16612,
+        "status": {
+          "confirmed": false
+        },
+        "order": 3135896875,
+        "adjustedVsize": 16611,
+        "feePerVsize": 1.0000602010715791,
+        "adjustedFeePerVsize": 1.0000602010715791,
+        "effectiveFeePerVsize": 1.0000488495921058,
+        "firstSeen": 1794338707,
+        "uid": 7,
+        "cpfpDirty": true,
+        "ancestors": [
+          {
+            "txid": "ed7002d770c0ab7237dcd455143e4b4dad3f5baf271c26e50811774129c00e1d",
+            "fee": 3860,
+            "weight": 3860
+          }
+        ],
+        "descendants": [],
+        "bestDescendant": null,
+        "cpfpChecked": true,
+        "position": {
+          "block": 0,
+          "vsize": 42792.5
+        },
+        "flags": 67272713
+      }
     ],
     "removed": [],
     "mined": [],
@@ -1582,72 +1237,76 @@ export const wsApiDocsData = [
           curl: [],
           response: `{
   "mempool-transactions": {
-    "sequence": 81419,
+    "sequence": 1288,
     "added": [
       {
-        "txid": "6229c0784bc776be22a5ee84e0e3d9b8f9e17843f079a8444b03bdc98b77d229",
+        "txid": "5e914ae59827ffc237165b22e3b926758e05f60775a37f9df64783139f685b3b",
         "version": 2,
-        "locktime": 0,
+        "locktime": 202431,
         "vin": [
           {
-            "txid": "b4b324e3bff7ee0a7e664e8c03df1fe3a0bd53e5685ea6b10abb5f89ba1b2ead",
-            "vout": 5,
+            "txid": "56258a216f705a61820a6fa9b05c1e4c32c5962560f403233e883e421ed75e0f",
+            "vout": 1,
             "prevout": {
-              "scriptpubkey": "76a914b54afb58f0faa9d1bde2ed755bc56ef1e4a4e24188ac",
-              "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 b54afb58f0faa9d1bde2ed755bc56ef1e4a4e241 OP_EQUALVERIFY OP_CHECKSIG",
-              "scriptpubkey_type": "p2pkh",
-              "scriptpubkey_address": "1HXb8YtsgBhFWdYezjd6bt7Dw4UGKyZo54",
-              "value": 17000
+              "scriptpubkey": "522023c72d9d72aeb3385c378c929b218dd616b3088630d6a22cfc07c91426f1b81c",
+              "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 23c72d9d72aeb3385c378c929b218dd616b3088630d6a22cfc07c91426f1b81c",
+              "scriptpubkey_type": "v2_p2mr",
+              "scriptpubkey_address": "tq1zy0rjm8tj46enshph3jffkgvd6cttxzyxxrt2yt8uqly3gfh3hqwqqkw8as",
+              "value": 6199992272
             },
-            "scriptsig": "4830450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a83649404012103cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
-            "scriptsig_asm": "OP_PUSHBYTES_72 30450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a8364940401 OP_PUSHBYTES_33 03cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
+            "scriptsig": "",
+            "scriptsig_asm": "",
+            "witness": [
+              "92817a68783ff1de63ceb1a62a2fb770cf7d08e41e5917320c85123704d2d33d...",
+              "20e183fb4575a25038c5a1cf4ac0dbbb013fe42bfc01080db45cf0b93118a2a47eb3",
+              "c1"
+            ],
             "is_coinbase": false,
-            "sequence": 4294967293
+            "sequence": 4294967293,
+            "inner_witnessscript_asm": "OP_PUSHBYTES_32 e183fb4575a25038c5a1cf4ac0dbbb013fe42bfc01080db45cf0b93118a2a47e OP_CHECKSIGPQC"
           }
         ],
         "vout": [
           {
-            "scriptpubkey": "76a91401603bd82a5d5a6e8c6df5d9ae662b9fc5db60f288ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 01603bd82a5d5a6e8c6df5d9ae662b9fc5db60f2 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "18GxdcLgNtRUc8v5TNJtPnvoi8jMVWxvb",
-            "value": 10419
+            "scriptpubkey": "5220b445fb0581c4c2fdfa057790604da9e7f5f77842b4ab27ee88010f76d3d2a658",
+            "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 b445fb0581c4c2fdfa057790604da9e7f5f77842b4ab27ee88010f76d3d2a658",
+            "scriptpubkey_type": "v2_p2mr",
+            "scriptpubkey_address": "tq1zk3zlkpvpcnp0m7s9w7gxqndful6lw7zzkj4j0m5gqy8hd57j5evq4v7t3f",
+            "value": 6099991306
           },
           {
-            "scriptpubkey": "76a914338ad842d236486627834bf9f5e182c7a8aa937188ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 338ad842d236486627834bf9f5e182c7a8aa9371 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "15hXntT6oUKNhtk4FWvuGPQJDX47wpbAaa",
-            "value": 5396
+            "scriptpubkey": "5220dec9d32d69d6a71bca31773d9890e6ee1e1076a6dfed7f4375e2ac8a9e9e2009",
+            "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 dec9d32d69d6a71bca31773d9890e6ee1e1076a6dfed7f4375e2ac8a9e9e2009",
+            "scriptpubkey_type": "v2_p2mr",
+            "scriptpubkey_address": "tq1zmmyaxttf66n3hj33wu7e3y8xac0pqa4xmlkh7sm4u2kg4857yqyspypnv8",
+            "value": 100000000
           }
         ],
-        "size": 226,
-        "weight": 904,
-        "sigops": 8,
-        "fee": 1185,
+        "size": 3860,
+        "weight": 3860,
+        "vsize": 3860,
+        "sigops": 0,
+        "fee": 966,
         "status": {
           "confirmed": false
         },
-        "order": 701659019,
-        "vsize": 226,
-        "adjustedVsize": 226,
-        "feePerVsize": 5.243362831858407,
-        "adjustedFeePerVsize": 5.243362831858407,
-        "effectiveFeePerVsize": 5.243362831858407,
-        "firstSeen": 1734893382,
-        "uid": 429139,
-        "inputs": [],
+        "order": 995846303,
+        "adjustedVsize": 3860,
+        "feePerVsize": 0.25025906735751297,
+        "adjustedFeePerVsize": 0.25025906735751297,
+        "effectiveFeePerVsize": 0.25025906735751297,
+        "firstSeen": 1793838503,
+        "uid": 1,
         "cpfpDirty": false,
         "ancestors": [],
         "descendants": [],
         "bestDescendant": null,
         "position": {
           "block": 0,
-          "vsize": 125270
+          "vsize": 5890
         },
-        "flags": 1099511628809
-      },
-      ...
+        "flags": 32777
+      }
     ],
     "removed": [],
     "mined": [],
@@ -1655,164 +1314,8 @@ export const wsApiDocsData = [
   }
 }`
         },
-        codeSampleSignet: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "mempool-transactions": {
-    "sequence": 81419,
-    "added": [
-      {
-        "txid": "6229c0784bc776be22a5ee84e0e3d9b8f9e17843f079a8444b03bdc98b77d229",
-        "version": 2,
-        "locktime": 0,
-        "vin": [
-          {
-            "txid": "b4b324e3bff7ee0a7e664e8c03df1fe3a0bd53e5685ea6b10abb5f89ba1b2ead",
-            "vout": 5,
-            "prevout": {
-              "scriptpubkey": "76a914b54afb58f0faa9d1bde2ed755bc56ef1e4a4e24188ac",
-              "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 b54afb58f0faa9d1bde2ed755bc56ef1e4a4e241 OP_EQUALVERIFY OP_CHECKSIG",
-              "scriptpubkey_type": "p2pkh",
-              "scriptpubkey_address": "1HXb8YtsgBhFWdYezjd6bt7Dw4UGKyZo54",
-              "value": 17000
-            },
-            "scriptsig": "4830450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a83649404012103cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
-            "scriptsig_asm": "OP_PUSHBYTES_72 30450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a8364940401 OP_PUSHBYTES_33 03cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
-            "is_coinbase": false,
-            "sequence": 4294967293
-          }
-        ],
-        "vout": [
-          {
-            "scriptpubkey": "76a91401603bd82a5d5a6e8c6df5d9ae662b9fc5db60f288ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 01603bd82a5d5a6e8c6df5d9ae662b9fc5db60f2 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "18GxdcLgNtRUc8v5TNJtPnvoi8jMVWxvb",
-            "value": 10419
-          },
-          {
-            "scriptpubkey": "76a914338ad842d236486627834bf9f5e182c7a8aa937188ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 338ad842d236486627834bf9f5e182c7a8aa9371 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "15hXntT6oUKNhtk4FWvuGPQJDX47wpbAaa",
-            "value": 5396
-          }
-        ],
-        "size": 226,
-        "weight": 904,
-        "sigops": 8,
-        "fee": 1185,
-        "status": {
-          "confirmed": false
-        },
-        "order": 701659019,
-        "vsize": 226,
-        "adjustedVsize": 226,
-        "feePerVsize": 5.243362831858407,
-        "adjustedFeePerVsize": 5.243362831858407,
-        "effectiveFeePerVsize": 5.243362831858407,
-        "firstSeen": 1734893382,
-        "uid": 429139,
-        "inputs": [],
-        "cpfpDirty": false,
-        "ancestors": [],
-        "descendants": [],
-        "bestDescendant": null,
-        "position": {
-          "block": 0,
-          "vsize": 125270
-        },
-        "flags": 1099511628809
-      },
-      ...
-    ],
-    "removed": [],
-    "mined": [],
-    "replaced": []
-  }
-}`
-        },
-        codeSampleLiquid: {
-          esModule: [],
-          commonJS: [],
-          curl: [],
-          response: `{
-  "mempool-transactions": {
-    "sequence": 81419,
-    "added": [
-      {
-        "txid": "6229c0784bc776be22a5ee84e0e3d9b8f9e17843f079a8444b03bdc98b77d229",
-        "version": 2,
-        "locktime": 0,
-        "vin": [
-          {
-            "txid": "b4b324e3bff7ee0a7e664e8c03df1fe3a0bd53e5685ea6b10abb5f89ba1b2ead",
-            "vout": 5,
-            "prevout": {
-              "scriptpubkey": "76a914b54afb58f0faa9d1bde2ed755bc56ef1e4a4e24188ac",
-              "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 b54afb58f0faa9d1bde2ed755bc56ef1e4a4e241 OP_EQUALVERIFY OP_CHECKSIG",
-              "scriptpubkey_type": "p2pkh",
-              "scriptpubkey_address": "1HXb8YtsgBhFWdYezjd6bt7Dw4UGKyZo54",
-              "value": 17000
-            },
-            "scriptsig": "4830450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a83649404012103cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
-            "scriptsig_asm": "OP_PUSHBYTES_72 30450221008e9b91aae7b4705841c97dc99d6ab233f10ff9b97d7c139be08634d2f0f5f66f02205d67eae8c830ed0979e169403d13c0f43efd78edbb9a344390245f5a8364940401 OP_PUSHBYTES_33 03cf9fad8b202384de9ef010129a62b8249920a6205fe53cc0efbea9eb0db595e7",
-            "is_coinbase": false,
-            "sequence": 4294967293
-          }
-        ],
-        "vout": [
-          {
-            "scriptpubkey": "76a91401603bd82a5d5a6e8c6df5d9ae662b9fc5db60f288ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 01603bd82a5d5a6e8c6df5d9ae662b9fc5db60f2 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "18GxdcLgNtRUc8v5TNJtPnvoi8jMVWxvb",
-            "value": 10419
-          },
-          {
-            "scriptpubkey": "76a914338ad842d236486627834bf9f5e182c7a8aa937188ac",
-            "scriptpubkey_asm": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 338ad842d236486627834bf9f5e182c7a8aa9371 OP_EQUALVERIFY OP_CHECKSIG",
-            "scriptpubkey_type": "p2pkh",
-            "scriptpubkey_address": "15hXntT6oUKNhtk4FWvuGPQJDX47wpbAaa",
-            "value": 5396
-          }
-        ],
-        "size": 226,
-        "weight": 904,
-        "sigops": 8,
-        "fee": 1185,
-        "status": {
-          "confirmed": false
-        },
-        "order": 701659019,
-        "vsize": 226,
-        "adjustedVsize": 226,
-        "feePerVsize": 5.243362831858407,
-        "adjustedFeePerVsize": 5.243362831858407,
-        "effectiveFeePerVsize": 5.243362831858407,
-        "firstSeen": 1734893382,
-        "uid": 429139,
-        "inputs": [],
-        "cpfpDirty": false,
-        "ancestors": [],
-        "descendants": [],
-        "bestDescendant": null,
-        "position": {
-          "block": 0,
-          "vsize": 125270
-        },
-        "flags": 1099511628809
-      },
-      ...
-    ],
-    "removed": [],
-    "mined": [],
-    "replaced": []
-  }
-}`
-        },
+        codeSampleSignet: emptyCodeSample,
+        codeSampleLiquid: emptyCodeSample,
       }
     }
   },
@@ -2956,7 +2459,7 @@ export const restApiDocsData = [
     fragment: 'get-address-transactions-chain',
     title: 'GET Address Transactions Chain',
     description: {
-      default: 'Get confirmed transaction history for the specified address/scripthash, sorted with newest first. Returns 25 transactions per page. More can be requested by specifying the last txid seen by the previous query.'
+      default: 'Get confirmed transaction history for the specified address/scripthash, sorted with newest first. Returns 25 transactions per page. More can be requested by specifying the last txid seen by the previous query: <code>/address/:address/txs/chain/:last_seen_txid</code>.'
     },
     urlString: '/address/:address/txs/chain',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -2982,52 +2485,115 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          commonJS: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          curl: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
+          esModule: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          commonJS: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          curl: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
           response: `[
   {
-    txid: "c4e53c2e37f4fac759fdb0d8380e4d49e6c7211233ae276a44ce7074a1d6d168",
-    version: 2,
-    locktime: 697761,
-    vin: [],
-    vout: [],
-    size: 221,
-    weight: 884,
-    fee: 331,
-    status: {
-      confirmed: true,
-      block_height: 697782,
-      block_hash: "000000000000000000011397e53a5b1442b3dbc5df046c959c11dfe0275a4579",
-      block_time: 1630040570
+    "txid": "6efb9eb45c0bfc810bcb2a3a11bee258a93ec8f76035ce6d243ba0cc036f1151",
+    "version": 2,
+    "locktime": 0,
+    "vin": [
+      {
+        "txid": "708a7f3cca31f5aafaeb86975604022cf0a5cbfce89656b56b798081711d5e48",
+        "vout": 2,
+        "prevout": {
+          "scriptpubkey": "522090d63fc95a05fe378059f18a9808cfef4f6568eda9e7146f0f2f852e22c7f007",
+          "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 90d63fc95a05fe378059f18a9808cfef4f6568eda9e7146f0f2f852e22c7f007",
+          "scriptpubkey_type": "v2_p2mr",
+          "scriptpubkey_address": "qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h",
+          "value": 6502485
+        },
+        "scriptsig": "",
+        "scriptsig_asm": "",
+        "witness": [
+          "f6fae2f7e853f4e0d04701731bddac939592ca79b25a35c113ad81c76e4ab0e6...",
+          ...
+        ],
+        "is_coinbase": false,
+        "sequence": 4294967293,
+        "inner_witnessscript_asm": "OP_PUSHBYTES_32 583e99acbe68d35478e2de0c81baa1f02a694f20e95ea7fdb84972a087bc493b OP_CHECKSIGPQC"
+      }
+    ],
+    "vout": [
+      {
+        "scriptpubkey": "6a387b2270223a22716269742d3230222c226f70223a226d696e74222c227469636b223a224d454d45222c22616d74223a22323030303030227d",
+        "scriptpubkey_asm": "OP_RETURN OP_PUSHBYTES_56 7b2270223a22716269742d3230222c226f7022...",
+        "scriptpubkey_type": "op_return",
+        "value": 0
+      },
+      ...
+    ],
+    "size": 3927,
+    "weight": 3927,
+    "vsize": 3927,
+    "sigops": 0,
+    "fee": 361587,
+    "status": {
+      "confirmed": true,
+      "block_height": 168102,
+      "block_hash": "00000000000000016fa098ad4e2cc08467b641089120f5125438c918133bfcf3",
+      "block_time": 1794240259
     }
   },
   ...
-],`
+]`
         },
         codeSampleTestnet: {
-          esModule: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          commonJS: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          curl: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
+          esModule: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          commonJS: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          curl: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
           response: `[
   {
-    txid: "3e6afd67862ce9fe3eb55268a3107f495415ff1b5d1933c928507e9bdf7a21e6",
-    version: 2,
-    locktime: 0,
-    vin: [],
-    vout: [],
-    size: 211,
-    weight: 736,
-    fee: 0,
-    status: {
-    confirmed: true,
-      block_height: 2091086,
-      block_hash: "00000000340f3667cce7032d084973ca29bdd0d858ec363ed894ad4c8ed09ebc",
-      block_time: 1630607773
+    "txid": "ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc",
+    "version": 2,
+    "locktime": 0,
+    "vin": [
+      {
+        "txid": "5e7e1a93217029827e0829d5356951bdb887fc69efdea5919d039864b5888bc1",
+        "vout": 0,
+        "prevout": {
+          "scriptpubkey": "5220ddba5296a1b1e1c2ab147327a5c0c55ed40a57e2d5ed2ce0f5524433b3825293",
+          "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 ddba5296a1b1e1c2ab147327a5c0c55ed40a57e2d5ed2ce0f5524433b3825293",
+          "scriptpubkey_type": "v2_p2mr",
+          "scriptpubkey_address": "tq1zmka9994pk8su92c5wvn6tsx9tm2q54lz6hkjec842fzr8vuz22fszzh956",
+          "value": 23960
+        },
+        "scriptsig": "",
+        "scriptsig_asm": "",
+        "witness": [
+          "0ed590cf0b59718f34ddd2da0d0762f641e69d4289594fe73e7700cd8fe11f9a...",
+          ...
+        ],
+        "is_coinbase": false,
+        "sequence": 4294967294,
+        "inner_witnessscript_asm": "OP_PUSHBYTES_32 a11f4736edb8fcb41bcf307543c22efda1ebb7020e9c615c..."
+      }
+    ],
+    "vout": [
+      {
+        "scriptpubkey": "5220d117f1c6142e8ae7b8222ec56c38d4f01919b648b0ef229f6b28be717a5dd10a",
+        "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d117f1c6142e8ae7b8222ec56c38d4f01919b648b0ef229f6b28be717a5dd10a",
+        "scriptpubkey_type": "v2_p2mr",
+        "scriptpubkey_address": "tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns",
+        "value": 10000
+      },
+      ...
+    ],
+    "size": 3960,
+    "weight": 3960,
+    "vsize": 3960,
+    "sigops": 0,
+    "fee": 3960,
+    "status": {
+      "confirmed": true,
+      "block_height": 202432,
+      "block_hash": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+      "block_time": 1793838527
     }
   },
   ...
-],`
+]`
         },
         codeSampleSignet: {
           esModule: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
@@ -3135,40 +2701,16 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          commonJS: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          curl: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
-          response: `[
-  {
-    txid: "16cd9bbc6b62313a22d16671fa559aec6bf581df8b5853d37775c84b0fddfa90",
-    version: 2,
-    locktime: 0,
-    vin: [ [Object] ],
-    vout: [ [Object], [Object] ],
-    size: 226,
-    weight: 904,
-    fee: 6720,
-    status: { confirmed: false }
-  }
-]`
+          esModule: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          commonJS: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          curl: [`qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h`],
+          response: `[]`
         },
         codeSampleTestnet: {
-          esModule: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          commonJS: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          curl: [`tb1qp0we5epypgj4acd2c4au58045ruud2pd6heuee`],
-          response: `[
-  {
-    txid: "16cd9bbc6b62313a22d16671fa559aec6bf581df8b5853d37775c84b0fddfa90",
-    version: 2,
-    locktime: 0,
-    vin: [ [Object] ],
-    vout: [ [Object], [Object] ],
-    size: 226,
-    weight: 904,
-    fee: 6720,
-    status: { confirmed: false }
-  }
-]`
+          esModule: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          commonJS: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          curl: [`tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns`],
+          response: `[]`
         },
         codeSampleSignet: {
           esModule: [`1wiz18xYmhRX6xStj2b9t1rwWX4GKUgpv`],
@@ -3778,43 +3320,152 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
-          commonJS: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
-          curl: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
           response: `{
-  "id": "000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce",
-  "height": 363366,
-  "version": 2,
-  "timestamp": 1435766771,
-  "tx_count": 494,
-  "size": 286494,
-  "weight": 1145976,
-  "merkle_root": "9d3cb87bf05ebae366b4262ed5f768ce8c62fc385c3886c9cb097647b04b686c",
-  "previousblockhash": "000000000000000010c545b6fa3ef1f7cf45a2a8760b1ee9f2e89673218207ce",
-  "mediantime": 1435763435,
-  "nonce": 2892644888,
-  "bits": 404111758,
-  "difficulty": 49402014931.2275
+  "id": "00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401",
+  "height": 163891,
+  "version": 652156928,
+  "timestamp": 1793986989,
+  "bits": 419590871,
+  "nonce": 1019171885,
+  "difficulty": 1754028339.970213,
+  "merkle_root": "daf8162146ced27a0a0f57688fbe81b35ca3e1c0e370641dc8aadaf2d9ae682c",
+  "tx_count": 5,
+  "size": 10717,
+  "weight": 10717,
+  "previousblockhash": "000000000000000123c8defab7560e1959d52e62c2fafa6d5a435f41c60f889c",
+  "mediantime": 1793986907,
+  "extras": {
+    "cadence": {
+      "topBits": 1,
+      "chainId": 14073,
+      "isAuxpow": false,
+      "signalBits": 0,
+      "expectedChainId": 47,
+      "chainIdMatchesExpected": null
+    },
+    "totalFees": 88536,
+    "medianFee": 0,
+    "feeRange": [
+      1.2007299270072993,
+      1.2007299270072993,
+      ...
+    ],
+    "reward": 18394368603,
+    "pool": {
+      "id": 1,
+      "name": "Qbit Pool",
+      "slug": "qbitpool",
+      "minerNames": null
+    },
+    "avgFee": 22134,
+    "avgFeeRate": 8,
+    "coinbaseRaw": "033380022f5162697420506f6f6c2f000e12451188d34fcd120000",
+    "coinbaseAddress": "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
+    "coinbaseAddresses": [
+      "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
+      "qb1zx9mjge324sgvj42dxrutjs44wal79ysd3kpexqxk5uq27m6lmufs3key9e",
+      ...
+    ],
+    "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 f6a3414c2c7a539bf031e83cd6b449d138c609cd6f5bee933efeab58bc6c068a",
+    "coinbaseSignatureAscii": "\\u00033\\u0002/Qbit Pool/\\u0000\\u000e\\u0012E\\u0011ÓOÍ\\u0012\\u0000\\u0000",
+    "avgTxSize": 1991.8,
+    "totalInputs": 4,
+    "totalOutputs": 51,
+    "totalOutputAmt": 497225513,
+    "medianFeeAmt": null,
+    "feePercentiles": null,
+    "segwitTotalTxs": 4,
+    "segwitTotalSize": 9959,
+    "segwitTotalWeight": 9959,
+    "header": "0020df269c880fc6415f435a6dfafac2622ed559190e56b7fadec82301000000...",
+    "auxpow": null,
+    "utxoSetChange": 47,
+    "utxoSetSize": null,
+    "totalInputAmt": null,
+    "virtualSize": 10717,
+    "firstSeen": null,
+    "orphans": [],
+    "matchRate": null,
+    "expectedFees": null,
+    "expectedWeight": null
+  }
 }`
         },
         codeSampleTestnet: {
-          esModule: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          commonJS: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          curl: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
           response: `{
-  id: "000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81",
-  height: 2091140,
-  version: 543162372,
-  timestamp: 1630625150,
-  tx_count: 2,
-  size: 575,
-  weight: 1865,
-  merkle_root: "5d10d8d158bb8eb217d01fecc435bd10eda028043a913dc2bfe0ccf536a51cc9",
-  previousblockhash: "0000000000000073f95d1fc0a93d449f82a754410c635e46264ec6c7c4d5741e",
-  mediantime: 1630621997,
-  nonce: 1600805744,
-  bits: 436273151,
-  difficulty: 16777216
+  "id": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+  "height": 202432,
+  "version": 536936448,
+  "timestamp": 1793838527,
+  "bits": 441912566,
+  "nonce": 313421461,
+  "difficulty": 192726.4657113559,
+  "merkle_root": "a7ceac128021ee0e6d505a6b7aad497726a2863f5f363a9337d30501cd131729",
+  "tx_count": 3,
+  "size": 8149,
+  "weight": 8149,
+  "previousblockhash": "0000000000000a0d2a30aecf8abdcd55d2e9ea1b4cedafea6f131db742eeccb3",
+  "mediantime": 1793838213,
+  "extras": {
+    "cadence": {
+      "topBits": 1,
+      "chainId": 8,
+      "isAuxpow": false,
+      "signalBits": 0,
+      "expectedChainId": 31430,
+      "chainIdMatchesExpected": null
+    },
+    "totalFees": 4926,
+    "medianFee": 0,
+    "feeRange": [
+      0.25025906735751297,
+      0.25025906735751297,
+      ...
+    ],
+    "reward": 17599652094,
+    "pool": {
+      "id": 1,
+      "name": "Qbit Pool",
+      "slug": "qbitpool",
+      "minerNames": null
+    },
+    "avgFee": 2463,
+    "avgFeeRate": 0,
+    "coinbaseRaw": "03c016032f505249534d20506f6f6c2f000080a9cb11000000000000",
+    "coinbaseAddress": "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+    "coinbaseAddresses": [
+      "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+      "tq1zgfhzn9y9lzpp8daz57mnwp3js2akvt3xyapjfvy6hzvvh7rt8tms70x96z"
+    ],
+    "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d665ed1ab020cd639d4a07c0afb135246f678f78aaa70b9e7a1fbd44480fa3e1",
+    "coinbaseSignatureAscii": "\\u0003À\\u0016\\u0003/PRISM Pool/\\u0000\\u0000©Ë\\u0011\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000",
+    "avgTxSize": 2606.67,
+    "totalInputs": 2,
+    "totalOutputs": 7,
+    "totalOutputAmt": 6200011306,
+    "medianFeeAmt": null,
+    "feePercentiles": null,
+    "segwitTotalTxs": 2,
+    "segwitTotalSize": 7820,
+    "segwitTotalWeight": 7820,
+    "header": "00000120b3ccee42b71d136feaafed4c1beae9d255cdbd8acfae302a0d0a0000...",
+    "auxpow": null,
+    "utxoSetChange": 5,
+    "utxoSetSize": null,
+    "totalInputAmt": null,
+    "virtualSize": 8149,
+    "firstSeen": null,
+    "orphans": [],
+    "matchRate": null,
+    "expectedFees": null,
+    "expectedWeight": null
+  }
 }`
         },
         codeSampleSignet: {
@@ -3912,73 +3563,72 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
-          commonJS: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
-          curl: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
           response: `{
-  "id": "000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce",
-  "height": 363366,
-  "version": 2,
-  "timestamp": 1435766771,
-  "bits": 404111758,
-  "nonce": 2892644888,
-  "difficulty": 49402014931.22746,
-  "merkle_root": "9d3cb87bf05ebae366b4262ed5f768ce8c62fc385c3886c9cb097647b04b686c",
-  "tx_count": 494,
-  "size": 286494,
-  "weight": 1145976,
-  "previousblockhash": "000000000000000010c545b6fa3ef1f7cf45a2a8760b1ee9f2e89673218207ce",
-  "mediantime": 1435763435,
+  "id": "00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401",
+  "height": 163891,
+  "version": 652156928,
+  "timestamp": 1793986989,
+  "bits": 419590871,
+  "nonce": 1019171885,
+  "difficulty": 1754028339.970213,
+  "merkle_root": "daf8162146ced27a0a0f57688fbe81b35ca3e1c0e370641dc8aadaf2d9ae682c",
+  "tx_count": 5,
+  "size": 10717,
+  "weight": 10717,
+  "previousblockhash": "000000000000000123c8defab7560e1959d52e62c2fafa6d5a435f41c60f889c",
+  "mediantime": 1793986907,
   "extras": {
-    "totalFees": 5949764,
-    "medianFee": 14,
+    "cadence": {
+      "topBits": 1,
+      "chainId": 14073,
+      "isAuxpow": false,
+      "signalBits": 0,
+      "expectedChainId": 47,
+      "chainIdMatchesExpected": null
+    },
+    "totalFees": 88536,
+    "medianFee": 0,
     "feeRange": [
-      0,
-      0,
-      1,
-      14,
-      38,
-      48,
-      261
+      1.2007299270072993,
+      1.2007299270072993,
+      ...
     ],
-    "reward": 2505949764,
+    "reward": 18394368603,
     "pool": {
-      "id": 0,
-      "name": "Unknown",
-      "slug": "unknown",
+      "id": 1,
+      "name": "Qbit Pool",
+      "slug": "qbitpool",
       "minerNames": null
     },
-    "avgFee": 12068,
-    "avgFeeRate": 20,
-    "coinbaseRaw": "03668b050455940ee2ebbc03100000046d",
-    "coinbaseAddress": "17JJ3oZyF4ShQMGukDjpMWhmooCjEvoVVB",
+    "avgFee": 22134,
+    "avgFeeRate": 8,
+    "coinbaseRaw": "033380022f5162697420506f6f6c2f000e12451188d34fcd120000",
+    "coinbaseAddress": "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
     "coinbaseAddresses": [
-      "17JJ3oZyF4ShQMGukDjpMWhmooCjEvoVVB"
+      "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
+      "qb1zx9mjge324sgvj42dxrutjs44wal79ysd3kpexqxk5uq27m6lmufs3key9e",
+      ...
     ],
-    "coinbaseSignature": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 45160ea9d45f6edefef3977ac0b2cdcc29aa594a OP_EQUALVERIFY OP_CHECKSIG",
-    "coinbaseSignatureAscii": "...",
-    "avgTxSize": 579.57,
-    "totalInputs": 1424,
-    "totalOutputs": 1764,
-    "totalOutputAmt": 531126071491,
-    "medianFeeAmt": 10000,
-    "feePercentiles": [
-      0,
-      735,
-      10000,
-      10000,
-      10000,
-      20000,
-      300000
-    ],
-    "segwitTotalTxs": 0,
-    "segwitTotalSize": 0,
-    "segwitTotalWeight": 0,
-    "header": "02000000ce0782217396e8f2e91e0b76a8a245cff7f13efab645c51000000000000000006c684bb0477609cbc986385c38fc628cce68f7d52e26b466e3ba5ef07bb83c9df30f94558e41161818426aac",
-    "utxoSetChange": 340,
-    "utxoSetSize": 21180314,
-    "totalInputAmt": 531132021255,
-    "virtualSize": 286494,
+    "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 f6a3414c2c7a539bf031e83cd6b449d138c609cd6f5bee933efeab58bc6c068a",
+    "coinbaseSignatureAscii": "\\u00033\\u0002/Qbit Pool/\\u0000\\u000e\\u0012E\\u0011ÓOÍ\\u0012\\u0000\\u0000",
+    "avgTxSize": 1991.8,
+    "totalInputs": 4,
+    "totalOutputs": 51,
+    "totalOutputAmt": 497225513,
+    "medianFeeAmt": null,
+    "feePercentiles": null,
+    "segwitTotalTxs": 4,
+    "segwitTotalSize": 9959,
+    "segwitTotalWeight": 9959,
+    "header": "0020df269c880fc6415f435a6dfafac2622ed559190e56b7fadec82301000000...",
+    "auxpow": null,
+    "utxoSetChange": 47,
+    "utxoSetSize": null,
+    "totalInputAmt": null,
+    "virtualSize": 10717,
     "firstSeen": null,
     "orphans": [],
     "matchRate": null,
@@ -3988,65 +3638,71 @@ export const restApiDocsData = [
 }`
         },
         codeSampleTestnet: {
-          esModule: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          commonJS: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          curl: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
           response: `{
-  "id": "000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81",
-  "height": 2091140,
-  "version": 543162372,
-  "timestamp": 1630625150,
-  "bits": 436273151,
-  "nonce": 1600805744,
-  "difficulty": 16777216,
-  "merkle_root": "5d10d8d158bb8eb217d01fecc435bd10eda028043a913dc2bfe0ccf536a51cc9",
-  "tx_count": 2,
-  "size": 575,
-  "weight": 1865,
-  "previousblockhash": "0000000000000073f95d1fc0a93d449f82a754410c635e46264ec6c7c4d5741e",
-  "mediantime": 1630621997,
+  "id": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+  "height": 202432,
+  "version": 536936448,
+  "timestamp": 1793838527,
+  "bits": 441912566,
+  "nonce": 313421461,
+  "difficulty": 192726.4657113559,
+  "merkle_root": "a7ceac128021ee0e6d505a6b7aad497726a2863f5f363a9337d30501cd131729",
+  "tx_count": 3,
+  "size": 8149,
+  "weight": 8149,
+  "previousblockhash": "0000000000000a0d2a30aecf8abdcd55d2e9ea1b4cedafea6f131db742eeccb3",
+  "mediantime": 1793838213,
   "extras": {
-    "totalFees": 877,
-    "medianFee": 5,
+    "cadence": {
+      "topBits": 1,
+      "chainId": 8,
+      "isAuxpow": false,
+      "signalBits": 0,
+      "expectedChainId": 31430,
+      "chainIdMatchesExpected": null
+    },
+    "totalFees": 4926,
+    "medianFee": 0,
     "feeRange": [
-      5,
-      5,
-      5,
-      5,
-      5,
-      5,
-      5
+      0.25025906735751297,
+      0.25025906735751297,
+      ...
     ],
-    "reward": 9766502,
+    "reward": 17599652094,
     "pool": {
-      "id": 0,
-      "name": "Unknown",
-      "slug": "unknown",
+      "id": 1,
+      "name": "Qbit Pool",
+      "slug": "qbitpool",
       "minerNames": null
     },
-    "avgFee": 877,
-    "avgFeeRate": 5,
-    "coinbaseRaw": "0384e81f047e5d3161425443506f6f6cfabe6d6dfc481b6989a49bad403c75b0abfcdb7796b42489514a8c2d2294d7e5b2c93c05020000007296cd10010022583d1d000000000000",
-    "coinbaseAddress": "2N4YXTxKEso3yeYXNn5h42Vqu3FzTTQ8Lq5",
+    "avgFee": 2463,
+    "avgFeeRate": 0,
+    "coinbaseRaw": "03c016032f505249534d20506f6f6c2f000080a9cb11000000000000",
+    "coinbaseAddress": "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
     "coinbaseAddresses": [
-      "2N4YXTxKEso3yeYXNn5h42Vqu3FzTTQ8Lq5"
+      "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+      "tq1zgfhzn9y9lzpp8daz57mnwp3js2akvt3xyapjfvy6hzvvh7rt8tms70x96z"
     ],
-    "coinbaseSignature": "OP_HASH160 OP_PUSHBYTES_20 7bef0b4a4dafa77b2ec52b81659cbcf0d9a91487 OP_EQUAL",
-    "coinbaseSignatureAscii": "...",
-    "avgTxSize": 128,
-    "totalInputs": 1,
-    "totalOutputs": 5,
-    "totalOutputAmt": 4728937,
+    "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d665ed1ab020cd639d4a07c0afb135246f678f78aaa70b9e7a1fbd44480fa3e1",
+    "coinbaseSignatureAscii": "\\u0003À\\u0016\\u0003/PRISM Pool/\\u0000\\u0000©Ë\\u0011\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000",
+    "avgTxSize": 2606.67,
+    "totalInputs": 2,
+    "totalOutputs": 7,
+    "totalOutputAmt": 6200011306,
     "medianFeeAmt": null,
     "feePercentiles": null,
-    "segwitTotalTxs": 1,
-    "segwitTotalSize": 256,
-    "segwitTotalWeight": 697,
-    "header": "040060201e74d5c4c7c64e26465e630c4154a7829f443da9c01f5df97300000000000000c91ca536f5cce0bfc23d913a0428a0ed10bd35c4ec1fd017b28ebb58d1d8105d7e5d3161ffff001a705b6a5f",
-    "utxoSetChange": 4,
-    "utxoSetSize": 26144301,
-    "totalInputAmt": 4729814,
-    "virtualSize": 466.25,
+    "segwitTotalTxs": 2,
+    "segwitTotalSize": 7820,
+    "segwitTotalWeight": 7820,
+    "header": "00000120b3ccee42b71d136feaafed4c1beae9d255cdbd8acfae302a0d0a0000...",
+    "auxpow": null,
+    "utxoSetChange": 5,
+    "utxoSetSize": null,
+    "totalInputAmt": null,
+    "virtualSize": 8149,
     "firstSeen": null,
     "orphans": [],
     "matchRate": null,
@@ -4197,16 +3853,16 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
-          commonJS: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
-          curl: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
-          response: `040000202c04d4c450187d1da9b1bc23ba47d67fe028d22486fd0c00000000000000000059a3a33d4642c799af9f54a4dd351fff9130e6a89d4e251130c60064878616e906b5ea60ce9813173a25caf3`
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          response: `0020df269c880fc6415f435a6dfafac2622ed559190e56b7fadec82301000000000000002c68aed9f2daaac81d6470e3c0e1a35cb381be8f68570f0a7ad2ce462116f8daad11ee6ad77202192d54bf3c`
         },
         codeSampleTestnet: {
-          esModule: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          commonJS: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          curl: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          response: `040060201e74d5c4c7c64e26465e630c4154a7829f443da9c01f5df97300000000000000c91ca536f5cce0bfc23d913a0428a0ed10bd35c4ec1fd017b28ebb58d1d8105d7e5d3161ffff001a705b6a5f`
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          response: `00000120b3ccee42b71d136feaafed4c1beae9d255cdbd8acfae302a0d0a000000000000291713cd0105d337933a365f3f86a2267749ad7a6b5a506d0eee218012accea7bfcdeb6af60c571a956eae12`
         },
         codeSampleSignet: {
           esModule: ['000000ca66fab8083d4f0370d499c3d602e78af5fa69b2427cda15a3f0d96152'],
@@ -4259,16 +3915,16 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['615615'],
-          commonJS: ['615615'],
-          curl: ['615615'],
-          response: `000000000000000000067bea442af50a91377ac796e63b8d284354feff4042b3`
+          esModule: ['163891'],
+          commonJS: ['163891'],
+          curl: ['163891'],
+          response: `00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401`
         },
         codeSampleTestnet: {
-          esModule: ['2100100'],
-          commonJS: ['2100100'],
-          curl: ['2100100'],
-          response: `000000000000001be62f15637e813e1d8ecdf26ee95d1820ef16db9bd8685985`
+          esModule: ['202432'],
+          commonJS: ['202432'],
+          curl: ['202432'],
+          response: `0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f`
         },
         codeSampleSignet: {
           esModule: ['48000'],
@@ -4311,23 +3967,23 @@ export const restApiDocsData = [
           esModule: ``
         },
         codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['1672531200'],
+          esModule: [`1793491200`],
+          commonJS: [`1793491200`],
+          curl: ['1793491200'],
           response: `{
-  height: 769786,
-  hash: "000000000000000000017f6405c2382de84944eb21be9cec0379a735813f137b",
-  timestamp: "2022-12-31T23:30:31.000Z"
+  "height": 155661,
+  "hash": "0000000000000001d5de78bc237553cef7163e598bdb918bc4dfaa37d2d2fab7",
+  "timestamp": "2026-10-31T23:59:41.000Z"
 }`
         },
         codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: ['1672531200'],
+          esModule: [`1793491200`],
+          commonJS: [`1793491200`],
+          curl: ['1793491200'],
           response: `{
-  height: 2413838,
-  hash: "00000000000000082888e2353ea4baaea04d2e0e88f2ee054ad2bbcc1d6a5469",
-  timestamp: "2022-12-31T23:57:26.000Z"
+  "height": 196592,
+  "hash": "0000000000005377875384ae7bef193b476e1ef4138a3666ed65e6eb0757d96c",
+  "timestamp": "2026-10-31T23:57:59.000Z"
 }`
         },
         codeSampleSignet: {
@@ -4378,15 +4034,15 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
-          commonJS: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
-          curl: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
           response: '',
         },
         codeSampleTestnet: {
-          esModule: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          commonJS: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          curl: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
           response: '',
         },
         codeSampleSignet: {
@@ -4417,7 +4073,7 @@ export const restApiDocsData = [
     fragment: 'get-block-status',
     title: 'GET Block Status',
     description: {
-      default: 'Returns the confirmation status of a block. Available fields: <code>in_best_chain</code> (boolean, false for orphaned blocks), <code>next_best</code> (the hash of the next block, only available for blocks in the best chain).'
+      default: 'Returns the confirmation status of a block. Available fields: <code>in_best_chain</code> (boolean, false for orphaned blocks and for hashes the explorer doesn\'t know), <code>height</code> (<code>null</code> unless the block is in the best chain), and <code>next_best</code> (the hash of the next block in the best chain, or <code>null</code>).'
     },
     urlString: '/block/:hash/status',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -4443,23 +4099,23 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
-          commonJS: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
-          curl: ['0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2'],
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
           response: `{
-  in_best_chain: true,
-  height: 690557,
-  next_best: "00000000000000000003a59a34c93e39e636c8cd23ead726fdc467fbed0b7c5a"
+  "in_best_chain": true,
+  "height": 163891,
+  "next_best": "00000000000000006356b8dd1b88535026cc0e48c5bd6d275a5803ac97cab0b9"
 }`
         },
         codeSampleTestnet: {
-          esModule: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          commonJS: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
-          curl: ['000000000000009c08dc77c3f224d9f5bbe335a78b996ec1e0701e065537ca81'],
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
           response: `{
-  in_best_chain: true,
-  height: 2091140,
-  next_best: "0000000000000064152f2dc1e13bd70811fbcfa9c1660557233668b98b7b1c2b"
+  "in_best_chain": true,
+  "height": 202432,
+  "next_best": "1cf1ecba426d1a51cc849623ec1b226b45da5612829f7e790230be9125d4d993"
 }`
         },
         codeSampleSignet: {
@@ -4654,16 +4310,16 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce', '218'],
-          commonJS: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce', '218'],
-          curl: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce', '218'],
-          response: `0fa6da60e484941f255cbb025c3d6440e5a7e970119e899b4065c7999360e406`
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401', '2'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401', '2'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401', '2'],
+          response: `2de5d75812774656cc1905cc40d6c40d35efe9555185037b5c065836415adac8`
         },
         codeSampleTestnet: {
-          esModule: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b', '1'],
-          commonJS: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b', '1'],
-          curl: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b', '1'],
-          response: `7aede67cd9f48c2f77ca9112c27da2583ea41fbb391652777c44ef21d5b1656e`
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f', '1'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f', '1'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f', '1'],
+          response: `ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc`
         },
         codeSampleSignet: {
           esModule: ['0000014b62b53d2550c310208af9d792ab7a9a2487a67d82c06b17b201ee602f', '1'],
@@ -4719,23 +4375,25 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce', '218'],
-          commonJS: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce', '218'],
-          curl: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce', '218'],
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
           response: `[
-  "cfe624ccdd8010cf78dbedd1b25e1ff601b470c4d7d90fa9fc8c1bcc5cdc6e0e",
-  "a5ef89881bd5103f223a0fa285dfc75f4718974cb792cf85e623a7de05801bc9",
-  ...,
+  "4a60e113576e895adf6e21011c47a21bf680a52321f4526d762d35316e4ecd64",
+  "d776cf01dd7cc404a1a046aa09d535e5c8cce15d074c5369dcd5ebc3c4b16823",
+  "2de5d75812774656cc1905cc40d6c40d35efe9555185037b5c065836415adac8",
+  "df080a214b4eb1513d740bfcdcc8c2271b57fa77700de02c9098bab987b2e325",
+  "0f0f4eeb49a107826eff33e0d7c662505bef4d35ed57b7d32fbd18923e3b352b"
 ]`
         },
         codeSampleTestnet: {
-          esModule: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b', '1'],
-          commonJS: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b', '1'],
-          curl: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b', '1'],
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
           response: `[
-  "b5d033f57045b76f2f29df0c2469be0153ecf2514717bccd8d52250b3e7ba781",
-  "7aede67cd9f48c2f77ca9112c27da2583ea41fbb391652777c44ef21d5b1656e",
-  "20827f9a8fb5ec5fa55ce5389b1d7520d7961272492dc3424874887daeea21dc"
+  "02b95f4057f72cca82172ac9d65c4feb4e501ca0450f762fec4e638b5b591a75",
+  "ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc",
+  "5e914ae59827ffc237165b22e3b926758e05f60775a37f9df64783139f685b3b"
 ]`
         },
         codeSampleSignet: {
@@ -4813,52 +4471,100 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
-          commonJS: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
-          curl: ['000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce'],
+          esModule: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          commonJS: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
+          curl: ['00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401'],
           response: `[
   {
-    txid: "cfe624ccdd8010cf78dbedd1b25e1ff601b470c4d7d90fa9fc8c1bcc5cdc6e0e",
-    version: 1,
-    locktime: 0,
-    vin: [],
-    vout: [],
-    size: 102,
-    weight: 408,
-    fee: 0,
-    status: {
-      confirmed: true,
-      block_height: 363366,
-      block_hash: "000000000000000015dc777b3ff2611091336355d3f0ee9766a2cf3be8e4b1ce",
-      block_time: 1435766771
+    "txid": "4a60e113576e895adf6e21011c47a21bf680a52321f4526d762d35316e4ecd64",
+    "version": 2,
+    "locktime": 163890,
+    "vin": [
+      {
+        "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+        "vout": 4294967295,
+        "prevout": null,
+        "scriptsig": "033380022f5162697420506f6f6c2f000e12451188d34fcd120000",
+        "scriptsig_asm": "OP_PUSHBYTES_3 338002 OP_PUSHBYTES_47 <push past end>",
+        "witness": [
+          "9967f6dfa2e0a0bca252cb181695d955367ca8d37caef58725c4361346f0be74"
+        ],
+        "is_coinbase": true,
+        "sequence": 4294967294
+      }
+    ],
+    "vout": [
+      {
+        "scriptpubkey": "5220f6a3414c2c7a539bf031e83cd6b449d138c609cd6f5bee933efeab58bc6c068a",
+        "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 f6a3414c2c7a539bf031e83cd6b449d138c609cd6f5bee933efeab58bc6c068a",
+        "scriptpubkey_type": "v2_p2mr",
+        "scriptpubkey_address": "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
+        "value": 367887372
+      },
+      ...
+    ],
+    "size": 677,
+    "weight": 677,
+    "vsize": 677,
+    "sigops": 0,
+    "fee": 0,
+    "status": {
+      "confirmed": true,
+      "block_height": 163891,
+      "block_hash": "00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401",
+      "block_time": 1793986989
     }
   },
   ...
 ]`
         },
         codeSampleTestnet: {
-          esModule: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b'],
-          commonJS: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b'],
-          curl: ['000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b'],
+          esModule: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          commonJS: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
+          curl: ['0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f'],
           response: `[
   {
-    txid: "b5d033f57045b76f2f29df0c2469be0153ecf2514717bccd8d52250b3e7ba781",
-    version: 2,
-    locktime: 0,
-    vin: [],
-    vout: [],
-    size: 238,
-    weight: 844,
-    fee: 0,
-    status: {
-      confirmed: true,
-      block_height: 2091173,
-      block_hash: "000000000000004a3ff1faff12c446f711c650454ff8af7f41d1e8b2564dd74b",
-      block_time: 1630635771
+    "txid": "02b95f4057f72cca82172ac9d65c4feb4e501ca0450f762fec4e638b5b591a75",
+    "version": 2,
+    "locktime": 202431,
+    "vin": [
+      {
+        "txid": "0000000000000000000000000000000000000000000000000000000000000000",
+        "vout": 4294967295,
+        "prevout": null,
+        "scriptsig": "03c016032f505249534d20506f6f6c2f000080a9cb11000000000000",
+        "scriptsig_asm": "OP_PUSHBYTES_3 c01603 OP_PUSHBYTES_47 <push past end>",
+        "witness": [
+          "4e2faa5354ac03c4689cd2aec9db306e3aed549940ca4591a0b99f35a3b416aa"
+        ],
+        "is_coinbase": true,
+        "sequence": 4294967294
+      }
+    ],
+    "vout": [
+      {
+        "scriptpubkey": "5220d665ed1ab020cd639d4a07c0afb135246f678f78aaa70b9e7a1fbd44480fa3e1",
+        "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d665ed1ab020cd639d4a07c0afb135246f678f78aaa70b9e7a1fbd44480fa3e1",
+        "scriptpubkey_type": "v2_p2mr",
+        "scriptpubkey_address": "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+        "value": 17247659053
+      },
+      ...
+    ],
+    "size": 248,
+    "weight": 248,
+    "vsize": 248,
+    "sigops": 0,
+    "fee": 0,
+    "status": {
+      "confirmed": true,
+      "block_height": 202432,
+      "block_hash": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+      "block_time": 1793838527
     }
   },
   ...
-],`
+]`
         },
         codeSampleSignet: {
           esModule: ['0000014b62b53d2550c310208af9d792ab7a9a2487a67d82c06b17b201ee602f'],
@@ -4967,77 +4673,153 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['730000'],
-          commonJS: ['730000'],
-          curl: ['730000'],
+          esModule: ['163891'],
+          commonJS: ['163891'],
+          curl: ['163891'],
           response: `[
   {
-    "id": "0000000000000000000384f28cb3b9cf4377a39cfd6c29ae9466951de38c0529",
-    "height": 730000,
-    "version": 536870912,
-    "timestamp": 1648829449,
-    "tx_count": 1627,
-    "size": 1210916,
-    "weight": 3993515,
-    "merkle_root": "efa344bcd6c0607f93b709515dd6dc5496178112d680338ebea459e3de7b4fbc",
-    "previousblockhash": "00000000000000000008b6f6fb83f8d74512ef1e0af29e642dd20daddd7d318f",
-    "mediantime": 1648827418,
-    "nonce": 3580664066,
-    "bits": 386521239,
-    "difficulty": 28587155782195.1
-  },
-  {
-    "id": "00000000000000000008b6f6fb83f8d74512ef1e0af29e642dd20daddd7d318f",
-    "height": 729999,
-    "version": 793796608,
-    "timestamp": 1648828946,
-    "tx_count": 2574,
-    "size": 1481957,
-    "weight": 3993485,
-    "merkle_root": "d84f9cc1823bd069c505061b1f6faabd809d67ab5354e9f6234312dc4bdb1ecf",
-    "previousblockhash": "000000000000000000071e6c86c2175aa86817cae2a77acd95372b55c1103d89",
-    "mediantime": 1648827210,
-    "nonce": 3477019455,
-    "bits": 386521239,
-    "difficulty": 28587155782195.1
+    "id": "00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401",
+    "height": 163891,
+    "version": 652156928,
+    "timestamp": 1793986989,
+    "bits": 419590871,
+    "nonce": 1019171885,
+    "difficulty": 1754028339.970213,
+    "merkle_root": "daf8162146ced27a0a0f57688fbe81b35ca3e1c0e370641dc8aadaf2d9ae682c",
+    "tx_count": 5,
+    "size": 10717,
+    "weight": 10717,
+    "previousblockhash": "000000000000000123c8defab7560e1959d52e62c2fafa6d5a435f41c60f889c",
+    "mediantime": 1793986907,
+    "extras": {
+      "cadence": {
+        "topBits": 1,
+        "chainId": 14073,
+        "isAuxpow": false,
+        "signalBits": 0,
+        "expectedChainId": 47,
+        "chainIdMatchesExpected": null
+      },
+      "totalFees": 88536,
+      "medianFee": 0,
+      "feeRange": [
+        1.2007299270072993,
+        ...
+      ],
+      "reward": 18394368603,
+      "pool": {
+        "id": 1,
+        "name": "Qbit Pool",
+        "slug": "qbitpool",
+        "minerNames": null
+      },
+      "avgFee": 22134,
+      "avgFeeRate": 8,
+      "coinbaseRaw": "033380022f5162697420506f6f6c2f000e12451188d34fcd120000",
+      "coinbaseAddress": "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
+      "coinbaseAddresses": [
+        "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
+        ...
+      ],
+      "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 f6a3414c2c7a539bf031e83cd6b449d138c609cd6f5bee933efeab58bc6c068a",
+      "coinbaseSignatureAscii": "\\u00033\\u0002/Qbit Pool/\\u0000\\u000e\\u0012E\\u0011ÓOÍ\\u0012\\u0000\\u0000",
+      "avgTxSize": 1991.8,
+      "totalInputs": 4,
+      "totalOutputs": 51,
+      "totalOutputAmt": 497225513,
+      "medianFeeAmt": null,
+      "feePercentiles": null,
+      "segwitTotalTxs": 4,
+      "segwitTotalSize": 9959,
+      "segwitTotalWeight": 9959,
+      "header": "0020df269c880fc6415f435a6dfafac2622ed559190e56b7fadec82301000000...",
+      "auxpow": null,
+      "utxoSetChange": 47,
+      "utxoSetSize": null,
+      "totalInputAmt": null,
+      "virtualSize": 10717,
+      "firstSeen": null,
+      "orphans": [],
+      "matchRate": null,
+      "expectedFees": null,
+      "expectedWeight": null
+    }
   },
   ...
 ]`,
         },
         codeSampleTestnet: {
-          esModule: ['2091187'],
-          commonJS: ['2091187'],
-          curl: ['2091187'],
+          esModule: ['202432'],
+          commonJS: ['202432'],
+          curl: ['202432'],
           response: `[
   {
-    "id": "00000000000000533f63df886281a9fd74da163e84a21445153ff480e5f57970",
-    "height": 2091187,
-    "version": 545259520,
-    "timestamp": 1630641890,
-    "tx_count": 26,
-    "size": 8390,
-    "weight": 22985,
-    "merkle_root": "4d6df12a4af11bb928c7b2930e0a4d2c3e268c6dc6a07462943ad1c4b6b96468",
-    "previousblockhash": "0000000000000079103da7d296e1480295df795b7379e7dffd27743e214b0b32",
-    "mediantime": 1630639627,
-    "nonce": 309403673,
-    "bits": 436273151,
-    "difficulty": 16777216
-  },
-  {
-    "id": "0000000000000079103da7d296e1480295df795b7379e7dffd27743e214b0b32",
-    "height": 2091186,
-    "version": 541065216,
-    "timestamp": 1630641655,
-    "tx_count": 43,
-    "size": 11427,
-    "weight": 32472,
-    "merkle_root": "c70fa944f2863dc0828ee93ec0407bb8473e3b9bb94854ffd3fa1ccb9855d76a",
-    "previousblockhash": "00000000000000f015cb6ce3c007b56a053c4b3c3c86a36130e63310da787a30",
-    "mediantime": 1630639598,
-    "nonce": 2671302918,
-    "bits": 436273151,
-    "difficulty": 16777216
+    "id": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+    "height": 202432,
+    "version": 536936448,
+    "timestamp": 1793838527,
+    "bits": 441912566,
+    "nonce": 313421461,
+    "difficulty": 192726.4657113559,
+    "merkle_root": "a7ceac128021ee0e6d505a6b7aad497726a2863f5f363a9337d30501cd131729",
+    "tx_count": 3,
+    "size": 8149,
+    "weight": 8149,
+    "previousblockhash": "0000000000000a0d2a30aecf8abdcd55d2e9ea1b4cedafea6f131db742eeccb3",
+    "mediantime": 1793838213,
+    "extras": {
+      "cadence": {
+        "topBits": 1,
+        "chainId": 8,
+        "isAuxpow": false,
+        "signalBits": 0,
+        "expectedChainId": 31430,
+        "chainIdMatchesExpected": null
+      },
+      "totalFees": 4926,
+      "medianFee": 0,
+      "feeRange": [
+        0.25025906735751297,
+        ...
+      ],
+      "reward": 17599652094,
+      "pool": {
+        "id": 1,
+        "name": "Qbit Pool",
+        "slug": "qbitpool",
+        "minerNames": null
+      },
+      "avgFee": 2463,
+      "avgFeeRate": 0,
+      "coinbaseRaw": "03c016032f505249534d20506f6f6c2f000080a9cb11000000000000",
+      "coinbaseAddress": "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+      "coinbaseAddresses": [
+        "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+        ...
+      ],
+      "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d665ed1ab020cd639d4a07c0afb135246f678f78aaa70b9e7a1fbd44480fa3e1",
+      "coinbaseSignatureAscii": "\\u0003À\\u0016\\u0003/PRISM Pool/\\u0000\\u0000©Ë\\u0011\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000",
+      "avgTxSize": 2606.67,
+      "totalInputs": 2,
+      "totalOutputs": 7,
+      "totalOutputAmt": 6200011306,
+      "medianFeeAmt": null,
+      "feePercentiles": null,
+      "segwitTotalTxs": 2,
+      "segwitTotalSize": 7820,
+      "segwitTotalWeight": 7820,
+      "header": "00000120b3ccee42b71d136feaafed4c1beae9d255cdbd8acfae302a0d0a0000...",
+      "auxpow": null,
+      "utxoSetChange": 5,
+      "utxoSetSize": null,
+      "totalInputAmt": null,
+      "virtualSize": 8149,
+      "firstSeen": null,
+      "orphans": [],
+      "matchRate": null,
+      "expectedFees": null,
+      "expectedWeight": null
+    }
   },
   ...
 ]`
@@ -5116,58 +4898,71 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['730000'],
-          commonJS: ['730000'],
-          curl: ['730000'],
+          esModule: ['163891'],
+          commonJS: ['163891'],
+          curl: ['163891'],
           response: `[
   {
-    "id": "0000000000000000000384f28cb3b9cf4377a39cfd6c29ae9466951de38c0529",
-    "height": 730000,
-    "version": 536870912,
-    "timestamp": 1648829449,
-    "bits": 386521239,
-    "nonce": 3580664066,
-    "difficulty": 28587155782195.1,
-    "merkle_root": "efa344bcd6c0607f93b709515dd6dc5496178112d680338ebea459e3de7b4fbc",
-    "tx_count": 1627,
-    "size": 1210916,
-    "weight": 3993515,
-    "previousblockhash": "00000000000000000008b6f6fb83f8d74512ef1e0af29e642dd20daddd7d318f",
-    "mediantime": 1648827418,
+    "id": "00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401",
+    "height": 163891,
+    "version": 652156928,
+    "timestamp": 1793986989,
+    "bits": 419590871,
+    "nonce": 1019171885,
+    "difficulty": 1754028339.970213,
+    "merkle_root": "daf8162146ced27a0a0f57688fbe81b35ca3e1c0e370641dc8aadaf2d9ae682c",
+    "tx_count": 5,
+    "size": 10717,
+    "weight": 10717,
+    "previousblockhash": "000000000000000123c8defab7560e1959d52e62c2fafa6d5a435f41c60f889c",
+    "mediantime": 1793986907,
     "extras": {
-      "totalFees": 16321983,
-      "medianFee": 11,
-      "feeRange": [1, 11, 11, 11, 18, 21, 660],
-      "reward": 641321983,
+      "cadence": {
+        "topBits": 1,
+        "chainId": 14073,
+        "isAuxpow": false,
+        "signalBits": 0,
+        "expectedChainId": 47,
+        "chainIdMatchesExpected": null
+      },
+      "totalFees": 88536,
+      "medianFee": 0,
+      "feeRange": [
+        1.2007299270072993,
+        ...
+      ],
+      "reward": 18394368603,
       "pool": {
-        "id": 105,
-        "name": "Binance Pool",
-        "slug": "binancepool",
+        "id": 1,
+        "name": "Qbit Pool",
+        "slug": "qbitpool",
         "minerNames": null
       },
-      "avgFee": 10038,
-      "avgFeeRate": 16,
-      "coinbaseRaw": "0390230b1362696e616e63652f383038e0006f02cd583765fabe6d6d686355577affaad03015e732428a927a5d2d842471b350394139616bcb4401d804000000000000001a750000c9ad0000",
-      "coinbaseAddress": "1JvXhnHCi6XqcanvrZJ5s2Qiv4tsmm2UMy",
+      "avgFee": 22134,
+      "avgFeeRate": 8,
+      "coinbaseRaw": "033380022f5162697420506f6f6c2f000e12451188d34fcd120000",
+      "coinbaseAddress": "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
       "coinbaseAddresses": [
-        "1JvXhnHCi6XqcanvrZJ5s2Qiv4tsmm2UMy"
+        "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh",
+        ...
       ],
-      "coinbaseSignature": "OP_DUP OP_HASH160 OP_PUSHBYTES_20 c499d0604392cc2051d7476056647d1c1bfc3f38 OP_EQUALVERIFY OP_CHECKSIG",
-      "coinbaseSignatureAscii": "...",
-      "avgTxSize": 744,
-      "totalInputs": 6249,
-      "totalOutputs": 6768,
-      "totalOutputAmt": 1314305994870,
-      "medianFeeAmt": 3182,
-      "feePercentiles": [313, 2086, 2538, 3182, 5625, 14136, 990660],
-      "segwitTotalTxs": 1314,
-      "segwitTotalSize": 1031785,
-      "segwitTotalWeight": 3277099,
-      "header": "000000208f317dddad0dd22d649ef20a1eef1245d7f883fbf6b608000000000000000000bc4f7bdee359a4be8e3380d61281179654dcd65d5109b7937f60c0d6bc44a3ef0924476297d8091702996cd5",
-      "utxoSetChange": 519,
-      "utxoSetSize": 80390138,
-      "totalInputAmt": 1314322316853,
-      "virtualSize": 998378.75,
+      "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 f6a3414c2c7a539bf031e83cd6b449d138c609cd6f5bee933efeab58bc6c068a",
+      "coinbaseSignatureAscii": "\\u00033\\u0002/Qbit Pool/\\u0000\\u000e\\u0012E\\u0011ÓOÍ\\u0012\\u0000\\u0000",
+      "avgTxSize": 1991.8,
+      "totalInputs": 4,
+      "totalOutputs": 51,
+      "totalOutputAmt": 497225513,
+      "medianFeeAmt": null,
+      "feePercentiles": null,
+      "segwitTotalTxs": 4,
+      "segwitTotalSize": 9959,
+      "segwitTotalWeight": 9959,
+      "header": "0020df269c880fc6415f435a6dfafac2622ed559190e56b7fadec82301000000...",
+      "auxpow": null,
+      "utxoSetChange": 47,
+      "utxoSetSize": null,
+      "totalInputAmt": null,
+      "virtualSize": 10717,
       "firstSeen": null,
       "orphans": [],
       "matchRate": null,
@@ -5179,58 +4974,71 @@ export const restApiDocsData = [
 ]`,
         },
         codeSampleTestnet: {
-          esModule: ['2091187'],
-          commonJS: ['2091187'],
-          curl: ['2091187'],
+          esModule: ['202432'],
+          commonJS: ['202432'],
+          curl: ['202432'],
           response: `[
   {
-    "id": "00000000000000533f63df886281a9fd74da163e84a21445153ff480e5f57970",
-    "height": 2091187,
-    "version": 545259520,
-    "timestamp": 1630641890,
-    "bits": 436273151,
-    "nonce": 309403673,
-    "difficulty": 16777216,
-    "merkle_root": "4d6df12a4af11bb928c7b2930e0a4d2c3e268c6dc6a07462943ad1c4b6b96468",
-    "tx_count": 26,
-    "size": 8390,
-    "weight": 22985,
-    "previousblockhash": "0000000000000079103da7d296e1480295df795b7379e7dffd27743e214b0b32",
-    "mediantime": 1630639627,
+    "id": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+    "height": 202432,
+    "version": 536936448,
+    "timestamp": 1793838527,
+    "bits": 441912566,
+    "nonce": 313421461,
+    "difficulty": 192726.4657113559,
+    "merkle_root": "a7ceac128021ee0e6d505a6b7aad497726a2863f5f363a9337d30501cd131729",
+    "tx_count": 3,
+    "size": 8149,
+    "weight": 8149,
+    "previousblockhash": "0000000000000a0d2a30aecf8abdcd55d2e9ea1b4cedafea6f131db742eeccb3",
+    "mediantime": 1793838213,
     "extras": {
-      "totalFees": 781942,
-      "medianFee": 1,
-      "feeRange": [1, 1, 1, 1, 5, 56, 5053],
-      "reward": 10547567,
+      "cadence": {
+        "topBits": 1,
+        "chainId": 8,
+        "isAuxpow": false,
+        "signalBits": 0,
+        "expectedChainId": 31430,
+        "chainIdMatchesExpected": null
+      },
+      "totalFees": 4926,
+      "medianFee": 0,
+      "feeRange": [
+        0.25025906735751297,
+        ...
+      ],
+      "reward": 17599652094,
       "pool": {
-        "id": 0,
-        "name": "Unknown",
-        "slug": "unknown",
+        "id": 1,
+        "name": "Qbit Pool",
+        "slug": "qbitpool",
         "minerNames": null
       },
-      "avgFee": 31277,
-      "avgFeeRate": 143,
-      "coinbaseRaw": "03b3e81f3a205468697320626c6f636b20776173206d696e65642077697468206120636172626f6e206e6567617469766520706f77657220736f75726365201209687a2009092009020de601d7986a040000",
-      "coinbaseAddress": "2MtzNEqm2D9jcbPJ5mW7Z3AUNwqt3afZH66",
+      "avgFee": 2463,
+      "avgFeeRate": 0,
+      "coinbaseRaw": "03c016032f505249534d20506f6f6c2f000080a9cb11000000000000",
+      "coinbaseAddress": "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
       "coinbaseAddresses": [
-        "2MtzNEqm2D9jcbPJ5mW7Z3AUNwqt3afZH66"
+        "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+        ...
       ],
-      "coinbaseSignature": "OP_HASH160 OP_PUSHBYTES_20 1320e6542e2146ea486700f4091aa793e7360788 OP_EQUAL",
-      "coinbaseSignatureAscii": "...",
-      "avgTxSize": 310.04,
-      "totalInputs": 33,
-      "totalOutputs": 64,
-      "totalOutputAmt": 30223143847,
+      "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d665ed1ab020cd639d4a07c0afb135246f678f78aaa70b9e7a1fbd44480fa3e1",
+      "coinbaseSignatureAscii": "\\u0003À\\u0016\\u0003/PRISM Pool/\\u0000\\u0000©Ë\\u0011\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000",
+      "avgTxSize": 2606.67,
+      "totalInputs": 2,
+      "totalOutputs": 7,
+      "totalOutputAmt": 6200011306,
       "medianFeeAmt": null,
       "feePercentiles": null,
-      "segwitTotalTxs": 24,
-      "segwitTotalSize": 7709,
-      "segwitTotalWeight": 20369,
-      "header": "00008020320b4b213e7427fddfe779735b79df950248e196d2a73d1079000000000000006864b9b6c4d13a946274a0c66d8c263e2c4d0a0e93b2c728b91bf14a2af16d4de29e3161ffff001a19207112",
-      "utxoSetChange": 31,
-      "utxoSetSize": 26145554,
-      "totalInputAmt": 30223925789,
-      "virtualSize": 5746.25,
+      "segwitTotalTxs": 2,
+      "segwitTotalSize": 7820,
+      "segwitTotalWeight": 7820,
+      "header": "00000120b3ccee42b71d136feaafed4c1beae9d255cdbd8acfae302a0d0a0000...",
+      "auxpow": null,
+      "utxoSetChange": 5,
+      "utxoSetSize": null,
+      "totalInputAmt": null,
+      "virtualSize": 8149,
       "firstSeen": null,
       "orphans": [],
       "matchRate": null,
@@ -5845,65 +5653,78 @@ export const restApiDocsData = [
           esModule: ``
         },
         codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`slushpool`],
+          esModule: [`qbitpool`],
+          commonJS: [`qbitpool`],
+          curl: [`qbitpool`],
           response: `{
   "pool": {
-    "id": 43,
-    "name": "SlushPool",
-    "link": "https://slushpool.com/",
+    "id": 2,
+    "name": "Qbit Pool",
+    "link": "https://qbit.org/pool",
     "addresses": [
-      "1CK6KHY6MHgYvmRQ4PAafKYDrg1ejbH1cE",
-      "1AqTMY7kmHZxBuLUR5wJjPFUvqGs23sesr"
+      "qb1z7635znpv0ffehup3aq7dddzf6yuvvzwddad7aye7l64430rvq69q4zmcdh"
     ],
     "regexes": [
-      "/slush/"
+      "/Qbit Pool/",
+      "/PRISM Pool/"
     ],
-    "slug": "slushpool"
+    "slug": "qbitpool",
+    "unique_id": 1,
+    "parentRegexes": [],
+    "parentAddresses": [],
+    "addressMatchMode": "any"
   },
   "blockCount": {
-    "all": 679,
-    "24h": 8,
-    "1w": 56
+    "all": 20027,
+    "24h": 584,
+    "1w": 3224
   },
   "blockShare": {
-    "all": 0.06015770355275981,
-    "24h": 0.05333333333333334,
-    "1w": 0.055666003976143144
+    "all": 0.11893506586058224,
+    "24h": 0.4086773967809657,
+    "1w": 0.32054086299463114
   },
-  "estimatedHashrate": 12448077385930390000,
-  "reportedHashrate": null
+  "estimatedHashrate": 50542901833723030,
+  "reportedHashrate": null,
+  "avgBlockHealth": null,
+  "totalReward": "397542025030015"
 }`
         },
         codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
+          esModule: [`binancepool`],
+          commonJS: [`binancepool`],
           curl: [`binancepool`],
           response: `{
   "pool": {
-    "id": 105,
+    "id": 9,
     "name": "Binance Pool",
-    "link": "https://pool.binance.com/",
+    "link": "https://pool.binance.com",
     "addresses": [],
-    "regexes": [
-      "/Binance/",
+    "regexes": [],
+    "slug": "binancepool",
+    "unique_id": 8,
+    "parentRegexes": [
       "binance"
     ],
-    "slug": "binancepool"
+    "parentAddresses": [
+      "3G7jcEELKh38L6kaSV8K35pTqsh5bgZW2D"
+    ],
+    "addressMatchMode": "any"
   },
   "blockCount": {
-    "all": 2,
-    "24h": 1,
-    "1w": 1
+    "all": 470,
+    "24h": 0,
+    "1w": 0
   },
   "blockShare": {
-    "all": 8.984160924290476e-7,
-    "24h": 0.004524886877828055,
-    "1w": 0.0005089058524173028
+    "all": 0.0022414360451530136,
+    "24h": 0,
+    "1w": 0
   },
-  "estimatedHashrate": 2617854550633.5283,
-  "reportedHashrate": null
+  "estimatedHashrate": 0,
+  "reportedHashrate": null,
+  "avgBlockHealth": null,
+  "totalReward": "9870000001932"
 }`
         },
         codeSampleSignet: {
@@ -6043,71 +5864,41 @@ export const restApiDocsData = [
           esModule: ``
         },
         codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`foundryusa`],
+          esModule: [`antpool`],
+          commonJS: [`antpool`],
+          curl: [`antpool`],
           response: `[
   {
-    "timestamp": 1647216000,
-    "avgHashrate": 39126788325841880000,
-    "share": 0.195312,
-    "poolName": "Foundry USA"
+    "timestamp": 1785110400,
+    "avgHashrate": 130674404043081630000,
+    "share": 0.106079,
+    "poolName": "AntPool"
   },
   {
-    "timestamp": 1647302400,
-    "avgHashrate": 42038778612166990000,
-    "share": 0.208941,
-    "poolName": "Foundry USA"
-  },
-  {
-    "timestamp": 1647820800,
-    "avgHashrate": 40677922193000910000,
-    "share": 0.196597,
-    "poolName": "Foundry USA"
-  },
-  {
-    "timestamp": 1647907200,
-    "avgHashrate": 40210989932016525000,
-    "share": 0.194707,
-    "poolName": "Foundry USA"
-  },
-  {
-    "timestamp": 1648425600,
-    "avgHashrate": 39336856807414260000,
-    "share": 0.194605,
-    "poolName": "Foundry USA"
-  },
-  {
-    "timestamp": 1648512000,
-    "avgHashrate": 39391244745360090000,
-    "share": 0.193487,
-    "poolName": "Foundry USA"
+    "timestamp": 1785715200,
+    "avgHashrate": 148991613391410170000,
+    "share": 0.0991242,
+    "poolName": "AntPool"
   },
   ...
 ]`
         },
         codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`kncminer`],
+          esModule: [`qbitpool`],
+          commonJS: [`qbitpool`],
+          curl: [`qbitpool`],
           response: `[
   {
-    "timestamp": 1400457600,
-    "avgHashrate": 23504290056.20675,
-    "share": 0.21875,
-    "poolName": "KnCMiner"
+    "timestamp": 1783900800,
+    "avgHashrate": 13388374830293.713,
+    "share": 0.449697,
+    "poolName": "Qbit Pool"
   },
   {
-    "timestamp": 1401062400,
-    "avgHashrate": 22880315827.385838,
-    "share": 0.301661,
-    "poolName": "KnCMiner"
-  },
-  {
-    "timestamp": 1401667200,
-    "avgHashrate": 65314000516.18979,
-    "share": 0.774853,
-    "poolName": "KnCMiner"
+    "timestamp": 1784505600,
+    "avgHashrate": 26233387870649.863,
+    "share": 0.743131,
+    "poolName": "Qbit Pool"
   },
   ...
 ]`
@@ -6163,131 +5954,158 @@ export const restApiDocsData = [
           esModule: ``
         },
         codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`luxor`,`730000`],
+          esModule: [`luxor`, `163891`],
+          commonJS: [`luxor`, `163891`],
+          curl: [`luxor`, `163891`],
           response: `[
   {
-    "id": "0000000000000000000572c6eb693c51b728593139079c613c8ea0bc6384e362",
-    "timestamp": 1648778242,
-    "height": 729910,
-    "version": 536895488,
-    "bits": 386521239,
-    "nonce": 1708647181,
-    "difficulty": 28587155782195.14,
-    "merkle_root": "729be37fb4b1bff0ca2e4b572e5dc3fb57e5aa57a8a400f8c89d4993d05c204f",
-    "tx_count": 1808,
-    "size": 1595444,
-    "weight": 3992846,
-    "previousblockhash": "00000000000000000000034e117bb9922da36adc6393fabfe9ed97c7bb38998c",
+    "id": "629b0d823aa0990c33026e4abd0adac8ebc0e5ce38e9130f1d1ab211ba776511",
+    "height": 163878,
+    "version": 537256192,
+    "timestamp": 1793986334,
+    "bits": 386571417,
+    "nonce": 0,
+    "difficulty": 26524536808210.01,
+    "merkle_root": "e772ae0ab498f37b1a4b297cccb7ce5d017c9d7c34a3dc43848e58dedf0f364b",
+    "tx_count": 1,
+    "size": 1218,
+    "weight": 1218,
+    "previousblockhash": "00000000000000009081f74b9d0ccfeea45baeb08478c65c30eb6ead01e1733c",
+    "mediantime": 1793986145,
     "extras": {
-      "coinbaseRaw": "0336230b315c20506f7765726564206279204c75786f722054656368205c000000002103a960b06341e200000e744596150000000000",
-      "medianFee": 1,
-      "reward": 628988802,
-      "totalFees": 3988802,
+      "cadence": {
+        "topBits": 1,
+        "chainId": 47,
+        "isAuxpow": true,
+        "signalBits": 0,
+        "expectedChainId": 47,
+        "chainIdMatchesExpected": true
+      },
+      "totalFees": 0,
+      "medianFee": 0,
+      "feeRange": [
+        0,
+        ...
+      ],
+      "reward": 18394280067,
       "pool": {
-        "id": 4
-      }
-    }
-  },
-  {
-    "id": "00000000000000000009b6d122d9e2299d2f9cda13274a9f024bebe52ef96a59",
-    "timestamp": 1648717740,
-    "height": 729820,
-    "version": 536870912,
-    "bits": 386521239,
-    "nonce": 1608169168,
-    "difficulty": 28587155782195.14,
-    "merkle_root": "4f67e65e8e5e554cd4a8d0f91aa63b5e8686817984eb8188af5fb39958263f5d",
-    "tx_count": 1425,
-    "size": 729585,
-    "weight": 1954155,
-    "previousblockhash": "000000000000000000006441657fa1eea37d68784ebd86dc1cd7f89251130f56",
-    "extras": {
-      "coinbaseRaw": "03dc220b315c20506f7765726564206279204c75786f722054656368205c00000000e5ae4908ac1f20df00000410c830000000000000",
-      "medianFee": 8,
-      "reward": 630138805,
-      "totalFees": 5138805,
-      "pool": {
-        "id": 4
-      }
-    }
-  },
-  {
-    "id": "0000000000000000000796834c03bd3be474bfa895146a58015f5ff325ef50c0",
-    "timestamp": 1648653948,
-    "height": 729714,
-    "version": 549453824,
-    "bits": 386547904,
-    "nonce": 883606929,
-    "difficulty": 27452707696466.39,
-    "merkle_root": "45593907e5fa0dee743d2f9194b0923a800cb6313e66221a86bf51df388e012c",
-    "tx_count": 1709,
-    "size": 1434271,
-    "weight": 3993013,
-    "previousblockhash": "000000000000000000000fbfac1a91cdeaf64d689f7673d02613da9d10bfb284",
-    "extras": {
-      "coinbaseRaw": "0372220b315c20506f7765726564206279204c75786f722054656368205c0000000063349a9b3d185fed000007e7092a000000000000",
-      "medianFee": 3,
-      "reward": 632350743,
-      "totalFees": 7350743,
-      "pool": {
-        "id": 4
-      }
+        "id": 2,
+        "name": "Luxor",
+        "slug": "luxor",
+        "minerNames": null
+      },
+      "avgFee": 0,
+      "avgFeeRate": 0,
+      "coinbaseRaw": "0326800200",
+      "coinbaseAddress": "qb1zgxwrmumwzvyk0jawp708eat70dzdrhyz80q83vypp9r8cj7e9ucqlwfe8r",
+      "coinbaseAddresses": [
+        "qb1zgxwrmumwzvyk0jawp708eat70dzdrhyz80q83vypp9r8cj7e9ucqlwfe8r"
+      ],
+      "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 419c3df36e130967cbae0f9e7cf57e7b44d1dc823bc078b08109467c4bd92f30",
+      "coinbaseSignatureAscii": "\\u0003&\\u0002\\u0000",
+      "avgTxSize": 0,
+      "totalInputs": 0,
+      "totalOutputs": 2,
+      "totalOutputAmt": 0,
+      "medianFeeAmt": null,
+      "feePercentiles": null,
+      "segwitTotalTxs": 0,
+      "segwitTotalSize": 0,
+      "segwitTotalWeight": 0,
+      "header": "00e105203c73e101ad6eeb305cc67884b0ae5ba4eecf0c9d4bf7819000000000...",
+      "auxpow": {
+        "parentBlockHash": "00000000000000000008cf1328378d2422d458da2915b789e95e2eedb08443fd",
+        "parentCoinbaseRaw": "03f1df0e164d696e6564206279204c75786f72c500c4067fef14f9fabe6d6dbf...",
+        "parentCoinbaseAddresses": [
+          "3K9KZZPB8NRwZVP5wNKX4VYhnswrJxpgZ4",
+          ...
+        ]
+      },
+      "utxoSetChange": 2,
+      "utxoSetSize": null,
+      "totalInputAmt": null,
+      "virtualSize": 1218,
+      "firstSeen": null,
+      "orphans": [],
+      "matchRate": null,
+      "expectedFees": null,
+      "expectedWeight": null
     }
   },
   ...
 ]`
         },
         codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`bitcoincom`,`2226000`],
+          esModule: [`qbitpool`, `202432`],
+          commonJS: [`qbitpool`, `202432`],
+          curl: [`qbitpool`, `202432`],
           response: `[
   {
-    "id": "00000000000000ed428cdb70dfdeb0f3927912131cb96e7b1fe274b1bb1181b2",
-    "timestamp": 1582018014,
-    "height": 1666150,
-    "version": 541065216,
-    "bits": 436312585,
-    "nonce": 21973352,
-    "difficulty": 10474471.99230249,
-    "merkle_root": "541456efe41e5730a563475e0c5e2007ee660f1d86d9778bfc164d73c59fd605",
-    "tx_count": 382,
-    "size": 126201,
-    "weight": 331851,
-    "previousblockhash": "00000000005a0843cc88b09cf6def15e4dc8fe38ab5cf3ad890f34a2df497004",
+    "id": "0000000000000a0d2a30aecf8abdcd55d2e9ea1b4cedafea6f131db742eeccb3",
+    "height": 202431,
+    "version": 536936448,
+    "timestamp": 1793838478,
+    "bits": 441920764,
+    "nonce": 656097405,
+    "difficulty": 192449.9156262012,
+    "merkle_root": "ff60da2e2fda8012546e80c8981b002030b1196aa622743002142b1289c30189",
+    "tx_count": 1,
+    "size": 329,
+    "weight": 329,
+    "previousblockhash": "00000000000031f9e5dcd65baedc69c011ac7b81e60491b988df4ca60c055363",
+    "mediantime": 1793838163,
     "extras": {
-      "coinbaseRaw": "03666c19706f6f6c2e626974636f696e2e636f6d010000022583010000000000",
-      "medianFee": 1,
-      "reward": 39726335,
-      "totalFees": 663835,
+      "cadence": {
+        "topBits": 1,
+        "chainId": 8,
+        "isAuxpow": false,
+        "signalBits": 0,
+        "expectedChainId": 31430,
+        "chainIdMatchesExpected": null
+      },
+      "totalFees": 0,
+      "medianFee": 0,
+      "feeRange": [
+        0,
+        ...
+      ],
+      "reward": 17599647168,
       "pool": {
-        "id": 12
-      }
-    }
-  },
-  {
-    "id": "00000000000000af90f51e48cb29fdecc62e9961c5e27aca1a4ae8213aae1954",
-    "timestamp": 1579793108,
-    "height": 1663620,
-    "version": 541065216,
-    "bits": 436295134,
-    "nonce": 1762790676,
-    "difficulty": 12563071.03178775,
-    "merkle_root": "02d02afea666f08bab5851de541d0570c71a6cd8be358c28952c52d57b7afad4",
-    "tx_count": 24,
-    "size": 9562,
-    "weight": 23848,
-    "previousblockhash": "000000000000013bbdbc0fef53a5b4b2af02880a6f56f7945de071b71d51123a",
-    "extras": {
-      "coinbaseRaw": "03846219706f6f6c2e626974636f696e2e636f6d01000065f224020000000000",
-      "medianFee": 1,
-      "reward": 39547121,
-      "totalFees": 484621,
-      "pool": {
-        "id": 12
-      }
+        "id": 1,
+        "name": "Qbit Pool",
+        "slug": "qbitpool",
+        "minerNames": null
+      },
+      "avgFee": 0,
+      "avgFeeRate": 0,
+      "coinbaseRaw": "03bf16032f505249534d20506f6f6c2f000080a9c605000000000000",
+      "coinbaseAddress": "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+      "coinbaseAddresses": [
+        "tq1z6ej76x4syrxk8822qlq2lvf4y3hk0rmc42nsh8n6r775gjq050ssdn0vng",
+        ...
+      ],
+      "coinbaseSignature": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d665ed1ab020cd639d4a07c0afb135246f678f78aaa70b9e7a1fbd44480fa3e1",
+      "coinbaseSignatureAscii": "\\u0003¿\\u0016\\u0003/PRISM Pool/\\u0000\\u0000©Æ\\u0005\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000",
+      "avgTxSize": 0,
+      "totalInputs": 0,
+      "totalOutputs": 3,
+      "totalOutputAmt": 0,
+      "medianFeeAmt": null,
+      "feePercentiles": null,
+      "segwitTotalTxs": 0,
+      "segwitTotalSize": 0,
+      "segwitTotalWeight": 0,
+      "header": "000001206353050ca64cdf88b99104e6817bac11c069dcae5bd6dce5f9310000...",
+      "auxpow": null,
+      "utxoSetChange": 3,
+      "utxoSetSize": null,
+      "totalInputAmt": null,
+      "virtualSize": 329,
+      "firstSeen": null,
+      "orphans": [],
+      "matchRate": null,
+      "expectedFees": null,
+      "expectedWeight": null
     }
   },
   ...
@@ -7335,9 +7153,9 @@ export const restApiDocsData = [
           esModule: ``
         },
         codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`000000000000000000032535698c5b0c48283b792cf86c1c6e36ff84464de785`],
+          esModule: [`00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401`],
+          commonJS: [`00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401`],
+          curl: [`00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401`],
           response: `{
   hash: "000000000000000000032535698c5b0c48283b792cf86c1c6e36ff84464de785",
   matchRate: 99.66,
@@ -7346,9 +7164,9 @@ export const restApiDocsData = [
 }`
         },
         codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`000000000000025a66f30a181e438b9f65ef33cec3014b7a4ff4c7578289cd6e`],
+          esModule: [`0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f`],
+          commonJS: [`0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f`],
+          curl: [`0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f`],
           response: `{
   hash: "000000000000025a66f30a181e438b9f65ef33cec3014b7a4ff4c7578289cd6e",
   matchRate: 100,
@@ -7392,9 +7210,9 @@ export const restApiDocsData = [
           esModule: ``
         },
         codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`820000`],
+          esModule: [`163891`],
+          commonJS: [`163891`],
+          curl: [`163891`],
           response: `[
   {
     hash: "000000000000000000034cd3689507da0386d3d1790dd56f2e6945e650e02c74",
@@ -7412,9 +7230,9 @@ export const restApiDocsData = [
 ]`
         },
         codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`2566570`],
+          esModule: [`202432`],
+          commonJS: [`202432`],
+          curl: [`202432`],
           response: `[
   {
     hash: "00000000000002e7e96e7b5ee04a5fbb3ef9575a9f4a99effb32a8a89d9d2f19",
@@ -7476,9 +7294,9 @@ export const restApiDocsData = [
           esModule: ``
         },
         codeSampleMainnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`00000000000000000000f218ceda7a5d9c289040b9c3f05ef9f7c2f4930e0123`],
+          esModule: [`00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401`],
+          commonJS: [`00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401`],
+          curl: [`00000000000000008451c8a192642a138f7ec4b84376341d7a5003335a2e9401`],
           response: `{
   height: 822418,
   id: "00000000000000000000f218ceda7a5d9c289040b9c3f05ef9f7c2f4930e0123",
@@ -7516,9 +7334,9 @@ export const restApiDocsData = [
 }`
         },
         codeSampleTestnet: {
-          esModule: [],
-          commonJS: [],
-          curl: [`000000000000007cfba94e051326b3546c968a188a7e12e340a78cefc586bfe3`],
+          esModule: [`0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f`],
+          commonJS: [`0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f`],
+          curl: [`0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f`],
           response: `{
   height: 2566708,
   id: "000000000000007cfba94e051326b3546c968a188a7e12e340a78cefc586bfe3",
@@ -8605,45 +8423,133 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
           response: `{
-  txid: "15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521",
-  version: 1,
-  locktime: 0,
-  vin: [],
-  vout: [],
-  size: 884,
-  weight: 3536,
-  fee: 20000,
-  status: {
-    confirmed: true,
-    block_height: 363348,
-    block_hash: "0000000000000000139385d7aa78ffb45469e0c715b8d6ea6cb2ffa98acc7171",
-    block_time: 1435754650
-  }
+  "txid": "053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b",
+  "version": 2,
+  "locktime": 0,
+  "vin": [
+    {
+      "txid": "ab7a18ec1c4476d8268ec04c16332554c813a802a9c328d59c03649d358bcd13",
+      "vout": 2,
+      "prevout": {
+        "scriptpubkey": "522090d63fc95a05fe378059f18a9808cfef4f6568eda9e7146f0f2f852e22c7f007",
+        "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 90d63fc95a05fe378059f18a9808cfef4f6568eda9e7146f0f2f852e22c7f007",
+        "scriptpubkey_type": "v2_p2mr",
+        "scriptpubkey_address": "qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h",
+        "value": 3411214
+      },
+      "scriptsig": "",
+      "scriptsig_asm": "",
+      "witness": [
+        "bc0e61d477e4e164043eae3a7e17fa83378f5f977614c5e73342c113ad274513...",
+        "20583e99acbe68d35478e2de0c81baa1f02a694f20e95ea7fdb84972a087bc493bb3",
+        ...
+      ],
+      "is_coinbase": false,
+      "sequence": 4294967293,
+      "inner_witnessscript_asm": "OP_PUSHBYTES_32 583e99acbe68d35478e2de0c81baa1f02a694f20e95ea7fdb84972a087bc493b OP_CHECKSIGPQC"
+    }
+  ],
+  "vout": [
+    {
+      "scriptpubkey": "6a357b2270223a22716269742d3230222c226f70223a226d696e74222c227469636b223a224e454f4e222c22616d74223a22323130227d",
+      "scriptpubkey_asm": "OP_RETURN OP_PUSHBYTES_53 7b2270223a22716269742d3230222c226f7022...",
+      "scriptpubkey_type": "op_return",
+      "value": 0
+    },
+    {
+      "scriptpubkey": "5220171be5cd839aa4edc6c97f98acaa1972462c225da155721082d5e7f42f72e383",
+      "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 171be5cd839aa4edc6c97f98acaa1972462c225da155721082d5e7f42f72e383",
+      "scriptpubkey_type": "v2_p2mr",
+      "scriptpubkey_address": "qb1zzud7tnvrn2jwm3kf07v2e2sewfrzcgja592hyyyz6hnlgtmjuwps3gpfcs",
+      "value": 100000
+    },
+    ...
+  ],
+  "size": 3924,
+  "weight": 3924,
+  "vsize": 3924,
+  "sigops": 0,
+  "fee": 51394,
+  "status": {
+    "confirmed": true,
+    "block_height": 161388,
+    "block_hash": "0000000000000001375acbbf5381a88f9de4a13f9383ad3d03707b274f03b277",
+    "block_time": 1793833342
+  },
+  "order": 1534490655,
+  "adjustedVsize": 3924,
+  "feePerVsize": 13.097349643221202,
+  "adjustedFeePerVsize": 13.097349643221202,
+  "effectiveFeePerVsize": 13.097349643221202
 }`
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
           response: `{
-  txid: "eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d",
-  version: 2,
-  locktime: 2091198,
-  vin: [],
-  vout: [],
-  size: 222,
-  weight: 561,
-  fee: 16332,
-  status: {
-    confirmed: true,
-    block_height: 2091199,
-    block_hash: "000000000000004d36632fda8180ff16855d606e5515aab0750d9d4fe55fe7d6",
-    block_time: 1630648992
-  }
+  "txid": "ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc",
+  "version": 2,
+  "locktime": 0,
+  "vin": [
+    {
+      "txid": "5e7e1a93217029827e0829d5356951bdb887fc69efdea5919d039864b5888bc1",
+      "vout": 0,
+      "prevout": {
+        "scriptpubkey": "5220ddba5296a1b1e1c2ab147327a5c0c55ed40a57e2d5ed2ce0f5524433b3825293",
+        "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 ddba5296a1b1e1c2ab147327a5c0c55ed40a57e2d5ed2ce0f5524433b3825293",
+        "scriptpubkey_type": "v2_p2mr",
+        "scriptpubkey_address": "tq1zmka9994pk8su92c5wvn6tsx9tm2q54lz6hkjec842fzr8vuz22fszzh956",
+        "value": 23960
+      },
+      "scriptsig": "",
+      "scriptsig_asm": "",
+      "witness": [
+        "0ed590cf0b59718f34ddd2da0d0762f641e69d4289594fe73e7700cd8fe11f9a...",
+        "20a11f4736edb8fcb41bcf307543c22efda1ebb7020e9c615cf0c7af49e19f8a...",
+        ...
+      ],
+      "is_coinbase": false,
+      "sequence": 4294967294,
+      "inner_witnessscript_asm": "OP_PUSHBYTES_32 a11f4736edb8fcb41bcf307543c22efda1ebb7020e9c615c..."
+    }
+  ],
+  "vout": [
+    {
+      "scriptpubkey": "5220d117f1c6142e8ae7b8222ec56c38d4f01919b648b0ef229f6b28be717a5dd10a",
+      "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 d117f1c6142e8ae7b8222ec56c38d4f01919b648b0ef229f6b28be717a5dd10a",
+      "scriptpubkey_type": "v2_p2mr",
+      "scriptpubkey_address": "tq1z6ytlr3s5969w0wpz9mzkcwx57qv3ndjgkrhj98mt9zl8z7ja6y9qkglrns",
+      "value": 10000
+    },
+    {
+      "scriptpubkey": "5220a12cdeb7727008fcf1ed926ee298cc851aa522e1b9a9b4ee28fed6a179caa0ba",
+      "scriptpubkey_asm": "OP_PUSHNUM_2 OP_PUSHBYTES_32 a12cdeb7727008fcf1ed926ee298cc851aa522e1b9a9b4ee28fed6a179caa0ba",
+      "scriptpubkey_type": "v2_p2mr",
+      "scriptpubkey_address": "tq1z5ykdadmjwqy0eu0djfhw9xxvs5d22ghphx5mfm3glmt2z7w25zaqzq4p7v",
+      "value": 10000
+    }
+  ],
+  "size": 3960,
+  "weight": 3960,
+  "vsize": 3960,
+  "sigops": 0,
+  "fee": 3960,
+  "status": {
+    "confirmed": true,
+    "block_height": 202432,
+    "block_hash": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+    "block_time": 1793838527
+  },
+  "order": 4234298322,
+  "adjustedVsize": 3960,
+  "feePerVsize": 1,
+  "adjustedFeePerVsize": 1,
+  "effectiveFeePerVsize": 1
 }`
         },
         codeSampleSignet: {
@@ -8745,16 +8651,16 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          response: `010000000536a007284bd52ee826680a7f43536472f1bcce1e76cd76b826b88c5884eddf1f0c0000006b483045022100bcdf40fb3b5ebfa2c158ac8d1a41c03eb3dba4e180b00e81836bafd56d946efd022005cc40e35022b614275c1e485c409599667cbd41f6e5d78f421cb260a020a24f01210255ea3f53ce3ed1ad2c08dfc23b211b15b852afb819492a9a0f3f99e5747cb5f0ffffffffee08cb90c4e84dd7952b2cfad81ed3b088f5b...`
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          response: `0200000000010113cd8b359d64039cd528c3a902a813c8542533164cc08e26d876441cec187aab0200000000fdffffff030000000000000000376a357b2270223a22716269742d3230222c226f70223a226d696e74222c227469636b223a224e454f4e222c22616d74223a22323130227da086010000000000225220171be5cd...`
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          response: `0200000000010146c398e70cceaf9d8f734e603bc53e4c4c0605ab46cb1b5807a62c90f5aed50d0100000000feffffff023c0fc10c010000001600145033f65b590f2065fe55414213f1d25ab20b6c4f487d1700000000001600144b812d5ef41fc433654d186463d41b458821ff740247304402202438dc18801919baa64eb18f7e925a...`
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          response: `02000000000101c18b88b56498039d91a5deef69fc87b8bd516935d529087e82297021931a7e5e0000000000feffffff021027000000000000225220d117f1c6142e8ae7b8222ec56c38d4f01919b648b0ef229f6b28be717a5dd10a1027000000000000225220a12cdeb7727008fcf1ed926ee298cc851aa522e1b9a9b4ee28...`
         },
         codeSampleSignet: {
           esModule: ['fe80c0c2439d41d301f35570018b4239ca3204293e5e5fd68d64013e8fc45025'],
@@ -8784,7 +8690,7 @@ export const restApiDocsData = [
     fragment: 'get-transaction-merkleblock-proof',
     title: 'GET Transaction Merkleblock Proof',
     description: {
-      default: 'Returns a merkle inclusion proof for the transaction using qbitd\'s merkleblock format.'
+      default: 'Returns a merkle inclusion proof for a confirmed transaction, as a hex-encoded merkle block: the block\'s 80-byte header, then the partial merkle tree. The header leaves out AuxPoW data, so for a block mined through AuxPoW the proof differs from qbitd\'s <code>gettxoutproof</code>, which includes it.'
     },
     urlString: '/tx/:txid/merkleblock-proof',
     showConditions: bitcoinNetworks,
@@ -8810,16 +8716,16 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          response: `0300000058f6dd09ac5aea942c01d12e75b351e73f4304cc442741000000000000000000ef0c2fa8517414b742094a020da7eba891b47d660ef66f126ad01e5be99a2fd09ae093558e411618c14240df820700000ce4d15e17594f257b22d1ddf47d07b3b88779a8374fcd515ad883d79726c6027da6abfcbc1341a049b30277d3bf14e4663...`
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          response: `00800020ba9016ab02195c425e30aa50e6db018ca06a87780bf9b405b50a9e5e740989ff123473512996e63f1a3f101c7b729ee6f5dabb1f4fbd1b217a059ed3344748507eb9eb6aad8c0119761169a14c0000000808ca8f38d105b10a49e7498106fc3593dd7a43b5e6f013c34db7e21f73bef132a32bdc64a7ab19ba773efb854bc3040c17fd2d5e2e7870cf32869c4de739e22d560c13acbd81b7847247e3d2e414af004771f06295fde68ba6d6f61ec2f801605b76781f63241d1273c12c5a610255323e8d5ed1ddfefc307b0773576886340546dd42754af016cece8bb158dcdb294fceaaef23b5265bfa9a9eac75f3e1463934df09493e2bfedbd5e73b445fbb8e0c14bdceee95964cdc0aca319e2691e898d1e8916bfc714cfa3d3e6b72319f6a77042a5e4350c7570c94b000d0add46dca35e8187ec30f7e15341c76ac83a14decfb7cee7d2d74aaf64e1497251721fbcc026f05`
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          response: `0000602002bf77bbb098f90f149430c314e71ef4e2671ea5e04a2503e0000000000000000406ffb54f2925360aae81bd3199f456928bbe6ae83a877902da9d9ffb08215da0ba3161ffff001a545a850bb80000000906e0c62f68fdf4865a46889e2e12d66f03cc537225d612aa77b08a38936b4d435d73544598d93174314d75e5833...`
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          response: `00000120b3ccee42b71d136feaafed4c1beae9d255cdbd8acfae302a0d0a000000000000291713cd0105d337933a365f3f86a2267749ad7a6b5a506d0eee218012accea7bfcdeb6af60c571a956eae120300000003751a595b8b634eec2f760f45a01c504eeb4f5cd6c92a1782ca2cf757405fb902fc6243d23b341fdf68721cb02d2db58c8d36837392afec7091865daea7672dbad1e3ec998a51c0f8edbb406ad4806dcabd24d71b0a6ae5c4714dcbe39f211df3010b`
         },
         codeSampleSignet: {
           esModule: ['fe80c0c2439d41d301f35570018b4239ca3204293e5e5fd68d64013e8fc45025'],
@@ -8865,44 +8771,33 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
           response: `{
-  block_height: 363348,
-  merkle: [
-    "acf931fe8980c6165b32fe7a8d25f779af7870a638599db1977d5309e24d2478",
-    "ee25997c2520236892c6a67402650e6b721899869dcf6715294e98c0b45623f9",
-    "790889ac7c0f7727715a7c1f1e8b05b407c4be3bd304f88c8b5b05ed4c0c24b7",
-    "facfd99cc4cfe45e66601b37a9637e17fb2a69947b1f8dc3118ed7a50ba7c901",
-    "8c871dd0b7915a114f274c354d8b6c12c689b99851edc55d29811449a6792ab7",
-    "eb4d9605966b26cfa3bf69b1afebe375d3d6aadaa7f2899d48899b6bd2fd6a43",
-    "daa1dc59f22a8601b489fc8a89da78bc35415291c62c185e711b8eef341e6e70",
-    "102907c1b95874e2893c6f7f06b45a3d52455d3bb17796e761df75aeda6aa065",
-    "baeede9b8e022bb98b63cb765ba5ca3e66e414bfd37702b349a04113bcfcaba6",
-    "b6f07be94b55144588b33ff39fb8a08004baa03eb7ff121e1847d715d0da6590",
-    "7d02c62697d783d85a51cd4f37a87987b8b3077df4ddd1227b254f59175ed1e4"
+  "block_height": 161388,
+  "merkle": [
+    "6001f8c21ef6d6a68be6fd9562f0714700af14e4d2e3477284b781bdac130c56",
+    "2de239e74d9c8632cf70782e5e2dfd170c04c34b85fb3e77ba19aba764dc2ba3",
+    "3946e1f375ac9e9afa5b26b523efaace4f29dbdc58b18bcece16f04a7542dd46",
+    "32f1be731fe2b74dc313f0e6b5437add9335fc068149e7490ab105d1388fca08",
+    "98e891269e31ca0adc4c9695eecebd140c8ebb5f443be7d5dbfe2b3e4909df34",
+    ...
   ],
-  pos: 1465
+  "pos": 11
 }`
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
           response: `{
-  block_height: 2091199,
-  merkle: [
-    "434d6b93388ab077aa12d6257253cc036fd6122e9e88465a86f4fd682fc6e006",
-    "bd9af28e56cf6731e78ee1503a65d9cc9b15c148daa474e71e085176f48996ac",
-    "605f6f83423ef3b86623927ef2d9dcb0f8d9e40a8132217c2fa0910b84488ec7",
-    "10b7ef06ef0756823dbf39dea717be397e7ccb49bbefc5cfc45e6f9d58793baf",
-    "19183ceae11796a9b1d0893e0561870bbce4d060c9547b1e91ad8b34eb3d5001",
-    "1b16723739522955422b4286b4d8620d2a704b6997e6bbd809d151b8d8d64611",
-    "6f8496469b19dd35871684332dfd3fc0205d83d2c58c44ebdae068542bc951f6",
-    "e0d2733bd7bce4e5690b71bc8f7cedb1edbc49a5ff85c3678ecdec894ea1c023"
+  "block_height": 202432,
+  "merkle": [
+    "02b95f4057f72cca82172ac9d65c4feb4e501ca0450f762fec4e638b5b591a75",
+    "f31d219fe3cb4d71c4e56a0a1bd724bdca6d80d46a40bbedf8c0518a99ece3d1"
   ],
-  pos: 1
+  "pos": 1
 }`
         },
         codeSampleSignet: {
@@ -8956,7 +8851,7 @@ export const restApiDocsData = [
     fragment: 'get-transaction-outspend',
     title: 'GET Transaction Outspend',
     description: {
-      default: 'Returns the spending status of a transaction output. Available fields: <code>spent</code> (boolean), <code>txid</code> (optional), <code>vin</code> (optional), and <code>status</code> (optional, the status of the spending tx).'
+      default: 'Returns the spending status of a transaction output. Available fields: <code>spent</code> (boolean), <code>txid</code> (optional), <code>vin</code> (optional), and <code>status</code> (optional, the status of the spending tx). An output that doesn\'t exist also answers <code>spent: false</code>.'
     },
     urlString: '/tx/:txid/outspend/:vout',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -8988,35 +8883,27 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521', '3'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521', '3'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521', '3'],
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b', '2'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b', '2'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b', '2'],
           response: `{
-  spent: true,
-  txid: "2a1b8ec06d68096911da82b02806c3848c415b0044a0046850c4a97cbffac7b1",
-  vin: 1,
-  status: {
-    confirmed: true,
-    block_height: 363354,
-    block_hash: "000000000000000012e6130dec174ca877bf39ead6e3d04a8ba3b0cd683c1661",
-    block_time: 1435758032
+  "spent": true,
+  "txid": "e89dcf8a7a5bce5810e54176b4af8ad06e871e11a54e4ad9c25d0d01a56056f4",
+  "vin": 0,
+  "status": {
+    "confirmed": true,
+    "block_height": 161395,
+    "block_hash": "0000000000000000f472b468a3d12b6db513adc3788a4a911e104795e360d77a",
+    "block_time": 1793833899
   }
 }`
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d', '0'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d', '0'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d', '0'],
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc', '0'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc', '0'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc', '0'],
           response: `{
-  spent: true,
-  txid: "37e867526abb7cde3f64f86f60b42bee1f989aa8514730ae2e741dd05bbc286b",
-  vin: 0,
-  status: {
-    confirmed: true,
-    block_height: 2091199,
-    block_hash: "000000000000004d36632fda8180ff16855d606e5515aab0750d9d4fe55fe7d6",
-    block_time: 1630648992
-  }
+  "spent": false
 }`
         },
         codeSampleSignet: {
@@ -9103,42 +8990,39 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
           response: `[
   {
-    spent: true,
-    txid: "34de8ba520eb846da8831fa47c06eef9b4eb4a2ff6a3271165fd6b9aafc5a20c",
-    vin: 12,
-    status: {
-      confirmed: true,
-      block_height: 363349,
-      block_hash: "000000000000000012ad81b3ea2cb1c4ba115901bd1b41cd05a6a8d736691322",
-      block_time: 1435754897
-    }
+    "spent": false
   },
-  ...
+  {
+    "spent": false
+  },
+  {
+    "spent": true,
+    "txid": "e89dcf8a7a5bce5810e54176b4af8ad06e871e11a54e4ad9c25d0d01a56056f4",
+    "vin": 0,
+    "status": {
+      "confirmed": true,
+      "block_height": 161395,
+      "block_hash": "0000000000000000f472b468a3d12b6db513adc3788a4a911e104795e360d77a",
+      "block_time": 1793833899
+    }
+  }
 ]`
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
           response: `[
   {
-    spent: true,
-    txid: "37e867526abb7cde3f64f86f60b42bee1f989aa8514730ae2e741dd05bbc286b",
-    vin: 0,
-    status: {
-      confirmed: true,
-      block_height: 2091199,
-      block_hash: "000000000000004d36632fda8180ff16855d606e5515aab0750d9d4fe55fe7d6",
-      block_time: 1630648992
-    }
+    "spent": false
   },
   {
-    spent: false
+    "spent": false
   }
 ]`
         },
@@ -9239,15 +9123,15 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
           response: ``
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
           response: ``
         },
         codeSampleSignet: {
@@ -9291,7 +9175,7 @@ export const restApiDocsData = [
           esModule: ``,
         },
         codeSampleMainnet: {
-          curl: [`2e95ff9094df9f3650e3f2abc189250760162be89a88f9f2f23301c7cb14b8b4`],
+          curl: [`053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b`],
           response: `{
   replacements: {
     tx: {
@@ -9330,7 +9214,7 @@ export const restApiDocsData = [
 }`
         },
         codeSampleTestnet: {
-          curl: [`5faaa30530bee55de8cc896bdf48f803c2274a94bffc2842386bec2a8bf7a813`],
+          curl: [`ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc`],
           response: `{
   replacements: {
     tx: {
@@ -9445,22 +9329,25 @@ export const restApiDocsData = [
           `,
         },
         codeSampleMainnet: {
-          esModule: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          commonJS: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
-          curl: ['15e10745f15593a899cef391191bdd3d7c12412cc4696b7bcb669d0feadc8521'],
+          esModule: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          commonJS: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b'],
           response: `{
-  confirmed: true,
-  block_height: 363348,
-  block_hash: "0000000000000000139385d7aa78ffb45469e0c715b8d6ea6cb2ffa98acc7171",
-  block_time: 1435754650
+  "confirmed": true,
+  "block_height": 161388,
+  "block_hash": "0000000000000001375acbbf5381a88f9de4a13f9383ad3d03707b274f03b277",
+  "block_time": 1793833342
 }`
         },
         codeSampleTestnet: {
-          esModule: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          commonJS: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
-          curl: ['eefbafa4006e77099db059eebe14687965813283e5754d317431d9984554735d'],
+          esModule: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          commonJS: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc'],
           response: `{
-  confirmed: false
+  "confirmed": true,
+  "block_height": 202432,
+  "block_hash": "0000000000004566ada8ed167de2f48c8c3f9cd9c3ce661df41c9cb82811388f",
+  "block_time": 1793838527
 }`
         },
         codeSampleSignet: {
@@ -9506,7 +9393,7 @@ export const restApiDocsData = [
     fragment: 'get-transaction-times',
     title: 'GET Transaction Times',
     description: {
-      default: 'Returns the timestamps when a list of unconfirmed transactions was initially observed in the mempool. If a transaction is not found in the mempool or has been mined, the timestamp will be <code>0</code>.'
+      default: 'Returns the timestamps when a list of unconfirmed transactions was initially observed in the mempool. If a transaction is not found in the mempool or has been mined, the timestamp will be <code>0</code>. The example asks about two confirmed transactions, so both are <code>0</code>; for first-seen times, ask about transactions from <code>GET /api/mempool/recent</code>.'
     },
     urlString: '/v1/transaction-times',
     showConditions: bitcoinNetworks.concat(liquidNetworks),
@@ -9519,12 +9406,12 @@ export const restApiDocsData = [
           esModule: ``,
         },
         codeSampleMainnet: {
-          curl: ['51545ef0ec7f09196e60693b59369a134870985c8a90e5d42655b191de06285e', '6086089bd1c56a9c42a39d470cdfa7c12d4b52bf209608b390dfc4943f2d3851'],
-          response: `[1703082129,1702325558]`
+          curl: ['053486685773077b30fcfeddd15e8d3e325502615a2cc173121d24631f78765b', '2de5d75812774656cc1905cc40d6c40d35efe9555185037b5c065836415adac8'],
+          response: `[0,0]`
         },
         codeSampleTestnet: {
-          curl: ['25e7a95ebf10ed192ee91741653d8d970ac88f8e0cd6fb14cc6c7145116d3964', '1e158327e52acae35de94962e60e53fc70f6b175b0cfc3e2058bed4b895203b4'],
-          response: `[1703267563,1703267322]`
+          curl: ['ba2d67a7ae5d869170ecaf927383368d8cb52d2db01c7268df1f343bd24362fc', '5e914ae59827ffc237165b22e3b926758e05f60775a37f9df64783139f685b3b'],
+          response: `[0,0]`
         },
         codeSampleSignet: {
           curl: ['8af0c5199acd89621244f2f61107fe5a9c7c7aad54928e8400651d03ca949aeb', '08f840f7b0c33c5b0fdadf1666e8a8c206836993d95fc1eeeef39b5ef9de03d0'],

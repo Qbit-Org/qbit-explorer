@@ -20,17 +20,10 @@ import syncAssets from './sync-assets';
 import { Common } from './api/common';
 import poolsUpdater from './tasks/pools-updater';
 import indexer from './indexer';
-import nodesRoutes from './api/explorer/nodes.routes';
-import channelsRoutes from './api/explorer/channels.routes';
-import generalLightningRoutes from './api/explorer/general.routes';
-import lightningStatsUpdater from './tasks/lightning/stats-updater.service';
-import networkSyncService from './tasks/lightning/network-sync.service';
 import statisticsRoutes from './api/statistics/statistics.routes';
 import pricesRoutes from './api/prices/prices.routes';
 import miningRoutes from './api/mining/mining-routes';
 import bitcoinRoutes from './api/bitcoin/bitcoin.routes';
-import fundingTxFetcher from './tasks/lightning/sync-tasks/funding-tx-fetcher';
-import forensicsService from './tasks/lightning/forensics.service';
 import priceUpdater from './tasks/price-updater';
 import chainTips from './api/chain-tips';
 import { AxiosError } from 'axios';
@@ -42,6 +35,7 @@ import bitcoinSecondClient from './api/bitcoin/bitcoin-second-client';
 import aboutRoutes from './api/about.routes';
 import mempoolBlocks from './api/mempool-blocks';
 import stratumApi from './api/services/stratum';
+import { rpcCookieProblems } from './api/bitcoin/rpc-cookie';
 
 class Server {
   private wss: WebSocket.Server | undefined;
@@ -66,7 +60,7 @@ class Server {
     }
 
     if (cluster.isPrimary) {
-      logger.notice(`Mempool Server (Master) is running on port ${config.MEMPOOL.HTTP_PORT} (${backendInfo.getShortCommitHash()})`);
+      logger.notice(`Mempool Server (Master) is running on ${config.MEMPOOL.HTTP_HOST ? config.MEMPOOL.HTTP_HOST + ' ' : ''}port ${config.MEMPOOL.HTTP_PORT} (${backendInfo.getShortCommitHash()})`);
 
       const numCPUs = config.MEMPOOL.SPAWN_CLUSTER_PROCS;
       for (let i = 0; i < numCPUs; i++) {
@@ -93,10 +87,6 @@ class Server {
   async startServer(worker = false): Promise<void> {
     logger.notice(`Starting Mempool Server${worker ? ' (worker)' : ''}... (${backendInfo.getShortCommitHash()})`);
 
-    if (config.MEMPOOL.RUST_GBT) {
-      logger.warn(`MEMPOOL.RUST_GBT is enabled, but rust/gbt does not support qbit's weight units (witness scale factor 1): projected-block fee rates will be wrong, about four times too high. Set MEMPOOL.RUST_GBT to false.`);
-    }
-
     // Register cleanup listeners for exit events
     ['SIGHUP', 'SIGINT', 'SIGTERM', 'SIGUSR1', 'SIGUSR2'].forEach(event => {
       process.on(event, () => { this.forceExit(event); });
@@ -113,6 +103,12 @@ class Server {
       console.error(`unhandledRejection:`, reason, promise);
       this.forceExit('unhandledRejection', 1);
     });
+
+    // with COOKIE set, RPC calls never fall back to a password, so say up
+    // front when the cookie can't be read
+    for (const problem of rpcCookieProblems(config)) {
+      logger.err(problem);
+    }
 
     if (config.MEMPOOL.BACKEND === 'esplora') {
       bitcoinApi.startHealthChecks();
@@ -196,15 +192,12 @@ class Server {
 
     setInterval(() => { this.healthCheck(); }, 2500);
 
-    if (config.LIGHTNING.ENABLED) {
-      void this.$runLightningBackend();
-    }
-
-    this.server.listen(config.MEMPOOL.HTTP_PORT, () => {
+    // without a host, Node listens on every interface
+    this.server.listen(config.MEMPOOL.HTTP_PORT, config.MEMPOOL.HTTP_HOST || undefined, () => {
       if (worker) {
         logger.info(`Mempool Server worker #${process.pid} started`);
       } else {
-        logger.notice(`Mempool Server is running on port ${config.MEMPOOL.HTTP_PORT}`);
+        logger.notice(`Mempool Server is running on ${config.MEMPOOL.HTTP_HOST ? config.MEMPOOL.HTTP_HOST + ' ' : ''}port ${config.MEMPOOL.HTTP_PORT}`);
       }
     });
     // nginx (1.29.7+) keeps idle upstream connections for 60s; outlast that so it never
@@ -284,20 +277,6 @@ class Server {
     }
   }
 
-  /** @asyncSafe */
-  async $runLightningBackend(): Promise<void> {
-    try {
-      await fundingTxFetcher.$init();
-      await networkSyncService.$startService();
-      await lightningStatsUpdater.$startService();
-      await forensicsService.$startService();
-    } catch(e) {
-      logger.err(`Exception in $runLightningBackend. Restarting in 1 minute. Reason: ${(e instanceof Error ? e.message : e)}`);
-      await Common.sleep$(1000 * 60);
-      void this.$runLightningBackend();
-    };
-  }
-
   setUpWebsocketHandling(): void {
     if (this.wss) {
       websocketHandler.addWebsocketServer(this.wss);
@@ -333,11 +312,6 @@ class Server {
     }
     if (Common.indexingEnabled() && config.MEMPOOL.ENABLED) {
       miningRoutes.initRoutes(this.app);
-    }
-    if (config.LIGHTNING.ENABLED) {
-      generalLightningRoutes.initRoutes(this.app);
-      nodesRoutes.initRoutes(this.app);
-      channelsRoutes.initRoutes(this.app);
     }
     if (!config.MEMPOOL.OFFICIAL) {
       aboutRoutes.initRoutes(this.app);

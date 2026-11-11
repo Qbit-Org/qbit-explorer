@@ -43,6 +43,13 @@ class Blocks {
   private blockSummaries: BlockSummary[] = [];
   private currentBlockHeight = 0;
   private initialSyncComplete = false;
+  // a run has ended with a cached block at or below the node's tip, which it
+  // checked against the node's chain, or with none cached. Until then, a
+  // cache restored from disk or Redis may predate a chain wipe
+  private cacheChecked = false;
+  // a reorg changed the cached chain, and clients have not been sent the new
+  // chain yet: $syncBlocks sends it once, at the end of its next complete run
+  private reorgNotificationPending = false;
   private asertAnchors: AsertAnchors = { hourAgo: null, dayAgo: null };
   private asertLaneAnchors: AsertLaneAnchors | null = null;
   private asertAnchorTip = -1;
@@ -1065,26 +1072,55 @@ class Blocks {
   public async $updateBlocks(): Promise<number> {
     // warn if this run stalls the main loop for more than 2 minutes
     const timer = this.startTimer();
+    try {
+      return await this.$syncBlocks(timer);
+    } finally {
+      // a failed run has ended, and runMainUpdateLoop reports why: it must
+      // not be reported as stalled two minutes later
+      this.clearTimer(timer);
+    }
+  }
 
+  /** @asyncUnsafe */
+  private async $syncBlocks(timer: { progress: string }): Promise<number> {
     diskCache.lock();
 
     let fastForwarded = false;
     let handledBlocks = 0;
-    const blockHeightTip = await bitcoinCoreApi.$getBlockHeightTip();
+    // while caught up, the node's best block is the cached tip, and this is
+    // the only call a run makes to the node
+    const cachedTip: BlockExtended | undefined = this.blocks[this.blocks.length - 1];
+    const bestBlockHash = await bitcoinCoreApi.$getBlockHashTip();
+    const nodeHasCachedTip = cachedTip !== undefined && bestBlockHash === cachedTip.id;
+    const blockHeightTip = nodeHasCachedTip ? cachedTip.height : await bitcoinCoreApi.$getBlockHeightTip();
     this.updateTimerProgress(timer, 'got block height tip');
 
-    if (this.blocks.length === 0) {
-      this.currentBlockHeight = Math.max(blockHeightTip - config.MEMPOOL.INITIAL_BLOCKS_AMOUNT, -1);
-    } else {
-      this.currentBlockHeight = this.blocks[this.blocks.length - 1].height;
+    this.currentBlockHeight = this.syncStartHeight(blockHeightTip);
+
+    // the loop below checks each block it fetches against the cached block
+    // below it, but not across the gap a fast-forward leaves. So before a
+    // fast-forward, check the cached tip (one getblockhash while the node has
+    // it). If the node doesn't, roll back to its chain first, and decide on
+    // the fast-forward from there.
+    if (cachedTip && blockHeightTip - this.currentBlockHeight > config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 2 && await this.$rollBackToNodeChain(blockHeightTip, timer)) {
+      this.currentBlockHeight = this.syncStartHeight(blockHeightTip);
     }
 
-    if (blockHeightTip - this.currentBlockHeight > config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 2) {
-      logger.info(`${blockHeightTip - this.currentBlockHeight} blocks since tip. Fast forwarding to the ${config.MEMPOOL.INITIAL_BLOCKS_AMOUNT} recent blocks`);
-      this.currentBlockHeight = blockHeightTip - config.MEMPOOL.INITIAL_BLOCKS_AMOUNT;
-      fastForwarded = true;
-      logger.info(`Re-indexing skipped blocks and corresponding hashrates data`);
-      indexer.reindex(); // Make sure to index the skipped blocks #1619
+    fastForwarded = this.fastForward(blockHeightTip);
+
+    // the loop below checks each block it fetches against the cached block
+    // below it, but fetches none while the node is no higher than the cached
+    // tip. So check the tip here when it isn't the node's best block, as after
+    // a reorg that replaced it at the same height or with a shorter chain, or
+    // when a disk or Redis cache predates a chain wipe. After a rollback, the
+    // fast-forward is decided again: the fork can be below the gap an earlier
+    // fast-forward left.
+    if (cachedTip && !nodeHasCachedTip && blockHeightTip <= cachedTip.height) {
+      const dropped = await this.$rollBackToNodeChain(blockHeightTip, timer);
+      if (dropped > 0) {
+        this.currentBlockHeight = this.syncStartHeight(blockHeightTip);
+        fastForwarded = this.fastForward(blockHeightTip, dropped) || fastForwarded;
+      }
     }
 
     // make sure to update the ASERT anchors now if we won't do it inside the loop
@@ -1093,20 +1129,36 @@ class Blocks {
       await this.$updateAsertLaneAnchors();
     }
 
+    // sync every height: upstream jumped from height 0 straight to the tip,
+    // which left out the blocks in between, as after a rollback that keeps
+    // only genesis
     while (this.currentBlockHeight < blockHeightTip) {
-      if (this.currentBlockHeight === 0) {
-        this.currentBlockHeight = blockHeightTip;
-        await this.$updateAsertAnchors();
-      } else {
-        this.currentBlockHeight++;
-        await this.$updateAsertAnchors();
-        logger.debug(`New block found (#${this.currentBlockHeight})!`);
-      }
+      this.currentBlockHeight++;
+      await this.$updateAsertAnchors();
+      logger.debug(`New block found (#${this.currentBlockHeight})!`);
 
       this.updateTimerProgress(timer, `getting block data for ${this.currentBlockHeight}`);
       const blockHash = await bitcoinCoreApi.$getBlockHash(this.currentBlockHeight);
       const verboseBlock = await bitcoinClient.getBlock(blockHash, 2);
       const block = BitcoinApi.convertBlock(verboseBlock);
+
+      // a block that doesn't extend the cached tip means the node switched to
+      // another chain: roll the cache back to the fork and sync from there,
+      // or fast-forward, as before the loop. This runs with indexing on or
+      // off, as $handleReorgs only compares the block with the database.
+      const parent: BlockExtended | undefined = this.blocks[this.blocks.length - 1];
+      if (parent && parent.height === block.height - 1 && block.previousblockhash !== parent.id) {
+        const dropped = await this.$rollBackToNodeChain(blockHeightTip, timer);
+        if (dropped === 0) {
+          // the node has the cached tip on its best chain again, so its chain
+          // changed during this run: leave the sync to the next run
+          throw new Error(`Block #${block.height} ${block.id} does not extend the cached tip ${parent.id}, which the node has again`);
+        }
+        this.currentBlockHeight = this.syncStartHeight(blockHeightTip);
+        fastForwarded = this.fastForward(blockHeightTip, dropped) || fastForwarded;
+        continue;
+      }
+
       const txIds: string[] = verboseBlock.tx.map(tx => tx.txid);
       const transactions = await this.$getTransactionsExtended(blockHash, block.height, block.timestamp, false, txIds, false, true) as MempoolTransactionExtended[];
 
@@ -1130,9 +1182,10 @@ class Blocks {
       const blockSummary: BlockSummary = this.summarizeBlockTransactions(block.id, block.height, cpfpSummary.transactions);
       this.updateTimerProgress(timer, `got block data for ${this.currentBlockHeight}`);
 
+      let orphansUpdated = false;
       if (Common.indexingEnabled()) {
         if (!fastForwarded) {
-          await this.$handleReorgs(blockExtended, timer);
+          orphansUpdated = await this.$handleReorgs(blockExtended, timer);
         }
 
         await blocksRepository.$saveBlockInDatabase(blockExtended, this.getPositiveCoinbasePayouts(cpfpSummary.transactions[0]));
@@ -1178,8 +1231,9 @@ class Blocks {
       this.updateTimerProgress(timer, `starting async callbacks for ${this.currentBlockHeight}`);
       const callbackPromises = this.newAsyncBlockCallbacks.map((cb) => cb(blockExtended, txIds, cpfpSummary.transactions));
 
-      // skip updating the orphan block cache if we've fallen behind the chain tip
-      if (this.currentBlockHeight >= blockHeightTip - 2) {
+      // skip updating the orphan block cache if we've fallen behind the chain tip,
+      // or if the cleanup after a reorg $handleReorgs found just updated it
+      if (this.currentBlockHeight >= blockHeightTip - 2 && !orphansUpdated) {
         this.updateTimerProgress(timer, `getting orphaned blocks for ${this.currentBlockHeight}`);
         await chainTips.updateOrphanedBlocks();
       }
@@ -1216,15 +1270,165 @@ class Blocks {
       handledBlocks++;
     }
 
+    if (this.reorgNotificationPending) {
+      // clients ignore a new block at or below the height they already have,
+      // so the blocks synced in place of replaced ones only reach them as a
+      // reorg. Both reorg paths leave it to here, so a run sends one.
+      websocketHandler.handleReorg();
+      this.reorgNotificationPending = false;
+    }
+
     // this run caught up with the tip the node reported when it started (a
     // run that fails throws before getting here)
     this.initialSyncComplete = true;
+    // with a cached block at or below the node's tip, the run checked one:
+    // the cached tip as its best block, in a rollback, or in the loop
+    this.cacheChecked = this.cacheChecked || this.blocks.length === 0 || this.blocks[0].height <= blockHeightTip;
 
     diskCache.unlock();
 
-    this.clearTimer(timer);
-
     return handledBlocks;
+  }
+
+  /**
+   * The height a sync run starts after: the cached tip, or for an empty
+   * cache, INITIAL_BLOCKS_AMOUNT blocks below the node's tip.
+   */
+  private syncStartHeight(blockHeightTip: number): number {
+    if (this.blocks.length === 0) {
+      return Math.max(blockHeightTip - config.MEMPOOL.INITIAL_BLOCKS_AMOUNT, -1);
+    }
+    return this.blocks[this.blocks.length - 1].height;
+  }
+
+  /**
+   * Fast-forward to the node's last INITIAL_BLOCKS_AMOUNT blocks when a run
+   * would sync more than INITIAL_BLOCKS_AMOUNT * 2 heights it never cached,
+   * as upstream does after a long pause. Returns whether it did.
+   *
+   * After a rollback, the heights of the blocks it dropped don't count: a
+   * fork in contiguous cached blocks is synced from the fork, but one below
+   * the gap an earlier fast-forward left isn't synced across the gap.
+   */
+  private fastForward(blockHeightTip: number, dropped = 0): boolean {
+    if (blockHeightTip - this.currentBlockHeight - dropped > config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 2) {
+      logger.info(`${blockHeightTip - this.currentBlockHeight} blocks since tip. Fast forwarding to the ${config.MEMPOOL.INITIAL_BLOCKS_AMOUNT} recent blocks`);
+      this.currentBlockHeight = blockHeightTip - config.MEMPOOL.INITIAL_BLOCKS_AMOUNT;
+      logger.info(`Re-indexing skipped blocks and corresponding hashrates data`);
+      indexer.reindex(); // Make sure to index the skipped blocks #1619
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Drop the cached blocks the node's best chain no longer has, down to the
+   * last one it still has (the fork point), so that $syncBlocks syncs again
+   * from there. Returns how many blocks it dropped.
+   *
+   * Blocks above the node's tip are kept while the highest cached block at
+   * or below it is on the node's chain: the node may only be catching up, as
+   * after a restart. Once a run has checked the cache, they are also kept
+   * when no cached block is at or below the node's tip. Until then, such a
+   * cache, as a disk or Redis cache from before a chain wipe can be, is kept
+   * only while the node reports itself syncing.
+   *
+   * @asyncUnsafe
+   */
+  private async $rollBackToNodeChain(blockHeightTip: number, timer: { progress: string }): Promise<number> {
+    let kept = this.blocks.length;
+    let diverged = false;
+    while (kept > 0) {
+      const block = this.blocks[kept - 1];
+      if (block.height <= blockHeightTip) {
+        if (await bitcoinCoreApi.$getBlockHash(block.height) === block.id) {
+          break;
+        }
+        diverged = true;
+      }
+      kept--;
+    }
+    this.updateTimerProgress(timer, `checked cached blocks against the node's tip ${blockHeightTip}`);
+    if (kept === this.blocks.length) {
+      return 0;
+    }
+    if (!diverged && (kept > 0 || this.cacheChecked)) {
+      logger.debug(`The node's tip #${blockHeightTip} is below the cached tip #${this.blocks[this.blocks.length - 1].height}, on the same chain: waiting for the node`, logger.tags.mining);
+      return 0;
+    }
+    if (!diverged) {
+      // no cached block can be checked, but the node may only be catching
+      // up, as with -reindex-chainstate or after a long stop
+      const blockchainInfo: IBitcoinApi.BlockchainInfo = await bitcoinClient.getBlockchainInfo();
+      if (blockchainInfo.initialblockdownload || blockchainInfo.headers > blockchainInfo.blocks) {
+        logger.debug(`The node's tip #${blockHeightTip} is below every cached block (#${this.blocks[0].height} to #${this.blocks[this.blocks.length - 1].height}), and the node is still syncing (headers to #${blockchainInfo.headers}): waiting for it`, logger.tags.mining);
+        return 0;
+      }
+    }
+
+    const dropped = this.blocks.slice(kept);
+    const forkTail = dropped[0];
+    logger.warn(`Cached blocks #${forkTail.height} to #${dropped[dropped.length - 1].height} are not on the node's best chain (tip #${blockHeightTip}), dropping them from the cache`, logger.tags.mining);
+
+    // update the database before the cache, so that a failure leaves the
+    // dropped blocks cached and the next run drops them again
+    if (Common.indexingEnabled()) {
+      // first, so that the indexer runs after the next complete run even if
+      // a step below fails: by then the node may have the dropped tip again,
+      // and then only the indexer makes the heights marked stale canonical
+      indexer.reindex();
+      // no dropped block stays canonical: the node's block at each height
+      // becomes canonical when it is saved
+      for (const block of dropped) {
+        await blocksRepository.$setCanonicalBlockAtHeight(null, block.height);
+      }
+    }
+    await this.$cleanUpAfterReorg(forkTail, timer);
+
+    const droppedIds = new Set(dropped.map(block => block.id));
+    this.blocks = this.blocks.slice(0, kept);
+    this.blockSummaries = this.blockSummaries.filter(summary => !droppedIds.has(summary.id));
+    // the sync loop rewrites the Redis and disk caches for each block it
+    // syncs, but it may sync none, and a restart would restore the dropped
+    // blocks
+    if (config.REDIS.ENABLED) {
+      await redisCache.$updateBlocks(this.blocks);
+      await redisCache.$updateBlockSummaries(this.blockSummaries);
+    }
+    if (config.MEMPOOL.CACHE_ENABLED && !memPool.hasPriority()) {
+      void diskCache.$saveCacheToDisk();
+    }
+    this.updateTimerProgress(timer, `dropped cached blocks from ${forkTail.height}`);
+    return dropped.length;
+  }
+
+  /**
+   * Clean up after a reorg replaced the blocks from forkTail, the first block
+   * above the fork point, up: re-index the data derived from them, refresh
+   * the orphan cache and the lane anchors, and send clients the new chain at
+   * the end of the run. $handleReorgs calls this for a reorg it finds in the
+   * database, and $rollBackToNodeChain for one in the cache.
+   *
+   * @asyncUnsafe
+   */
+  private async $cleanUpAfterReorg(forkTail: BlockExtended, timer: { progress: string }): Promise<void> {
+    this.reorgNotificationPending = true;
+    if (Common.indexingEnabled()) {
+      // force re-indexing of block-related data. The indexer first, so that
+      // it runs after the next complete run even if a deletion fails
+      indexer.reindex();
+      await HashratesRepository.$deleteHashratesFromTimestamp(forkTail.timestamp - 604800);
+      await cpfpRepository.$deleteClustersFrom(forkTail.height);
+    }
+    // blocks the reorg made canonical may be cached as orphans, from the
+    // first height it replaced up. Refill the cache now: the blocks the reorg
+    // orphaned belong in it, and the sync loop may sync no block to refill it.
+    chainTips.clearOrphanCacheAboveHeight(forkTail.height - 1);
+    await chainTips.updateOrphanedBlocks();
+    // the difficulty state sent with the reorg must not use lane anchors from
+    // the abandoned chain: drop them if they cannot be refreshed
+    await this.$updateAsertLaneAnchors(true);
+    this.updateTimerProgress(timer, `cleaned up after the reorg from ${forkTail.height}`);
   }
 
   private startTimer() {
@@ -1336,8 +1540,12 @@ class Blocks {
     return this.$indexBlock(hash);
   }
 
-  /** @asyncUnsafe */
-  private async $handleReorgs(blockExtended: BlockExtended, timer: any): Promise<void> {
+  /**
+   * Returns whether it found a reorg, whose cleanup refreshed the orphan cache.
+   *
+   * @asyncUnsafe
+   */
+  private async $handleReorgs(blockExtended: BlockExtended, timer: { progress: string }): Promise<boolean> {
     let forkTail = blockExtended;
     let currentlyIndexed = await blocksRepository.$getBlockByHeight(forkTail.height - 1);
     this.updateTimerProgress(timer, `got block by height at previous tip ${forkTail.height - 1}`);
@@ -1383,30 +1591,26 @@ class Blocks {
       }
       this.updateTimerProgress(timer, `rebuilt block cache`);
 
-      // force re-indexing of block-related data
-      await HashratesRepository.$deleteHashratesFromTimestamp(forkTail.timestamp - 604800);
-      await cpfpRepository.$deleteClustersFrom(forkTail.height);
-      chainTips.clearOrphanCacheAboveHeight(forkTail.height);
-      this.updateTimerProgress(timer, `deleted stale block data`);
-
       this.blocks = newBlocks.reverse();
       if (this.blocks.length > config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 4) {
         this.blocks = this.blocks.slice(-config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 4);
       }
+      // the summaries of the blocks no longer cached go too, as in
+      // $rollBackToNodeChain. The sync loop writes both caches to Redis once
+      // the incoming block is cached.
+      const cachedIds = new Set(this.blocks.map(block => block.id));
+      this.blockSummaries = this.blockSummaries.filter(summary => cachedIds.has(summary.id));
       this.updateTimerProgress(timer, `connected new best chain from ${forkTail.height} to ${this.currentBlockHeight}`);
 
       logger.info(`Re-indexed ${this.currentBlockHeight - forkTail.height} blocks and summaries. Will re-index latest hashrates in a few seconds.`, logger.tags.mining);
-      indexer.reindex();
-
-      // the reorg emission below publishes the difficulty state: the lane
-      // anchors must not reference the abandoned chain, and are dropped
-      // outright if they cannot be refreshed. The incoming block is not saved
-      // yet, but handleReorg passes it as the tip override, which covers its
-      // own lane.
-      await this.$updateAsertLaneAnchors(true);
-
-      websocketHandler.handleReorg(blockExtended);
+      // after the cache is rebuilt, so that the orphan cache refill marks the
+      // blocks this reorg orphaned on the new chain's cached blocks. Clients
+      // get the new chain at the end of the run, once the incoming block is
+      // cached.
+      await this.$cleanUpAfterReorg(forkTail, timer);
+      return true;
     }
+    return false;
   }
 
   /**

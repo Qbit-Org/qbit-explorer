@@ -72,6 +72,12 @@
       </div>
     }
 
+    @if (!unconfirmedParents) {
+      <div class="alert alert-mempool">
+        <span><strong>Unconfirmed parents not checked</strong>. The transactions this one spends couldn't be loaded, so the Non-Standard tag leaves out qbit's TRUC and ephemeral dust rules on them.</span>
+      </div>
+    }
+
     @if (errorCpfpInfo) {
       <div class="alert alert-mempool">
         <span><strong>Error loading CPFP data</strong>. Reason: {{ errorCpfpInfo }}</span>

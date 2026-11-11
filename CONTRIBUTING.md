@@ -57,8 +57,16 @@ Mining: the pool is now Qbit Pool
 
 Use the body to explain why the change is needed.
 
-Pull requests are squash-merged, so `main` gets one commit for each pull
-request. Write the pull request title in the same style.
+Every commit on `main` and `1.x.x` must carry a verified signature, and pull
+requests merge with a merge commit: squash and rebase merges are off. You
+don't need to sign your own commits. When a pull request is ready, a
+maintainer squashes it into one commit, signs it and merges it, so the branch
+gets one commit for each pull request, under GitHub's merge commit. That
+commit's subject is the pull request's title, so write the title in the same
+style. Leave "Allow edits by maintainers" on, so the maintainer can push the
+signed commit to your branch. If your fork can't offer that, a maintainer
+opens the same change from a branch in this repository. The rulesets that
+enforce this are in [`.github/rulesets/`](.github/rulesets/).
 
 ## Review
 
@@ -109,6 +117,14 @@ The language menu offers English only. The English source strings are in
 run from `frontend/`, regenerates that file from the source. The translation
 files for other languages (`messages.<lang>.xlf`) are upstream mempool's and
 have not been updated for qbit.
+
+Each unit in a translation file keeps the English text it translates. CI
+fails when that text differs from the unit with the same id in `messages.xlf`,
+or when the translation uses a placeholder that English doesn't have. That
+happens when you change the English of a message with a custom `@@` id, which
+keeps its id. Then run `node scripts/check-translations.mjs --fix` from
+`frontend/`: it removes those units, and the build shows your English text in
+every language.
 
 ## License
 

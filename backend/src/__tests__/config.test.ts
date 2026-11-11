@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 describe('Mempool Backend Config', () => {
   beforeEach(() => {
@@ -20,6 +22,7 @@ describe('Mempool Backend Config', () => {
         BLOCKS_SUMMARIES_INDEXING: false,
         GOGGLES_INDEXING: false,
         HTTP_PORT: 8999,
+        HTTP_HOST: '',
         UNIX_SOCKET_PATH: '',
         SPAWN_CLUSTER_PROCS: 0,
         API_URL_PREFIX: '/api/v1/',
@@ -33,7 +36,7 @@ describe('Mempool Backend Config', () => {
         BLOCK_TARGET_SPACING_SECONDS: 60,
         INITIAL_BLOCKS_AMOUNT: 8,
         MEMPOOL_BLOCKS_AMOUNT: 8,
-        INDEXING_BLOCKS_AMOUNT: 11000,
+        INDEXING_BLOCKS_AMOUNT: 110000,
         USE_SECOND_NODE_FOR_MINFEE: false,
         EXTERNAL_ASSETS: [],
         EXTERNAL_MAX_RETRY: 1,
@@ -44,7 +47,7 @@ describe('Mempool Backend Config', () => {
         POOLS_JSON_URL: '',
         POOLS_UPDATE_DELAY: 604800,
         AUDIT: false,
-        RUST_GBT: false,
+        RUST_GBT: true,
         LIMIT_GBT: false,
         CPFP_INDEXING: false,
         MAX_BLOCKS_BULK_QUERY: 0,
@@ -126,13 +129,6 @@ describe('Mempool Backend Config', () => {
         MEMPOOL_ONION: ''
       });
 
-      expect(config.MAXMIND).toStrictEqual({
-        ENABLED: false,
-        GEOLITE2_CITY: '/usr/local/share/GeoIP/GeoLite2-City.mmdb',
-        GEOLITE2_ASN: '/usr/local/share/GeoIP/GeoLite2-ASN.mmdb',
-        GEOIP2_ISP: '/usr/local/share/GeoIP/GeoIP2-ISP.mmdb'
-      });
-
       expect(config.REPLICATION).toStrictEqual({
         ENABLED: false,
         AUDIT: false,
@@ -163,6 +159,34 @@ describe('Mempool Backend Config', () => {
         ENABLED: false,
         API: 'http://localhost:1234',
       });
+    });
+  });
+
+  test('should index as many days of blocks by default as upstream does on Bitcoin', () => {
+    // upstream mempool indexes 11000 blocks by default, about 76 days of 600 s Bitcoin blocks
+    const upstreamIndexedSeconds = 11000 * 600;
+    const sample = JSON.parse(fs.readFileSync(`${__dirname}/../../mempool-config.sample.json`, 'utf8'));
+    for (const configFile of [{}, sample]) {
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => (configFile), { virtual: true });
+
+        const config = jest.requireActual('../config').default;
+
+        expect(config.MEMPOOL.INDEXING_BLOCKS_AMOUNT * config.MEMPOOL.BLOCK_TARGET_SPACING_SECONDS).toBeGreaterThanOrEqual(upstreamIndexedSeconds);
+      });
+    }
+  });
+
+  test('should give the Docker image the same block indexing default as config.ts', () => {
+    jest.isolateModules(() => {
+      jest.mock('../../mempool-config.json', () => ({}), { virtual: true });
+
+      const config = jest.requireActual('../config').default;
+      // start.sh writes its own default into mempool-config.json, which
+      // overrides config.ts's default in the image
+      const startSh = fs.readFileSync(`${__dirname}/../../../docker/backend/start.sh`, 'utf-8');
+
+      expect(startSh).toContain(`__MEMPOOL_INDEXING_BLOCKS_AMOUNT__=\${MEMPOOL_INDEXING_BLOCKS_AMOUNT:=${config.MEMPOOL.INDEXING_BLOCKS_AMOUNT}}`);
     });
   });
 
@@ -212,6 +236,172 @@ describe('Mempool Backend Config', () => {
     });
   });
 
+  test('should load a config file that still has the removed Lightning and MaxMind sections, ignore them, and say so', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      jest.isolateModules(() => {
+        // the sections backend/mempool-config.sample.json had, switched on
+        jest.mock('../../mempool-config.json', () => ({
+          MAXMIND: {
+            ENABLED: true,
+            GEOLITE2_CITY: '/usr/local/share/GeoIP/GeoLite2-City.mmdb',
+            GEOLITE2_ASN: '/usr/local/share/GeoIP/GeoLite2-ASN.mmdb',
+            GEOIP2_ISP: '/usr/local/share/GeoIP/GeoIP2-ISP.mmdb'
+          },
+          LIGHTNING: {
+            ENABLED: true,
+            BACKEND: 'lnd',
+            STATS_REFRESH_INTERVAL: 600,
+            GRAPH_REFRESH_INTERVAL: 600,
+            LOGGER_UPDATE_INTERVAL: 30,
+            FORENSICS_INTERVAL: 43200,
+            FORENSICS_RATE_LIMIT: 20
+          },
+          LND: { TLS_CERT_PATH: 'tls.cert', MACAROON_PATH: 'readonly.macaroon', REST_API_URL: 'https://localhost:8080', TIMEOUT: 10000 },
+          CLIGHTNING: { SOCKET: 'lightning-rpc' }
+        }), { virtual: true });
+
+        const config = jest.requireActual('../config').default;
+
+        for (const section of ['LIGHTNING', 'LND', 'CLIGHTNING', 'MAXMIND']) {
+          expect(config).not.toHaveProperty(section);
+        }
+        expect(config.MEMPOOL.NETWORK).toBe('mainnet');
+      });
+      expect(warn.mock.calls).toStrictEqual([[
+        'Ignoring config file sections that only the removed Lightning backend read: LIGHTNING, LND, CLIGHTNING, MAXMIND.'
+      ]]);
+
+      // only the sections the file has
+      warn.mockClear();
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MAXMIND: { ENABLED: false } }), { virtual: true });
+        jest.requireActual('../config');
+      });
+      expect(warn.mock.calls).toStrictEqual([[
+        'Ignoring config file sections that only the removed Lightning backend read: MAXMIND.'
+      ]]);
+
+      // and nothing without them
+      warn.mockClear();
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MEMPOOL: { NETWORK: 'regtest' } }), { virtual: true });
+        jest.requireActual('../config');
+      });
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('should accept an IP address or nothing as MEMPOOL.HTTP_HOST', () => {
+    // '' listens on every interface, as the backend did before the setting existed
+    for (const host of ['', '127.0.0.1', '0.0.0.0', '10.1.2.3', '::1', '::', '2001:db8::1']) {
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MEMPOOL: { HTTP_HOST: host } }), { virtual: true });
+
+        expect(jest.requireActual('../config').default.MEMPOOL.HTTP_HOST).toBe(host);
+      });
+    }
+  });
+
+  test('should reject a MEMPOOL.HTTP_HOST that is not an IP address', () => {
+    // Node would look a host name up and bind to its first address, which for
+    // localhost may be ::1 while nginx-mempool.conf proxies to 127.0.0.1
+    const hosts = ['localhost', 'example.org', ' 127.0.0.1', '127.0.0.1 ', '127.0.0.1:8999', '[::1]',
+      '256.0.0.1', '127.1', '*', null, 0, 127, false, true, [], {}];
+    for (const host of hosts) {
+      jest.isolateModules(() => {
+        jest.mock('../../mempool-config.json', () => ({ MEMPOOL: { HTTP_HOST: host } }), { virtual: true });
+
+        expect(() => jest.requireActual('../config')).toThrow(
+          `Invalid MEMPOOL.HTTP_HOST ${JSON.stringify(host)}: set an IP address such as 127.0.0.1 or ::1, or "" to listen on every interface`
+        );
+      });
+    }
+  });
+
+  test('should resolve a relative MEMPOOL_CONFIG_FILE against the working directory', () => {
+    const cwd = process.cwd();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mempool-config-file-'));
+    const file = path.join(dir, 'operator.json');
+    fs.writeFileSync(file, JSON.stringify({ MEMPOOL: { NETWORK: 'regtest', HTTP_PORT: 18999 } }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      process.chdir(dir);
+      // config.ts used to pass the value straight to require(), which reads a
+      // bare name as a package and a ./ path as relative to dist/ (or src/)
+      // an absolute path without its extension, as require() allows
+      for (const configFile of ['operator.json', './operator.json', file, file.replace(/\.json$/, '')]) {
+        jest.isolateModules(() => {
+          process.env.MEMPOOL_CONFIG_FILE = configFile;
+          const config = jest.requireActual('../config').default;
+
+          expect(config.MEMPOOL.NETWORK).toBe('regtest');
+          expect(config.MEMPOOL.HTTP_PORT).toBe(18999);
+        });
+      }
+      expect(warn).not.toHaveBeenCalled();
+
+      // with no file at either path, the error names the working-directory one
+      jest.isolateModules(() => {
+        process.env.MEMPOOL_CONFIG_FILE = 'missing.json';
+        expect(() => jest.requireActual('../config')).toThrow(path.join(process.cwd(), 'missing.json'));
+      });
+    } finally {
+      warn.mockRestore();
+      process.chdir(cwd);
+      delete process.env.MEMPOOL_CONFIG_FILE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('should still read a MEMPOOL_CONFIG_FILE relative to dist/, with a deprecation warning', () => {
+    // Earlier versions passed MEMPOOL_CONFIG_FILE straight to require(), which
+    // resolves ./ and ../ against the directory of config.js: dist/ in a build,
+    // src/ here. So ../mempool-config.json, run from backend/, meant
+    // backend/mempool-config.json.
+    const configFile = './__tests__/fixtures/mempool-config.legacy.json';
+    const legacyFile = path.join(__dirname, 'fixtures', 'mempool-config.legacy.json');
+    const cwd = process.cwd();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mempool-config-file-'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      process.chdir(dir);
+      process.env.MEMPOOL_CONFIG_FILE = configFile;
+      jest.isolateModules(() => {
+        const config = jest.requireActual('../config').default;
+
+        expect(config.MEMPOOL.NETWORK).toBe('testnet4');
+        expect(config.MEMPOOL.HTTP_PORT).toBe(18990);
+      });
+      expect(warn.mock.calls).toStrictEqual([[
+        `MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory, and `
+          + `${path.join(process.cwd(), configFile)} doesn't exist. Reading ${legacyFile} instead, where earlier `
+          + 'versions found it. Set MEMPOOL_CONFIG_FILE to that absolute path: this fallback will be removed.'
+      ]]);
+
+      // a file at the working-directory path comes first, with a warning that
+      // names the file earlier versions read
+      warn.mockClear();
+      fs.mkdirSync(path.join(dir, '__tests__', 'fixtures'), { recursive: true });
+      fs.writeFileSync(path.join(dir, configFile), JSON.stringify({ MEMPOOL: { NETWORK: 'regtest' } }));
+      jest.isolateModules(() => {
+        expect(jest.requireActual('../config').default.MEMPOOL.NETWORK).toBe('regtest');
+      });
+      expect(warn.mock.calls).toStrictEqual([[
+        `MEMPOOL_CONFIG_FILE=${configFile} is resolved against the working directory: reading `
+          + `${path.join(process.cwd(), configFile)}, not ${legacyFile}, which earlier versions read. Set `
+          + 'MEMPOOL_CONFIG_FILE to an absolute path to choose.'
+      ]]);
+    } finally {
+      warn.mockRestore();
+      process.chdir(cwd);
+      delete process.env.MEMPOOL_CONFIG_FILE;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('should keep production templates on qbit networks, local services and full indexing', () => {
     const productionDir = `${__dirname}/../../../production`;
     // qbit-electrs REST defaults: 3000 mainnet, 3004 testnet4, 3002 regtest
@@ -237,14 +427,21 @@ describe('Mempool Backend Config', () => {
         expect(config.MEMPOOL.BACKEND).toBe('esplora');
         expect(config.CORE_RPC.PORT).toBe(port);
         expect(config.ESPLORA.REST_API_URL).toBe(esploraUrl);
-        // the port nginx-mempool.conf proxies the API and WebSocket to
+        // the address and port nginx-mempool.conf proxies the API and WebSocket
+        // to; listening only there keeps the backend off the host's other interfaces
+        expect(config.MEMPOOL.HTTP_HOST).toBe('127.0.0.1');
         expect(config.MEMPOOL.HTTP_PORT).toBe(8999);
+        // qbitd's RPC cookie at the rpccookiefile path in production/README.md, so
+        // the templates hold no RPC password
+        expect(productionConfig.CORE_RPC).toStrictEqual({ PORT: port, COOKIE: true, COOKIE_PATH: '/var/lib/qbit/.cookie' });
+        expect(config.CORE_RPC.COOKIE).toBe(true);
+        expect(config.CORE_RPC.COOKIE_PATH).toBe('/var/lib/qbit/.cookie');
         // every network indexes the same way
         expect(config.MEMPOOL.INDEXING_BLOCKS_AMOUNT).toBe(-1);
         expect(config.MEMPOOL.BLOCKS_SUMMARIES_INDEXING).toBe(true);
         expect(config.MEMPOOL.GOGGLES_INDEXING).toBe(true);
         expect(config.MEMPOOL.CPFP_INDEXING).toBe(true);
-        // rust/gbt still applies Bitcoin's witness scale factor of 4
+        // production keeps the TypeScript block template builder until its operator switches
         expect(config.MEMPOOL.RUST_GBT).toBe(false);
         // upstream's operator templates set these for mempool.space: an official
         // instance, Esplora sockets and fallback hosts, and FreeBSD's MariaDB socket

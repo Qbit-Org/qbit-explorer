@@ -25,9 +25,9 @@ post-quantum signatures.
   REST and WebSocket API. It talks to `qbitd` over RPC and keeps its own data
   in MariaDB.
 - [`rust/gbt/`](rust/gbt/): the block-template algorithm in Rust, built as a
-  Node.js addon. It still applies Bitcoin's witness scale factor of 4, so the
-  backend leaves it off (`MEMPOOL.RUST_GBT`) and projects the next blocks from
-  the mempool with its TypeScript implementation.
+  Node.js addon, which projects the next blocks from the mempool with qbit's
+  weights. Setting `MEMPOOL.RUST_GBT` to `false` switches the backend to its
+  slower TypeScript implementation.
 - `qbitd`, the qbit node from [Qbit-Org/qbit](https://github.com/Qbit-Org/qbit).
   Required.
 - [Qbit-Org/qbit-electrs](https://github.com/Qbit-Org/qbit-electrs), an
@@ -97,8 +97,10 @@ signs upstream's contributor license agreement. qbit-explorer has no CLA (see
 tree. If a pick conflicts on one of those files, resolve the conflict with
 `git rm`. Before you push, check that `git ls-files contributors` prints
 nothing, and remove anything it lists in another commit. CI's Repository checks
-job fails a pull request that still has them. Pull requests are squash-merged,
-so files removed in a later commit never reach `main`.
+job fails a pull request that still has them. A maintainer squashes a pull
+request into one commit before merging it, so files removed in a later commit
+never reach `main`. Nothing enforces the squash, so don't merge such a pull
+request as it is.
 
 ## License
 

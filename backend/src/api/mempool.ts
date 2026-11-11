@@ -127,9 +127,10 @@ class Mempool {
       logger.debug(`Migrating ${Object.keys(this.mempoolCache).length} transactions from disk cache to Redis cache`);
     }
     for (const txid of Object.keys(this.mempoolCache)) {
-      if (!this.mempoolCache[txid].adjustedVsize || this.mempoolCache[txid].sigops == null || this.mempoolCache[txid].effectiveFeePerVsize == null) {
-        this.mempoolCache[txid] = transactionUtils.extendMempoolTransaction(this.mempoolCache[txid]);
-      }
+      // a cache written by an older release holds sigops counted by that release's rules, so count
+      // them afresh, as for a transaction that arrives now, with the adjusted vsize that follows.
+      // The disk and Redis caches both restore through here.
+      this.mempoolCache[txid] = transactionUtils.extendMempoolTransaction({ ...this.mempoolCache[txid], sigops: undefined });
       if (this.mempoolCache[txid].order == null) {
         this.mempoolCache[txid].order = transactionUtils.txidToOrdering(txid);
       }
@@ -137,10 +138,22 @@ class Mempool {
         transactionUtils.addInnerScriptsToVin(vin);
       }
       count++;
+      // getTransactionFlags keeps any static flags it is given, and a cache written by an older
+      // release holds flags from that release's rules, so classify restored transactions afresh,
+      // before they reach Redis. Projected blocks classify mempool transactions without a height
+      // too, so a restored transaction gets the flags it would get live. If classification
+      // fails, keep the cached flags rather than abandon the rest of the restore.
+      const cachedFlags = this.mempoolCache[txid].flags;
+      this.mempoolCache[txid].flags = undefined;
+      try {
+        this.mempoolCache[txid].flags = Common.getTransactionFlags(this.mempoolCache[txid]);
+      } catch (e) {
+        this.mempoolCache[txid].flags = cachedFlags;
+        logger.warn(`Failed to reclassify cached mempool transaction ${txid}, keeping its cached flags: ${e instanceof Error ? e.message : e}`);
+      }
       if (config.MEMPOOL.CACHE_ENABLED && config.REDIS.ENABLED) {
         await redisCache.$addTransaction(this.mempoolCache[txid]);
       }
-      this.mempoolCache[txid].flags = Common.getTransactionFlags(this.mempoolCache[txid]);
       this.mempoolCache[txid].cpfpChecked = false;
       this.mempoolCache[txid].cpfpDirty = true;
       this.mempoolCache[txid].cpfpUpdated = undefined;
@@ -236,7 +249,17 @@ class Mempool {
 
     // warn if this run stalls the main loop for more than 2 minutes
     const timer = this.startTimer();
+    try {
+      await this.$syncMempool(transactions, accelerations, minFeeMempool, minFeeTip, pollRate, timer);
+    } finally {
+      // a failed run has ended, and runMainUpdateLoop reports why: it must
+      // not be reported as stalled two minutes later
+      this.clearTimer(timer);
+    }
+  }
 
+  /** @asyncUnsafe */
+  private async $syncMempool(transactions: string[], accelerations: Record<string, Acceleration> | null, minFeeMempool: string[], minFeeTip: number, pollRate: number, timer: { progress: string }): Promise<void> {
     const start = new Date().getTime();
     let hasChange: boolean = false;
     const currentMempoolSize = Object.keys(this.mempoolCache).length;
@@ -415,8 +438,6 @@ class Mempool {
     const end = new Date().getTime();
     const time = end - start;
     logger.debug(`Mempool updated in ${time / 1000} seconds. New size: ${Object.keys(this.mempoolCache).length} (${diff > 0 ? '+' + diff : diff})`);
-
-    this.clearTimer(timer);
   }
 
   public getAccelerations(): { [txid: string]: Acceleration } {

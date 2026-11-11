@@ -502,6 +502,10 @@ class WebsocketHandler {
 
       if (client['want-blocks']) {
         response['blocks'] = this.socketData['blocks'];
+        // tells pages that this list replaces blocks they may show, so it can
+        // lower their tip, as after a reorg to a shorter chain. Pages ignore
+        // the lower tip of any other list, such as one from a lagging backend.
+        response['reorg'] = 'true';
       }
       if (client['want-stats']) {
         response['da'] = this.socketData['da'];

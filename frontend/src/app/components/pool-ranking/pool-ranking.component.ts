@@ -3,7 +3,7 @@ import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { EChartsOption, PieSeriesOption } from '@app/graphs/echarts';
 import { merge, Observable } from 'rxjs';
-import { map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
+import { filter, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
 import { SeoService } from '@app/services/seo.service';
 import { StorageService } from '@app//services/storage.service';
 import { MiningService, MiningStats } from '@app/services/mining.service';
@@ -27,6 +27,7 @@ export class PoolRankingComponent implements OnInit {
 
   miningWindowPreference: string;
   radioGroupForm: UntypedFormGroup;
+  readonly rangeButtons = ['24h', '3d', '1w', '1m', '3m', '6m', '1y', '2y', '3y', 'all'];
 
   auditAvailable = false;
   indexingAvailable = false;
@@ -96,11 +97,14 @@ export class PoolRankingComponent implements OnInit {
         this.stateService.chainTip$
           .pipe(
             switchMap(() => {
-              return this.miningService.getMiningStats(this.miningWindowPreference);
+              // drop a refresh for a range the graph has since left, such as one it switched from
+              const timespan = this.miningWindowPreference;
+              return this.miningService.getMiningStats(timespan).pipe(filter(() => timespan === this.miningWindowPreference));
             })
           )
       )
       .pipe(
+        filter((data) => this.widget || !this.miningService.switchToShownRange(this.radioGroupForm.controls.dateSpan, this.rangeButtons, data.totalBlockCount)),
         map(data => {
           data.minersLuck = this.getMinersLuck(data.blockCount, data.totalBlockCount);
           return data;

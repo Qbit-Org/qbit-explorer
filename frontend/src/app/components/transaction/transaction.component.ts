@@ -40,6 +40,7 @@ import { ZONE_SERVICE } from '@app/injection-tokens';
 import { MiningService, MiningStats } from '@app/services/mining.service';
 import { ETA, EtaService } from '@app/services/eta.service';
 import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize } from '@app/shared/weight-units';
+import { isAwaitableTransactionError } from '@app/shared/http-error.utils';
 
 export interface Pool {
   id: number;
@@ -278,7 +279,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       switchMap((txid) => this.apiService.getTransactionTimes$([txid]).pipe(
         retry({ count: 2, delay: 2000 }),
         // Try again until we either get a valid response, or the transaction is confirmed
-        repeat({ delay: 2000 }),
+        // (in the browser: the server renders once, and repeating would keep its render from finishing)
+        repeat({ delay: 2000, count: this.stateService.isBrowser ? Infinity : 1 }),
         filter((transactionTimes) => transactionTimes?.[0] > 0 || this.tx.status?.confirmed),
         take(1),
       )),
@@ -297,7 +299,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
             .getCpfpinfo$(txId)
             .pipe(retryWhen((errors) => errors.pipe(
               mergeMap((error) => {
-                if (!this.tx?.status || this.tx.status.confirmed) {
+                // the server renders once, and retrying would keep its render from finishing
+                if (!this.tx?.status || this.tx.status.confirmed || !this.stateService.isBrowser) {
                   return throwError(error);
                 } else {
                   return of(null);
@@ -852,7 +855,7 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   handleLoadElectrsTransactionError(error: any): Observable<any> {
-    if (error.status === 404 && /^[a-fA-F0-9]{64}$/.test(this.txId)) {
+    if (isAwaitableTransactionError(error) && /^[a-fA-F0-9]{64}$/.test(this.txId)) {
       this.websocketService.startMultiTrackTransaction(this.txId);
       this.waitingForTransaction = true;
     }
@@ -953,7 +956,8 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
       this.taprootEnabled = false;
       this.rbfEnabled = false;
     }
-    this.featuresEnabled = this.segwitEnabled || this.taprootEnabled || this.rbfEnabled;
+    // qbit shows no Taproot badge (see TxFeaturesComponent), so Taproot alone never shows the features
+    this.featuresEnabled = this.segwitEnabled || this.rbfEnabled;
   }
 
   checkAccelerationEligibility() {

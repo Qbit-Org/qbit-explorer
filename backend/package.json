@@ -1,6 +1,6 @@
 {
   "name": "mempool-backend",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "qbit block explorer and mempool visualizer backend",
   "license": "GNU Affero General Public License v3.0",
   "homepage": "https://mempool.qbit.org",
@@ -15,8 +15,7 @@
     "bitcoin",
     "mempool",
     "blockchain",
-    "explorer",
-    "lightning"
+    "explorer"
   ],
   "main": "index.ts",
   "scripts": {
@@ -44,10 +43,9 @@
     "@mempool/electrum-client": "1.1.9",
     "@types/node": "^18.15.3",
     "axios": "1.20.0",
-    "bitcoinjs-lib": "~6.1.3",
+    "bitcoinjs-lib": "~6.1.8",
     "crypto-js": "~4.2.0",
     "express": "~4.22.3",
-    "maxmind": "~4.3.11",
     "mysql2": "~3.24.2",
     "rust-gbt": "file:./rust-gbt",
     "redis": "^4.7.0",

@@ -8,12 +8,40 @@ use crate::{
     GbtResult, ThreadTransactionsMap, thread_acceleration::ThreadAcceleration,
 };
 
+// MAX_BLOCK_SIGOPS_COST in consensus/consensus.h
 const BLOCK_SIGOPS: u32 = 80_000;
+// DEFAULT_BLOCK_RESERVED_WEIGHT in policy/policy.h
 const BLOCK_RESERVED_WEIGHT: u32 = 4_000;
+// coinbase_output_max_additional_sigops in node/types.h
 const BLOCK_RESERVED_SIGOPS: u32 = 400;
+// BLOCK_FULL_ENOUGH_WEIGHT_DELTA in node/miner.cpp
+const BLOCK_FULL_ENOUGH_WEIGHT_DELTA: u32 = 4_000;
 
 type AuditPool = Vec<Option<ManuallyDrop<AuditTransaction>>>;
 type ModifiedQueue = PriorityQueue<u32, TxPriority, U32HasherState>;
+
+/// What a projected block may hold, fixed for a `GbtGenerator`'s lifetime.
+#[derive(Clone, Copy, Debug)]
+pub struct GbtOptions {
+    // -blockmaxweight, which includes the reserved weight: qbit's default is MAX_BLOCK_WEIGHT
+    max_block_weight: u32,
+    max_blocks: usize,
+    // turns weight into vsize: 1 on qbit, 4 on Bitcoin
+    witness_scale_factor: u32,
+}
+
+impl GbtOptions {
+    /// # Errors
+    ///
+    /// Rejects a `witness_scale_factor` outside 1 (qbit) to 4 (Bitcoin). Node converts -1 to
+    /// `u32::MAX`, which would overflow the block weight.
+    pub fn new(max_block_weight: u32, max_blocks: usize, witness_scale_factor: u32) -> Result<Self, &'static str> {
+        if !(1..=4).contains(&witness_scale_factor) {
+            return Err("witness_scale_factor must be from 1 to 4");
+        }
+        Ok(Self { max_block_weight, max_blocks, witness_scale_factor })
+    }
+}
 
 #[derive(Debug)]
 struct TxPriority {
@@ -55,9 +83,9 @@ pub fn gbt(
     mempool: &mut ThreadTransactionsMap,
     accelerations: &[ThreadAcceleration],
     max_uid: usize,
-    max_block_weight: u32,
-    max_blocks: usize,
+    options: GbtOptions,
 ) -> GbtResult {
+    let GbtOptions { max_block_weight, max_blocks, witness_scale_factor } = options;
     let mut indexed_accelerations = Vec::with_capacity(max_uid + 1);
     indexed_accelerations.resize(max_uid + 1, None);
     for acceleration in accelerations {
@@ -75,7 +103,7 @@ pub fn gbt(
     info!("Initializing working structs");
     for (uid, tx) in &mut *mempool {
         let acceleration = indexed_accelerations.get(*uid as usize);
-        let audit_tx = AuditTransaction::from_thread_transaction(tx, acceleration.copied());
+        let audit_tx = AuditTransaction::from_thread_transaction(tx, acceleration.copied(), witness_scale_factor);
         // Safety: audit_pool and mempool_stack must always contain the same transactions
         audit_pool[*uid as usize] = Some(ManuallyDrop::new(audit_tx));
         mempool_stack.push(*uid);
@@ -150,10 +178,10 @@ pub fn gbt(
                 modified.pop();
             }
 
+            // BlockAssembler::TestPackage
             if blocks.len() < (max_blocks - 1)
-                && ((block_weight + (4 * next_tx.ancestor_sigop_adjusted_vsize())
-                    >= max_block_weight - 4_000)
-                    || (block_sigops + next_tx.ancestor_sigops() > BLOCK_SIGOPS))
+                && ((block_weight + next_tx.ancestor_package_weight() >= max_block_weight)
+                    || (block_sigops + next_tx.ancestor_sigops() >= BLOCK_SIGOPS))
             {
                 // hold this package in an overflow list while we check for smaller options
                 overflow.push(next_tx.uid);
@@ -204,8 +232,8 @@ pub fn gbt(
         }
 
         // this block is full
-        let exceeded_package_tries =
-            failures > 1000 && block_weight > (max_block_weight - 4_000 - BLOCK_RESERVED_WEIGHT);
+        let exceeded_package_tries = failures > 1000
+            && block_weight > max_block_weight.saturating_sub(BLOCK_FULL_ENOUGH_WEIGHT_DELTA);
         let queue_is_empty = mempool_stack.is_empty() && modified.is_empty();
         if (exceeded_package_tries || queue_is_empty) && blocks.len() < (max_blocks - 1) {
             // finalize this block
@@ -436,6 +464,97 @@ fn update_descendants(
                     visited.insert(*child_id);
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{gbt, GbtOptions};
+    use crate::{thread_transaction::ThreadTransaction, u32_hasher_types::u32hashmap_with_capacity, GbtResult};
+
+    // qbit's MAX_BLOCK_WEIGHT (consensus/consensus.h), which is also its default -blockmaxweight
+    const QBIT_MAX_BLOCK_WEIGHT: u32 = 2_000_000;
+
+    fn tx(uid: u32, fee: u64, weight: u32, sigops: u32, inputs: Vec<u32>) -> ThreadTransaction {
+        ThreadTransaction {
+            uid,
+            order: uid,
+            fee: fee as f64,
+            weight,
+            sigops,
+            // the backend's adjustedFeePerVsize: vsize is max(weight, 20 * sigops) when WSF is 1
+            effective_fee_per_vsize: fee as f64 / f64::from(weight.max(sigops * 20)),
+            inputs,
+        }
+    }
+
+    fn run(txs: Vec<ThreadTransaction>) -> GbtResult {
+        let max_uid = txs.iter().map(|tx| tx.uid).max().unwrap_or(0) as usize;
+        let mut mempool = u32hashmap_with_capacity(txs.len());
+        for tx in txs {
+            mempool.insert(tx.uid, tx);
+        }
+        let options = GbtOptions::new(QBIT_MAX_BLOCK_WEIGHT, 8, 1).expect("qbit's options are valid");
+        gbt(&mut mempool, &[], max_uid, options)
+    }
+
+    fn rate(result: &GbtResult, uid: u32) -> Option<f64> {
+        result.rates.iter().find(|rate| rate[0] == f64::from(uid)).map(|rate| rate[1])
+    }
+
+    #[test]
+    fn fills_a_block_up_to_the_qbit_weight_limit() {
+        // With 4,000 WU reserved, 499 transactions of 3,992 WU fit (1,996,008 WU),
+        // and a 500th would reach 2,000,000, which BlockAssembler::TestPackage rejects.
+        let txs = (1..=500).map(|uid| tx(uid, 10_000 - u64::from(uid), 3_992, 0, vec![])).collect();
+        let result = run(txs);
+        assert_eq!(result.blocks[0].len(), 499);
+        assert_eq!(result.block_weights[0], 4_000 + 499 * 3_992);
+        assert_eq!(result.blocks[1], vec![500]);
+    }
+
+    #[test]
+    fn rates_a_cpfp_package_by_weight() {
+        // 8,000 sats over 8,000 WU is 1 sat/vB when vsize equals weight
+        let result = run(vec![tx(1, 1_000, 4_000, 0, vec![]), tx(2, 7_000, 4_000, 0, vec![1])]);
+        assert_eq!(result.clusters, vec![vec![1, 2]]);
+        assert_eq!(rate(&result, 1), Some(1.0));
+        assert_eq!(rate(&result, 2), Some(1.0));
+    }
+
+    #[test]
+    fn keeps_trying_packages_until_the_block_is_within_4000_wu_of_full() {
+        // 1,995,000 WU used: more than 1,000 packages fail, but BlockAssembler only gives up
+        // once nBlockWeight + BLOCK_FULL_ENOUGH_WEIGHT_DELTA exceeds -blockmaxweight
+        let mut txs: Vec<ThreadTransaction> = (1..=4).map(|uid| tx(uid, 4_000_000, 400_000, 0, vec![])).collect();
+        txs.push(tx(5, 3_910_000, 391_000, 0, vec![]));
+        txs.extend((6..=1_007).map(|uid| tx(uid, 20_000 - u64::from(uid), 10_000, 0, vec![])));
+        txs.push(tx(1_008, 1_000, 1_000, 0, vec![]));
+        let result = run(txs);
+        assert_eq!(result.block_weights[0], 1_996_000);
+        assert!(result.blocks[0].contains(&1_008));
+    }
+
+    #[test]
+    fn keeps_block_sigops_below_80000_including_the_coinbase_reserve() {
+        // MAX_BLOCK_SIGOPS_COST is 80,000 and 400 are reserved for the coinbase. After four
+        // transactions of 16,000 sigops, one of 15,600 would make exactly 80,000, which
+        // BlockAssembler::TestPackage rejects, and one of 15,599 still fits.
+        let mut txs: Vec<ThreadTransaction> = (1..=4).map(|uid| tx(uid, 1_000_000 - u64::from(uid), 320_000, 16_000, vec![])).collect();
+        txs.push(tx(5, 900_000, 312_000, 15_600, vec![]));
+        txs.push(tx(6, 800_000, 311_980, 15_599, vec![]));
+        let result = run(txs);
+        assert_eq!(result.blocks[0], vec![1, 2, 3, 4, 6]);
+        assert_eq!(result.blocks[1], vec![5]);
+    }
+
+    #[test]
+    fn rejects_scale_factors_outside_1_to_4() {
+        assert!(GbtOptions::new(QBIT_MAX_BLOCK_WEIGHT, 8, 1).is_ok());
+        assert!(GbtOptions::new(4_000_000, 8, 4).is_ok());
+        for witness_scale_factor in [0, 5, u32::MAX] {
+            assert!(GbtOptions::new(QBIT_MAX_BLOCK_WEIGHT, 8, witness_scale_factor).is_err());
         }
     }
 }

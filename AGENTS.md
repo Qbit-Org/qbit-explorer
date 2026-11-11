@@ -105,6 +105,7 @@ npm run lint
 npm run smoke:qbit-scripts
 npm run smoke:qbit-weight
 npm run smoke:qbit-block-target
+npm run smoke:qbit-reorg
 npm run build
 ```
 
@@ -122,8 +123,9 @@ testnet4 qbitd or qbit-electrs evidence in the PR or issue comment.
 | Address or script rendering | backend unit tests plus frontend build | Sample `tq` or `qbrt` addresses, P2MR, anchor, and PQC transactions |
 | Weight, vsize, or fee math | backend unit tests around the touched module | Fixture or curl evidence showing `vsize == weight` under WSF=1 |
 | Difficulty, subsidy, or mining UI | backend tests and frontend build | qbit source citation plus regtest/testnet4 sample data |
-| Lightning, Liquid, accelerator, services | frontend/backend build | Confirm disabled or gracefully hidden for qbit |
+| Liquid, accelerator, services | frontend/backend build | Confirm disabled or gracefully hidden for qbit |
 | Block, transaction, address or mempool pages | `npm run cypress:run:regtest` against the regtest harness (`docs/qbit-local-dev.md`) | |
+| Server-side rendering (`frontend/server.ts`, `frontend/server.run.ts`) | `cd frontend && npm run build:ssr && npm run smoke:ssr` | |
 
 ## qbit Consensus Quick Reference
 
@@ -167,16 +169,25 @@ qbit source and the deployed network rather than pre-launch planning text.
 The qbit CI/CD workflows are:
 
 - `.github/workflows/ci.yml` — backend and frontend lint and builds, backend
-  unit tests, the frontend qbit script, weight and block target smokes, plus a
-  check that `docker/backend/start.sh` renders valid JSON. As upstream, the
-  frontend unit-test step is commented out, so frontend specs do not gate pull
-  requests.
+  unit tests, the frontend qbit script, weight, block target and reorg smokes,
+  plus a check that `docker/backend/start.sh` renders valid JSON. As upstream,
+  the frontend unit-test step is commented out, so frontend specs do not gate
+  pull requests. Its Rust GBT job runs `cargo test --locked` in `rust/gbt` and
+  fails on a RustSec vulnerability or unsound advisory against
+  `rust/gbt/Cargo.lock`, with a `cargo-audit` release binary pinned by SHA-256.
+  The frontend prod job also builds the server-side rendering server from its
+  build and checks that it renders `/` (`npm run smoke:ssr`).
 - `.github/workflows/backend-integration.yml` — backend integration tests
   against MariaDB, on a host port Docker picks (`MEMPOOL_TEST_DB_HOST_PORT=0`).
 - `.github/workflows/docker.yml` — on every pull request, builds both images
   from the pull request merged onto its base branch and checks that the
-  `docker/docker-compose.yml` stack becomes healthy. It runs the same check on
-  `v*` tags, and never pushes images anywhere.
+  `docker/docker-compose.yml` stack becomes healthy, that a missing bundle
+  gets an uncached 404 from nginx while app routes get the app page, and that
+  the API and WebSocket answer through nginx, also after the `api` container
+  is recreated at another address. It runs the same check on `v*` tags, and
+  never pushes images anywhere. The frontend build gets the job's read-only
+  `GITHUB_TOKEN` as a BuildKit secret, for the GitHub API calls that list the
+  mining pool logos.
 - `.github/workflows/qbit-design-check.yml` — drift gate for the vendored
   qbit.org design contract in `frontend/src/resources/qbit-design/`. Those
   vendored files are machine-managed by `frontend/scripts/sync-qbit-design.mjs`
@@ -196,11 +207,25 @@ Keep the workflows safe for a public repository. Each one sets
 `permissions: contents: read` and checks out with `persist-credentials: false`.
 Third-party actions are pinned to a commit SHA; GitHub-owned `actions/*` stay
 pinned to their major version tag (`@v4`). Only the Docker publish jobs read
-secrets, and they skip pull requests from forks. Do not add
+secrets, and they skip pull requests from forks. The automatic `GITHUB_TOKEN`
+isn't a repository secret, and under `contents: read` it can only read; pass
+it only to the step that needs it, as `docker.yml` does. Do not add
 `pull_request_target` or `workflow_run` triggers that run pull request code.
 
 `ci.yml`'s Repository checks job fails a pull request with files under
 `contributors/`, which are upstream's CLA signatures (README.md, Upstream).
+It also runs `frontend/scripts/check-translations.mjs`, which fails on a unit
+in a built translation file whose English text differs from `messages.xlf`, or
+whose translation uses a placeholder `messages.xlf`'s English doesn't have
+(CONTRIBUTING.md, Translations).
+
+Dependabot reads `.github/dependabot.yml` only from `main`, so a change to it
+takes effect when a release brings it there. The file on this branch opens
+version updates, including `cargo` for `rust/gbt`, against `1.x.x`. Security
+updates always open against `main`. Dependabot reads `rust/gbt/rust-toolchain`
+only in TOML form, so keep that file TOML. Workflows and the npm build read its
+channel with `rust/gbt/scripts/toolchain-channel.sh`, which fails when it finds
+none.
 
 Every checked-in GitHub Actions job runs on the pinned Blacksmith Ubuntu 24.04
 runner `blacksmith-4vcpu-ubuntu-2404`. The Blacksmith GitHub App must retain
@@ -227,6 +252,13 @@ cherry-picks) lives in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 - Verify constants against the qbit source or qbit-electrs contract, not old
   planning text.
+- The pins in `docker/*/Dockerfile`, base image digests and the SHA-256 of
+  NodeSource's `setup_26.x` (in both backend stages), are the ones the
+  production image build uses. When NodeSource republishes the script at the
+  same URL, the backend build fails that check: review the new script and
+  update both stages. A PR that changes any of these pins, a Dependabot
+  digest bump included, says so in its description, so that the production
+  deployment moves with it.
 - Check every weight/vsize change for the WSF=1 invariant.
 - Qbit mainnet has launched; mainnet wording is no longer launch-gated. The
   qbit.org design contract (banner and nav) is authoritative for public

@@ -27,7 +27,7 @@ class BackendInfo {
       hostname: os.hostname(),
       version: versionInfo.version,
       gitCommit: versionInfo.gitCommit,
-      lightning: config.LIGHTNING.ENABLED,
+      lightning: false, // the Lightning backend has been removed; kept for upstream clients
       backend: config.MEMPOOL.BACKEND,
       coreVersion: '?',
       osVersion: `${os.type()} ${os.release()}`,

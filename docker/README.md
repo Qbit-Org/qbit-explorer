@@ -24,7 +24,9 @@ No images are published, so build them yourself as shown below.
 [`.github/workflows/docker.yml`](../.github/workflows/docker.yml) runs the same
 build on every pull request and on every `v*` tag. It then starts both images
 with `docker-compose.yml` and checks that all three containers become healthy,
-without pushing the images anywhere.
+that nginx answers a missing bundle with an uncached 404, and that the API
+answers through nginx, also after the `api` container is recreated, without
+pushing the images anywhere.
 
 ### Build the images yourself
 
@@ -45,12 +47,29 @@ docker buildx build --load \
 
 Run `docker/init.sh` from the repository root. It copies `docker/backend`,
 `docker/frontend`, `nginx.conf` and `nginx-mempool.conf` into the build
-contexts (the copies are git-ignored), and downloads the GeoLite2 databases
-from [mempool/geoip-data](https://github.com/mempool/geoip-data) at a pinned
-commit. The frontend image build also needs network access: it downloads
-mining pool logos from
+contexts (the copies are git-ignored). The frontend image build needs
+network access: it downloads mining pool logos from
 [mempool/mining-pool-logos](https://github.com/mempool/mining-pool-logos),
 which include the logos for the AuxPoW parent pools the explorer recognises.
+
+The build lists those logos through the GitHub API, twice per build. GitHub
+allows 60 unauthenticated API requests an hour per IP address, so a build on a
+busy or shared address can fail with `API rate limit exceeded`. A token is
+optional and raises that limit: set `GITHUB_TOKEN` and add
+`--secret id=github_token,env=GITHUB_TOKEN` to the frontend build. Only the
+build step that downloads the logos sees the token, and it isn't stored in the
+image. `docker.yml` passes the job's read-only token this way.
+
+Both images need BuildKit, Docker's default builder since Docker 23, which
+`docker buildx build` always uses: the frontend image for that secret mount,
+with or without a token, and the backend image for its `--build-context`
+options.
+
+The Dockerfiles pin each base image by digest, and the backend image checks
+NodeSource's Node.js setup script against a SHA-256 before running it.
+Dependabot proposes digest updates. NodeSource can republish `setup_26.x` at
+the same URL, and the backend build then stops at that check: read the new
+script, then put its checksum in both stages of `docker/backend/Dockerfile`.
 
 ## Run with Docker Compose
 
@@ -88,8 +107,9 @@ Configure `qbit.conf`:
 ```ini
 server=1
 txindex=1
-rpcuser=mempool
-rpcpassword=mempool
+# the RPC cookie, in a directory of its own for the backend container to mount
+rpccookiefile=/var/lib/qbit/rpc/.cookie
+rpccookieperms=group
 
 # qbitd accepts RPC only on localhost unless both rpcbind and rpcallowip are
 # set. Bind to the address the containers use (CORE_RPC_HOST below) and allow
@@ -100,10 +120,23 @@ rpcallowip=127.0.0.1
 rpcallowip=172.16.0.0/12
 ```
 
-Set the RPC address and credentials for the `api` service in
+With no `rpcpassword` set, qbitd writes an RPC cookie each time it starts. The
+backend authenticates with it, so no RPC password goes into
+`docker-compose.yml`. qbitd doesn't create the cookie's directory, so create it
+for the user qbitd runs as, here the `qbit` user of qbit's systemd unit:
+
+```bash
+sudo install -d -o qbit -g qbit -m 0750 /var/lib/qbit/rpc
+```
+
+Set the RPC address and the cookie for the `api` service in
 `docker-compose.yml`. `CORE_RPC_HOST` must be an address of the Docker host that
 the containers can reach. The `172.27.0.1` in the file is a placeholder; the
-host's `docker0` address, usually `172.17.0.1`, is a common choice.
+host's `docker0` address, usually `172.17.0.1`, is a common choice. Mount the
+cookie's directory read-only, not the cookie itself: qbitd replaces the file at
+every start, and a file mount would keep showing the old one. The container
+runs as UID 1000, so unless qbitd does too, add the GID of the group that owns
+the cookie (`getent group qbit`) with `group_add`:
 
 ```yaml
   api:
@@ -111,9 +144,23 @@ host's `docker0` address, usually `172.17.0.1`, is a common choice.
       MEMPOOL_BACKEND: "none"
       CORE_RPC_HOST: "172.17.0.1"
       CORE_RPC_PORT: "8352"
-      CORE_RPC_USERNAME: "mempool"
-      CORE_RPC_PASSWORD: "mempool"
+      CORE_RPC_COOKIE: "true"
+      CORE_RPC_COOKIE_PATH: "/qbit-rpc/.cookie"
+    group_add:
+      - "999" # the qbit group's GID
+    volumes:
+      - ./data:/backend/cache
+      - /var/lib/qbit/rpc:/qbit-rpc:ro
 ```
+
+Set both cookie variables. The image leaves `CORE_RPC_COOKIE_PATH` empty, so
+with `CORE_RPC_COOKIE` alone the backend has no cookie to read: it logs an error
+at startup, and RPC calls fail. It doesn't fall back to `CORE_RPC_USERNAME` and
+`CORE_RPC_PASSWORD`. To use a password, as the sample `docker-compose.yml`
+does, add an `rpcauth` line to `qbit.conf` (qbit's
+[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
+prints one) and set `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD` instead of the
+cookie variables.
 
 Once qbitd is running and synced, start the stack from `docker/`:
 
@@ -127,8 +174,15 @@ The explorer listens on port 80 of the host, at http://localhost.
 
 [qbit-electrs](https://github.com/Qbit-Org/qbit-electrs) serves an
 Esplora-compatible REST API, on port 3000 by default for mainnet. It must
-listen (`--http-addr`) on an address the containers can reach. Point the
-backend at it:
+listen (`--http-addr`) on an address the containers can reach. With the
+`qbit.conf` above it uses the same cookie: start it with
+`--daemon-dir /var/lib/qbit/rpc` and `--jsonrpc-import`, so that it reads
+`.cookie` from that directory and fetches blocks over RPC. Run it as a user in
+the `qbit` group, so that it can read the cookie. qbit-electrs uses an
+explicit `--daemon-dir` as given on every chain, and adds the chain's
+subdirectory, such as `testnet4/`, only to its default. Its `--cookie` option
+takes the credentials themselves, which `ps` shows and which go stale when
+qbitd restarts, so don't use it here. Point the backend at it:
 
 ```yaml
   api:
@@ -140,6 +194,10 @@ backend at it:
 `MEMPOOL_BACKEND` accepts `none` (qbitd only), `esplora` (the qbit-electrs REST
 API) and `electrum` (an Electrum protocol server). qbit deployments normally use
 `none` or `esplora`.
+
+With `esplora`, search suggests addresses only when qbit-electrs runs with
+`--address-search`, with an index rebuilt from an empty `--db-dir` if it was
+built without the flag.
 
 qbit-electrs also serves the Electrum protocol, over plain TCP, on port 50001
 for mainnet, 40001 for testnet4 and 60401 for regtest. It listens on localhost
@@ -171,10 +229,10 @@ frontend serves that network at `/`.
 | regtest | 18452 | 3002 | `MEMPOOL_NETWORK: "regtest"`, `CORE_RPC_PORT: "18452"` | `MAINNET_ENABLED: "false"`, `REGTEST_ENABLED: "true"`, `ROOT_NETWORK: "regtest"` |
 
 The block weight (2,000,000) and target spacing (60 seconds) defaults already
-match qbit on every network. Leave `MEMPOOL_RUST_GBT` at its default of
-`false`: the Rust block-template builder in `rust/gbt` still applies Bitcoin's
-witness scale factor of 4, which would show projected-block fee rates four
-times too high on qbit.
+match qbit on every network. `MEMPOOL_RUST_GBT` defaults to `false` in the
+container, so the backend projects blocks with its TypeScript builder. Set it
+to `true` to use the faster Rust builder in `rust/gbt`, which the backend
+defaults to outside the container.
 
 ## Configuration reference
 
@@ -185,8 +243,8 @@ times too high on qbit.
   unset or empty variable takes the image default shown here. The built-in
   defaults in `backend/src/config.ts` apply only to keys missing from that file,
   so the image defaults are the ones that take effect. Some differ from the
-  built-in defaults, for example `MEMPOOL_BACKEND`, `ESPLORA_REQUEST_TIMEOUT`,
-  `SYSLOG_ENABLED` and `MAXMIND_ENABLED`.
+  built-in defaults, for example `MEMPOOL_BACKEND`, `ESPLORA_REQUEST_TIMEOUT`
+  and `SYSLOG_ENABLED`.
 - **Frontend:** `docker/frontend/entrypoint.sh` writes `FRONTEND_HTTP_PORT` and
   the backend address into the nginx configuration, then renders the browser
   configuration (`config.js`) from the variables below. `MAINNET_EXPLORER_URL`
@@ -206,6 +264,7 @@ times too high on qbit.
 | `MEMPOOL_ENABLED` | `MEMPOOL.ENABLED` | `true` |
 | `MEMPOOL_OFFICIAL` | `MEMPOOL.OFFICIAL` | `false` |
 | `BACKEND_HTTP_PORT` | `MEMPOOL.HTTP_PORT` | `8999` |
+| `MEMPOOL_HTTP_HOST` | `MEMPOOL.HTTP_HOST` | (empty) |
 | `MEMPOOL_SPAWN_CLUSTER_PROCS` | `MEMPOOL.SPAWN_CLUSTER_PROCS` | `0` |
 | `MEMPOOL_UNIX_SOCKET_PATH` | `MEMPOOL.UNIX_SOCKET_PATH` | (empty) |
 | `MEMPOOL_API_URL_PREFIX` | `MEMPOOL.API_URL_PREFIX` | `/api/v1/` |
@@ -218,7 +277,7 @@ times too high on qbit.
 | `MEMPOOL_BLOCK_TARGET_SPACING_SECONDS` | `MEMPOOL.BLOCK_TARGET_SPACING_SECONDS` | `60` |
 | `MEMPOOL_INITIAL_BLOCKS_AMOUNT` | `MEMPOOL.INITIAL_BLOCKS_AMOUNT` | `8` |
 | `MEMPOOL_MEMPOOL_BLOCKS_AMOUNT` | `MEMPOOL.MEMPOOL_BLOCKS_AMOUNT` | `8` |
-| `MEMPOOL_INDEXING_BLOCKS_AMOUNT` | `MEMPOOL.INDEXING_BLOCKS_AMOUNT` | `11000` |
+| `MEMPOOL_INDEXING_BLOCKS_AMOUNT` | `MEMPOOL.INDEXING_BLOCKS_AMOUNT` | `110000` |
 | `MEMPOOL_BLOCKS_SUMMARIES_INDEXING` | `MEMPOOL.BLOCKS_SUMMARIES_INDEXING` | `false` |
 | `MEMPOOL_GOGGLES_INDEXING` | `MEMPOOL.GOGGLES_INDEXING` | `false` |
 | `MEMPOOL_USE_SECOND_NODE_FOR_MINFEE` | `MEMPOOL.USE_SECOND_NODE_FOR_MINFEE` | `false` |
@@ -241,6 +300,11 @@ times too high on qbit.
 | `MEMPOOL_ALLOW_UNREACHABLE` | `MEMPOOL.ALLOW_UNREACHABLE` | `true` |
 | `MEMPOOL_PRICE_UPDATES_PER_HOUR` | `MEMPOOL.PRICE_UPDATES_PER_HOUR` | `1` |
 | `MEMPOOL_MAX_TRACKED_ADDRESSES` | `MEMPOOL.MAX_TRACKED_ADDRESSES` | `1` |
+
+`MEMPOOL_HTTP_HOST` is the address the backend listens on: an IP address such
+as `127.0.0.1` or `::1`, or empty for every interface. Under Compose, leave it
+empty. The `web` container reaches the backend over the Compose network, and
+with `127.0.0.1` the backend would only answer from inside its own container.
 
 **CORE_RPC** (qbitd)
 
@@ -331,15 +395,6 @@ times too high on qbit.
 | `SOCKS5PROXY_USERNAME` | `SOCKS5PROXY.USERNAME` | (empty) |
 | `SOCKS5PROXY_PASSWORD` | `SOCKS5PROXY.PASSWORD` | (empty) |
 
-**MAXMIND** (GeoIP; the image bundles the GeoLite2 databases)
-
-| Variable | `mempool-config.json` key | Image default |
-| --- | --- | --- |
-| `MAXMIND_ENABLED` | `MAXMIND.ENABLED` | `true` |
-| `MAXMIND_GEOLITE2_CITY` | `MAXMIND.GEOLITE2_CITY` | `/backend/GeoIP/GeoLite2-City.mmdb` |
-| `MAXMIND_GEOLITE2_ASN` | `MAXMIND.GEOLITE2_ASN` | `/backend/GeoIP/GeoLite2-ASN.mmdb` |
-| `MAXMIND_GEOIP2_ISP` | `MAXMIND.GEOIP2_ISP` | (empty) |
-
 **REDIS**
 
 | Variable | `mempool-config.json` key | Image default |
@@ -357,17 +412,16 @@ times too high on qbit.
 | `FIAT_PRICE_API_KEY` | `FIAT_PRICE.API_KEY` | (empty) |
 
 `start.sh` also reads upstream mempool settings that qbit doesn't use:
-Lightning (`LIGHTNING_*`, `LND_*`, `CLIGHTNING_SOCKET`), mempool.space services
-and replication (`MEMPOOL_SERVICES_*`, `REPLICATION_*`,
-`EXTERNAL_DATA_SERVER_*`) and Stratum job tracking (`STRATUM_*`). Their
-defaults disable them, so leave them unset.
+mempool.space services and replication (`MEMPOOL_SERVICES_*`,
+`REPLICATION_*`, `EXTERNAL_DATA_SERVER_*`) and Stratum job tracking
+(`STRATUM_*`). Their defaults disable them, so leave them unset.
 
 ### Frontend (`web`)
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `FRONTEND_HTTP_PORT` | `8080` | Port nginx listens on inside the container |
-| `BACKEND_MAINNET_HTTP_HOST` | `127.0.0.1` | Backend host that nginx proxies `/api` and `/ws` to (`api` in the compose file) |
+| `BACKEND_MAINNET_HTTP_HOST` | `127.0.0.1` | Backend host or IP address that nginx proxies `/api` and `/ws` to (`api` in the compose file). See [Backend host names](#backend-host-names) for how nginx looks a host name up |
 | `BACKEND_MAINNET_HTTP_PORT` | `8999` | Backend port for that proxy |
 | `MAINNET_ENABLED` | `true` | Serve qbit mainnet |
 | `TESTNET4_ENABLED` | `false` | Serve qbit testnet4 |
@@ -392,3 +446,33 @@ defaults disable them, so leave them unset.
 | `ADDITIONAL_CURRENCIES` | `false` | Extra fiat currencies |
 | `NGINX_PROTOCOL`, `NGINX_HOSTNAME`, `NGINX_PORT` | `http`, `localhost`, `8999` | API address for server-side rendering only; the browser uses relative URLs |
 | `ACCELERATOR`, `ACCELERATOR_BUTTON`, `PUBLIC_ACCELERATIONS`, `SERVICES_API`, `STRATUM_ENABLED` | off or empty | Upstream mempool.space services; leave them off |
+
+### Backend host names
+
+nginx looks up a `BACKEND_MAINNET_HTTP_HOST` host name when a request comes
+in, and keeps the answer for 10 seconds, so it follows a recreated `api`
+container to its new address. An IP address needs no lookup.
+
+At every start, `entrypoint.sh` sets nginx's resolver to the first
+`nameserver` in the container's `/etc/resolv.conf` that nginx can use, so a
+restart after a network change picks up the new one:
+
+- On a user-defined Docker network, such as Compose's, that is Docker's DNS
+  server, `127.0.0.11`. Elsewhere, such as in Kubernetes, in Podman or on
+  Docker's default bridge network, it's the DNS server the container gets
+  there, and the log names it.
+- It skips link-local IPv6 addresses with a zone, such as `fe80::1%eth0`,
+  which nginx can't use. If no nameserver is left, it uses `127.0.0.11` and
+  logs that.
+- With an IPv6 nameserver, nginx asks for IPv4 and IPv6 addresses. With any
+  other, `127.0.0.11` included, it asks for IPv4 addresses only.
+
+nginx doesn't read `/etc/hosts` and doesn't add `search` domains, so some
+names that resolved before don't. Set an IP address instead, with an IPv6
+address in brackets, such as `[fd00::2]`:
+
+- names that only `/etc/hosts` knows, from `extra_hosts`, `--add-host` or
+  `--link`;
+- short names that need a `search` domain, such as a Kubernetes service's
+  `api`. Its full name, `api.<namespace>.svc.cluster.local`, also works;
+- names with only an IPv6 address, when the nameserver is IPv4.

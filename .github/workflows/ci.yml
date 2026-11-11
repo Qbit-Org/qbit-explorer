@@ -53,7 +53,9 @@ jobs:
 
       - name: Read rust-toolchain file from repository
         id: gettoolchain
-        run: echo "toolchain=$(cat ./rust/gbt/rust-toolchain)" >> "$GITHUB_OUTPUT"
+        run: |
+          toolchain="$(sh rust/gbt/scripts/toolchain-channel.sh)"
+          echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
         working-directory: ${{ matrix.node }}/${{ matrix.flavor }}
 
       - name: Cache Rust dependencies
@@ -98,6 +100,77 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/backend
+
+  # The backend jobs build rust/gbt; this one runs its tests and audits the
+  # crates it locks.
+  rust_gbt:
+    if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    name: Rust GBT tests and RustSec audit
+    env:
+      # rustsec/rustsec's cargo-audit release binary. The checksum is the
+      # SHA-256 digest GitHub lists for this release asset. Update both if the
+      # advisory database moves to a format this version can't read.
+      CARGO_AUDIT_VERSION: "0.22.2"
+      CARGO_AUDIT_SHA256: 7fb9497f8594b389e5fce5ef9b92db08432996895b2e0c5a0167a69ed445c428
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Test the rust-toolchain reader
+        run: sh rust/gbt/scripts/toolchain-channel.test.sh
+
+      - name: Read rust-toolchain file from repository
+        id: gettoolchain
+        run: |
+          toolchain="$(sh rust/gbt/scripts/toolchain-channel.sh)"
+          echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
+
+      # Only the downloaded crates. The tests build from scratch in under a
+      # minute, so there's no target/ to go stale under an unchanged key.
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-gbt-test-${{ hashFiles('rust/gbt/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-gbt-test-
+
+      - name: Install ${{ steps.gettoolchain.outputs.toolchain }} Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: ${{ steps.gettoolchain.outputs.toolchain }}
+
+      - name: Test
+        run: cargo test --locked
+        working-directory: rust/gbt
+
+      # The audit runs even when a test fails, so a pull request sees both.
+      - name: Download and verify cargo-audit ${{ env.CARGO_AUDIT_VERSION }}
+        id: cargo-audit
+        if: ${{ !cancelled() }}
+        run: |
+          name="cargo-audit-x86_64-unknown-linux-musl-v${CARGO_AUDIT_VERSION}"
+          mkdir -p "$RUNNER_TEMP/cargo-audit"
+          cd "$RUNNER_TEMP/cargo-audit"
+          curl --fail --location --silent --show-error --retry 3 --retry-delay 5 \
+            --output "$name.tgz" \
+            "https://github.com/rustsec/rustsec/releases/download/cargo-audit/v${CARGO_AUDIT_VERSION}/$name.tgz"
+          echo "${CARGO_AUDIT_SHA256}  $name.tgz" | sha256sum --check --strict
+          tar -xzf "$name.tgz"
+          echo "CARGO_AUDIT=$RUNNER_TEMP/cargo-audit/$name/cargo-audit" >> "$GITHUB_ENV"
+
+      # Fails on a RustSec vulnerability or unsound advisory against a locked
+      # crate. Unmaintained crates and yanked versions print as warnings.
+      - name: RustSec audit of rust/gbt/Cargo.lock
+        if: ${{ !cancelled() && steps.cargo-audit.outcome == 'success' }}
+        run: '"$CARGO_AUDIT" audit --deny unsound --file rust/gbt/Cargo.lock'
 
   frontend:
     if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
@@ -166,6 +239,11 @@ jobs:
         run: npm run smoke:qbit-block-target
         working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
 
+      - name: qbit Reorg Smoke
+        if: ${{ matrix.flavor == 'dev'}}
+        run: npm run smoke:qbit-reorg
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
       # - name: Test
       #   run: npm run test
 
@@ -177,6 +255,20 @@ jobs:
           # logos tracked in this repository. The Docker image build runs the
           # sync and downloads the logos from mempool/mining-pool-logos.
           SKIP_SYNC: 1
+
+      # Server-side rendering (#49), on the install production/README.md
+      # uses. build:ssr is the build above plus build:ssr:server. The smoke
+      # starts the server and checks that it renders `/`.
+      - name: SSR Build
+        if: ${{ matrix.flavor == 'prod'}}
+        run: npm run build:ssr:server
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
+
+      - name: SSR Smoke
+        if: ${{ matrix.flavor == 'prod'}}
+        timeout-minutes: 5
+        run: npm run smoke:ssr
+        working-directory: ${{ matrix.node }}/${{ matrix.flavor }}/frontend
 
   validate_docker_json:
     if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
@@ -221,6 +313,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "26.12.1"
+
+      - name: Test the translation check
+        run: node --test frontend/scripts/check-translations.test.mjs
+
+      # A translation made for English that messages.xlf no longer has, under
+      # the same message id, would keep showing in the localized builds.
+      - name: Check translations against messages.xlf
+        run: node frontend/scripts/check-translations.mjs
+
       # Upstream mempool pull requests add contributors/<name>.txt to sign
       # upstream's contributor license agreement. qbit-explorer has no CLA
       # (CONTRIBUTING.md, License), and README.md (Upstream) says to keep
@@ -229,7 +334,7 @@ jobs:
         run: |
           files=$(git ls-files contributors)
           if [ -n "$files" ]; then
-            echo "::error title=Upstream CLA files::These contributors/ files sign upstream mempool's CLA, but qbit-explorer has no CLA (CONTRIBUTING.md#license). Remove them in another commit with 'git rm -r contributors' and push; pull requests are squash-merged, so they never reach main (README.md#upstream)."
+            echo "::error title=Upstream CLA files::These contributors/ files sign upstream mempool's CLA, but qbit-explorer has no CLA (CONTRIBUTING.md#license). Remove them in another commit with 'git rm -r contributors' and push; a pull request is squashed into one commit before it merges, so they never reach main (README.md#upstream)."
             echo "$files"
             exit 1
           fi

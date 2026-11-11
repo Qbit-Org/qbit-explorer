@@ -3542,8 +3542,8 @@
         </context-group>
         <note priority="1" from="description">mining.reward-stats</note>
       </trans-unit>
-      <trans-unit id="8527213d7c7dbffe48a45c4d796ae221d419c71a" datatype="html">
-        <source>(144 blocks)</source>
+      <trans-unit id="12df9073ef549c04f486ccc2896450a69c0efd32" datatype="html">
+        <source>(1,440 blocks)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/mining-dashboard/mining-dashboard.component.html</context>
           <context context-type="linenumber">10</context>
@@ -4321,16 +4321,16 @@
         </context-group>
         <note priority="1" from="description">mining.rewards</note>
       </trans-unit>
-      <trans-unit id="79b0842a2010172290ad09062bf51f09d8842f65" datatype="html">
-        <source>Amount being paid to miners in the past 144 blocks</source>
+      <trans-unit id="37acb195f751fb0d9757df5e3fce03264a0631f6" datatype="html">
+        <source>Amount being paid to miners in the past 1,440 blocks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/reward-stats/reward-stats.component.html</context>
           <context context-type="linenumber">6</context>
         </context-group>
         <note priority="1" from="description">mining.rewards-desc</note>
       </trans-unit>
-      <trans-unit id="a0d4ab5b063e7be1c9ea980f5fd6ce1b5384ad0b" datatype="html">
-        <source>Average fees per block in the past 144 blocks</source>
+      <trans-unit id="4c434497a500cbfae2b998d5cf5dfbc190b4e03a" datatype="html">
+        <source>Average fees per block in the past 1,440 blocks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/reward-stats/reward-stats.component.html</context>
           <context context-type="linenumber">18</context>
@@ -4362,8 +4362,8 @@
         </context-group>
         <note priority="1" from="description">mining.average-fee</note>
       </trans-unit>
-      <trans-unit id="8be96dc461529381c812f64962c62f4228d01470" datatype="html">
-        <source>Fee paid on average for each transaction in the past 144 blocks</source>
+      <trans-unit id="95f70c5fac162eb514c9dfaf2fda5a7f6a8c91e2" datatype="html">
+        <source>Fee paid on average for each transaction in the past 1,440 blocks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/components/reward-stats/reward-stats.component.html</context>
           <context context-type="linenumber">31</context>

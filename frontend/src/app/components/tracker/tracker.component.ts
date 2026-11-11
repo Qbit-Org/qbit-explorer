@@ -33,6 +33,7 @@ import { ETA, EtaService } from '@app/services/eta.service';
 import { getTransactionFlags, getUnacceleratedFeeRate } from '@app/shared/transaction.utils';
 import { StorageService } from '@app/services/storage.service';
 import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize } from '@app/shared/weight-units';
+import { isAwaitableTransactionError } from '@app/shared/http-error.utils';
 
 
 interface Pool {
@@ -200,7 +201,8 @@ export class TrackerComponent implements OnInit, OnDestroy {
             .getCpfpinfo$(txId)
             .pipe(retryWhen((errors) => errors.pipe(
               mergeMap((error) => {
-                if (!this.tx?.status || this.tx.status.confirmed) {
+                // the server renders once, and retrying would keep its render from finishing
+                if (!this.tx?.status || this.tx.status.confirmed || !this.stateService.isBrowser) {
                   return throwError(error);
                 } else {
                   return of(null);
@@ -617,7 +619,7 @@ export class TrackerComponent implements OnInit, OnDestroy {
   }
 
   handleLoadElectrsTransactionError(error: any): Observable<any> {
-    if (error.status === 404 && /^[a-fA-F0-9]{64}$/.test(this.txId)) {
+    if (isAwaitableTransactionError(error) && /^[a-fA-F0-9]{64}$/.test(this.txId)) {
       this.websocketService.startMultiTrackTransaction(this.txId);
       this.waitingForTransaction = true;
     }

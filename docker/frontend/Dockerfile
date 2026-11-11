@@ -1,4 +1,4 @@
-FROM node:26.12.1-bookworm-slim AS builder
+FROM node:26.12.1-bookworm-slim@sha256:88e480776c6149ff1d098cd304f44bf18057fb5d284a3329b78162d29821e28c AS builder
 
 ARG commitHash
 ENV DOCKER_COMMIT_HASH=${commitHash}
@@ -11,9 +11,14 @@ RUN apt-get install -y build-essential rsync
 RUN cp mempool-frontend-config.sample.json mempool-frontend-config.json
 RUN npm install --omit=dev --omit=optional
 
-RUN npm run build
+# The build lists the mining pool logos through the GitHub API. The optional
+# github_token build secret raises GitHub's rate limit for that; without it
+# the calls go unauthenticated. The secret is mounted for this step only and
+# isn't stored in the image.
+RUN --mount=type=secret,id=github_token \
+    GITHUB_TOKEN="$(cat /run/secrets/github_token 2>/dev/null)" npm run build
 
-FROM nginx:1.30.6-alpine
+FROM nginx:1.30.6-alpine@sha256:0e52bd054126cdc040b1276c0af347aeb02a41b9cfe305d6094767ac30e97949
 
 WORKDIR /patch
 

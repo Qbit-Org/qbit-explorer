@@ -5,6 +5,7 @@ import logger from '../logger';
 import { Common } from '../api/common';
 import PoolsRepository from './PoolsRepository';
 import HashratesRepository from './HashratesRepository';
+import cpfpRepository from './CpfpRepository';
 import { RowDataPacket } from 'mysql2';
 import BlocksSummariesRepository from './BlocksSummariesRepository';
 import bitcoinClient from '../api/bitcoin/bitcoin-client';
@@ -853,10 +854,14 @@ class BlocksRepository {
    * @asyncSafe
    */
   public async $validateChain(): Promise<boolean> {
+    // the repairs the walk finds, from the top: the node's block to make the
+    // only canonical one at each height. Declared outside the try for a run
+    // that fails before it has written them all
+    const repairs: { hash: string, height: number }[] = [];
     try {
       const start = new Date().getTime();
-      const tip = await bitcoinApi.$getBlockHashTip();
-      let firstBadBlockHeight: number | null = null;
+      // the earliest timestamp of a block whose canonical status changes
+      let firstBadBlockTimestamp = Infinity;
       const [blocks]: any[] = await DB.query(`
         SELECT
           height,
@@ -867,6 +872,12 @@ class BlocksRepository {
         FROM blocks
         ORDER BY height DESC
       `);
+      // after the snapshot: the sync loop may save another chain's blocks as
+      // canonical between the two, and from a tip read before, the walk would
+      // follow the chain they replaced and mark them stale. From the node, as
+      // the sync loop reads it: an esplora backend can still serve the
+      // replaced chain around a reorg
+      const tip = await bitcoinCoreApi.$getBlockHashTip();
       const blocksByHash = {};
       const blocksByHeight = {};
       let minHeight = Infinity;
@@ -883,7 +894,8 @@ class BlocksRepository {
       // ensure that indexed blocks are correctly classified as stale or canonical
       // iterate back to genesis, resetting canonical status where necessary
       let hash = tip;
-      const tipHeight = blocksByHash[hash].height || (await bitcoinApi.$getBlock(hash))?.height;
+      const indexedTip = blocksByHash[hash];
+      const tipHeight = indexedTip?.height ?? (await bitcoinCoreApi.$getBlock(hash))?.height;
 
       // stop at the last canonical block we're supposed to have indexed already
       let lastIndexedBlockHeight = minHeight;
@@ -895,16 +907,18 @@ class BlocksRepository {
 
       for (let height = tipHeight; height > lastIndexedBlockHeight; height--) {
         const block = blocksByHash[hash];
-        if (!block) {
-          // block hasn't been indexed
-          // mark any other blocks at this height as stale
-          if (blocksByHeight[height]?.length > 1) {
-            await this.$setCanonicalBlockAtHeight(null, height);
-          }
-        } else if (block.stale) {
-          // block is marked stale, but shouldn't be
-          await this.$setCanonicalBlockAtHeight(block.hash, height);
-          firstBadBlockHeight = height;
+        // the best chain's block must be the only canonical one at its height,
+        // whether it is indexed or not: another chain's block left canonical,
+        // as below a reorg deeper than the block cache, counts the height as
+        // indexed, so the best chain's block would never be indexed there
+        const otherCanonical = (blocksByHeight[height] || []).filter(other => other.hash !== hash && !other.stale);
+        // the node's block is missing or marked stale, or another block at its
+        // height isn't. Where it isn't indexed, the repair still names it: the
+        // sync loop may have saved it since the snapshot, and it stays canonical
+        const changed: { timestamp: number }[] = block?.stale ? [block, ...otherCanonical] : otherCanonical;
+        if (changed.length > 0) {
+          repairs.push({ hash, height });
+          firstBadBlockTimestamp = Math.min(firstBadBlockTimestamp, ...changed.map(changedBlock => changedBlock.timestamp));
         }
         hash = block?.previous_block_hash;
         if (!hash) {
@@ -914,14 +928,35 @@ class BlocksRepository {
             break;
           } else {
             logger.info('Some blocks are not indexed, looking up prevhashes directly for chain validation');
-            hash = await bitcoinApi.$getBlockHash(height - 1);
+            hash = await bitcoinCoreApi.$getBlockHash(height - 1);
           }
         }
       }
 
-      if (firstBadBlockHeight != null) {
-        logger.warn(`Chain divergence detected at block ${firstBadBlockHeight}`);
-        await HashratesRepository.$deleteHashratesFromTimestamp(blocksByHash[firstBadBlockHeight].timestamp - 604800);
+      if (repairs.length > 0) {
+        const firstBadBlockHeight = repairs[repairs.length - 1].height;
+        logger.warn(`Chain divergence detected at block ${firstBadBlockHeight}: repairing ${repairs.length} of the heights from #${firstBadBlockHeight} to #${repairs[0].height}`);
+        // first, have the data derived from the changed blocks indexed again,
+        // as after a reorg: hashrates from a week before the earliest of them,
+        // and, when the CPFP indexer will rebuild them, the CPFP clusters, with
+        // their transactions, from the lowest repaired height up, as the reorg
+        // cleanup does from the fork. Not only at the repaired heights: a
+        // transaction the old chain held there, and the new chain mined
+        // higher up, keeps its mapping only if that height is indexed again.
+        // Without the indexer, clusters only come from indexing a block's
+        // summary, which a block that has one never gets again, so they stay.
+        // A failed CPFP deletion throws before any flag is written, so the
+        // next run finds the same repairs and deletes again. (The hashrate
+        // deletion catches its own errors, as in the reorg cleanup.)
+        await HashratesRepository.$deleteHashratesFromTimestamp(firstBadBlockTimestamp - 604800);
+        if (Common.cpfpIndexingEnabled()) {
+          await cpfpRepository.$deleteClustersFrom(firstBadBlockHeight);
+        }
+        for (const repair of repairs) {
+          await this.$setCanonicalBlockAtHeight(repair.hash, repair.height);
+        }
+        // the indexer runs again 10 seconds after a false, and indexes the
+        // heights this left without a canonical block
         return false;
       }
 
@@ -929,6 +964,13 @@ class BlocksRepository {
       return true;
     } catch (e) {
       logger.err('Cannot validate chain of block hash. Reason: ' + (e instanceof Error ? e.message : e));
+      if (repairs.length > 0) {
+        // repairs found but not all written: the indexer runs again 10
+        // seconds after a false, and the next walk finds what's left. A
+        // database outage fails the indexer in $generateBlockDatabase, before
+        // this, and it retries every 10 seconds then anyway
+        return false;
+      }
       return true; // Don't do anything if there is a db error
     }
   }
@@ -939,14 +981,16 @@ class BlocksRepository {
    */
   public async $getHistoricalBlockFees(div: number, interval: string | null, timespan?: {from: number, to: number}): Promise<any> {
     try {
+      const withPrices = Common.blockPricesIndexingEnabled();
+
       let query = `SELECT
         CAST(AVG(blocks.height) as INT) as avgHeight,
         CAST(AVG(UNIX_TIMESTAMP(blockTimestamp)) as INT) as timestamp,
-        CAST(AVG(fees) as INT) as avgFees,
-        prices.USD
-        FROM blocks
+        CAST(AVG(fees) as INT) as avgFees${withPrices ? `,
+        prices.USD` : ''}
+        FROM blocks${withPrices ? `
         JOIN blocks_prices on blocks_prices.height = blocks.height
-        JOIN prices on prices.id = blocks_prices.price_id
+        JOIN prices on prices.id = blocks_prices.price_id` : ''}
         WHERE stale = 0
       `;
 
@@ -972,14 +1016,16 @@ class BlocksRepository {
    */
   public async $getHistoricalBlockRewards(div: number, interval: string | null): Promise<any> {
     try {
+      const withPrices = Common.blockPricesIndexingEnabled();
+
       let query = `SELECT
         CAST(AVG(blocks.height) as INT) as avgHeight,
         CAST(AVG(UNIX_TIMESTAMP(blockTimestamp)) as INT) as timestamp,
-        CAST(AVG(reward) as INT) as avgRewards,
-        prices.USD
-        FROM blocks
+        CAST(AVG(reward) as INT) as avgRewards${withPrices ? `,
+        prices.USD` : ''}
+        FROM blocks${withPrices ? `
         JOIN blocks_prices on blocks_prices.height = blocks.height
-        JOIN prices on prices.id = blocks_prices.price_id
+        JOIN prices on prices.id = blocks_prices.price_id` : ''}
         WHERE stale = 0
       `;
 

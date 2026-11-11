@@ -2,14 +2,13 @@ import * as bitcoinjs from 'bitcoinjs-lib';
 import { Request } from 'express';
 import { EffectiveFeeStats, MempoolBlockWithTransactions, TransactionExtended, MempoolTransactionExtended, TransactionStripped, WorkingEffectiveFeeStats, TransactionClassified, TransactionFlags } from '../mempool.interfaces';
 import config from '../config';
-import { NodeSocket } from '../repositories/NodesSocketsRepository';
-import { isIP } from 'net';
 import transactionUtils from './transaction-utils';
 import { isPoint } from '../utils/secp256k1';
 import logger from '../logger';
-import { getVarIntLength, opcodes, parseMultisigScript } from '../utils/bitcoin-script';
+import { decodeInputScripts, DecodedInputScripts, getSigOpCount, getVarIntLength, isPushOnly, parseMultisigScript } from '../utils/bitcoin-script';
 import { IEsploraApi } from './bitcoin/esplora-api.interface';
-import { feeRatePerVsize, vsizeToWeight, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '../utils/weight-units';
+import { feeRatePerVsize, getTransactionWeight, sigopsToAdjustedVsize, vsizeToWeight, weightToFractionalVsize, weightToVsize } from '../utils/weight-units';
+import { QBIT_PRICE_FEEDS_AVAILABLE } from '../utils/qbit-price-feeds';
 
 // Bitcoin Core default policy settings
 const MAX_STANDARD_TX_WEIGHT = 400_000;
@@ -20,13 +19,28 @@ const MAX_P2SH_SIGOPS = 15;
 const MAX_STANDARD_P2WSH_STACK_ITEMS = 100;
 const MAX_STANDARD_P2WSH_STACK_ITEM_SIZE = 80;
 const MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE = 80;
+const MAX_STANDARD_P2MR_STACK_ITEM_SIZE = 16 * 1024; // qbit policy: per leaf script argument, leaf version 0xc0
+const MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES = 128 * 1024; // qbit policy: all leaf script arguments, leaf version 0xc0
 const MAX_STANDARD_P2WSH_SCRIPT_SIZE = 3600;
 const MAX_STANDARD_SCRIPTSIG_SIZE = 1650;
+const MAX_SCRIPT_SIZE = 10_000;
 const DUST_RELAY_TX_FEE_SATS_PER_KVB = 750; // qbit policy: 0.75 sat/vB
+const PQC_SIG_SIZE = 3_680; // qbit bounded SLH-DSA signature bytes
+// qbit policy: with no witness discount, the dust threshold prices every output but P2MR with the
+// 148-byte legacy spend, and P2MR with a single-key spend: outpoint, empty scriptsig and sequence,
+// then a 3-item witness of a PQC signature with its sighash byte, the 34-byte
+// <pubkey> OP_CHECKSIGPQC leaf script and the 1-byte control block, each with its length
+const DUST_SPEND_SIZE = 148;
+const P2MR_DUST_SPEND_SIZE = 41 + 1 + (3 + PQC_SIG_SIZE + 1) + (1 + 34) + (1 + 1); // 3,763 bytes
 const MAX_OP_RETURN_RELAY = 200_000; // qbit policy: -datacarriersize default, shared by all OP_RETURN outputs
 const MAX_DUST_OUTPUTS_PER_TX = 1; // qbit policy: ephemeral dust allows one dust output
 const DEFAULT_PERMIT_BAREMULTISIG = true;
-const MAX_TX_LEGACY_SIGOPS = 2_500 * WITNESS_SCALE_FACTOR; // witness-adjusted sigops
+const MAX_TX_LEGACY_SIGOPS = 2_500; // qbit policy: legacy sigops a transaction's inputs can execute (BIP54)
+const TRUC_VERSION = 3;
+const TRUC_MAX_VSIZE = 50_000; // qbit policy: sigop-adjusted vsize of any v3 transaction
+// the only leaf versions qbit relays: BIP 342 tapscript, and P2MR v1, which qbit defines separately
+const TAPROOT_LEAF_TAPSCRIPT = 0xc0;
+const P2MR_LEAF_VERSION = 0xc0;
 
 export class Common {
   static median(numbers: number[]) {
@@ -209,23 +223,39 @@ export class Common {
       return true;
     }
 
+    // each input's scripts, decoded once for the sigop and input checks below
+    const inputScripts = tx.vin.map(decodeInputScripts);
+
+    // sigop cost, as esplora reports it, or counted here when it is missing. Counting needs prevouts
+    // for the sigops of the outputs being spent, so without them the count is a lower bound, and the
+    // sigop limits below can miss a transaction but never flag one wrongly.
+    const sigopCost = tx.sigops ?? transactionUtils.countSigops(tx, inputScripts);
+
+    // TRUC-violation: a v3 transaction's sigop-adjusted vsize must be within TRUC_MAX_VSIZE
+    // (a v3 transaction that spends an unconfirmed one is limited to 45,500 vB: qbitd checks that before
+    // a transaction enters its mempool, so the frontend checks it on /tx/preview only)
+    if (tx.version === TRUC_VERSION && Math.max(weightToVsize(tx.weight), sigopsToAdjustedVsize(sigopCost)) > TRUC_MAX_VSIZE) {
+      return true;
+    }
+
     // tx-size-small
     if (this.getNonWitnessSize(tx) < MIN_STANDARD_TX_NONWITNESS_SIZE) {
       return true;
     }
 
     // bad-txns-too-many-sigops
-    if (tx.sigops && tx.sigops > MAX_STANDARD_TX_SIGOPS_COST) {
+    if (sigopCost > MAX_STANDARD_TX_SIGOPS_COST) {
       return true;
     }
 
     // legacy sigops
-    if (this.isNonStandardLegacySigops(tx, height)) {
+    if (this.isNonStandardLegacySigops(tx, height, inputScripts)) {
       return true;
     }
 
     // input validation
-    for (const vin of tx.vin) {
+    for (let i = 0; i < tx.vin.length; i++) {
+      const vin = tx.vin[i];
       if (vin.is_coinbase) {
         // standardness rules don't apply to coinbase transactions
         return false;
@@ -235,19 +265,15 @@ export class Common {
         return true;
       }
       // scriptsig-not-pushonly
-      if (vin.scriptsig_asm?.length) {
-        for (const op of vin.scriptsig_asm.split(' ')) {
-          if (opcodes[op] && opcodes[op] > opcodes['OP_16']) {
-            return true;
-          }
-        }
+      if (!isPushOnly(inputScripts[i].scriptsig)) {
+        return true;
       }
       // bad-txns-nonstandard-inputs
       if (vin.prevout?.scriptpubkey_type === 'p2sh') {
         // TODO: evaluate script (https://github.com/bitcoin/bitcoin/blob/1ac627c485a43e50a9a49baddce186ee3ad4daad/src/policy/policy.cpp#L177)
-        // countScriptSigops returns the witness-scaled sigops, so normalize before comparing with MAX_P2SH_SIGOPS
-        const sigops = (transactionUtils.countScriptSigops(vin.inner_redeemscript_asm) / WITNESS_SCALE_FACTOR);
-        if (sigops > MAX_P2SH_SIGOPS) {
+        // the redeem script is the last item the push-only scriptsig pushes
+        const redeemScript = inputScripts[i].redeemScript;
+        if (redeemScript && getSigOpCount(redeemScript, true) > MAX_P2SH_SIGOPS) {
           return true;
         }
       } else if (['unknown', 'provably_unspendable', 'empty'].includes(vin.prevout?.scriptpubkey_type || '')) {
@@ -257,26 +283,42 @@ export class Common {
       }
       // bad-witness-nonstandard
       if (vin.prevout?.scriptpubkey_type === 'v1_p2tr' && vin.witness?.length) {
-        const hasAnnex = vin.witness.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50');
         // annex is non-standard
-        if (hasAnnex) {
+        if (Common.hasAnnex(vin.witness)) {
           return true;
         }
-        if (vin.witness.length > (hasAnnex ? 2 : 1)) {
+        if (vin.witness.length > 1) {
           // script path spend
-          const controlBlock = vin.witness[vin.witness.length - (hasAnnex ? 2 : 1)];
-          // control block is required
-          if (!controlBlock.length) {
-            return false;
-          } else {
-            // Leaf version must be 0xc0 (aka Tapscript, see BIP 342)
-            if ((parseInt(controlBlock.slice(0, 2), 16) & 0xfe) !== 0xc0) {
-              return false;
-            }
+          const controlBlock = vin.witness[vin.witness.length - 1];
+          // control block is required, and qbit's standard script flags reject every leaf version
+          // but 0xc0 (aka Tapscript, see BIP 342), as reserved for upgrades
+          if (!controlBlock.length || Common.leafVersion(controlBlock) !== TAPROOT_LEAF_TAPSCRIPT) {
+            return true;
           }
           // remaining witness items (except for the script) must be within MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE limit
-          if (vin.witness.slice(0, vin.witness.length - (hasAnnex ? 3 : 2)).some(v => v.length > 160)) {
-            return false;
+          if (vin.witness.slice(0, -2).some(item => item.length / 2 > MAX_STANDARD_TAPSCRIPT_STACK_ITEM_SIZE)) {
+            return true;
+          }
+        }
+      }
+      if (['v2_p2mr', 'witness_v2_p2mr'].includes(vin.prevout?.scriptpubkey_type || '') && vin.witness?.length) {
+        // P2MR has no key path, so it needs a leaf script and a control block; annex is non-standard
+        if (vin.witness.length < 2 || Common.hasAnnex(vin.witness)) {
+          return true;
+        }
+        const controlBlock = vin.witness[vin.witness.length - 1];
+        // control block is required, and qbit's standard script flags reject every P2MR leaf version
+        // but 0xc0, as reserved for upgrades
+        if (!controlBlock.length || Common.leafVersion(controlBlock) !== P2MR_LEAF_VERSION) {
+          return true;
+        }
+        // remaining witness items (except for the script) must be within the MAX_STANDARD_P2MR_STACK_ITEM_SIZE
+        // limit, and together within MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES
+        let stackBytes = 0;
+        for (const item of vin.witness.slice(0, -2)) {
+          stackBytes += item.length / 2;
+          if (item.length / 2 > MAX_STANDARD_P2MR_STACK_ITEM_SIZE || stackBytes > MAX_STANDARD_P2MR_TOTAL_INITIAL_STACK_BYTES) {
+            return true;
           }
         }
       }
@@ -289,13 +331,18 @@ export class Common {
     let dustCount = 0;
     for (const vout of tx.vout) {
       // scriptpubkey
+      const witnessProgram = this.isWitnessProgram(vout.scriptpubkey);
+      if (witnessProgram && witnessProgram.version >= 3) {
+        // qbit keeps witness versions 3 to 16 dormant, so outputs to them are non-standard
+        return true;
+      }
       if (['nonstandard', 'provably_unspendable', 'empty'].includes(vout.scriptpubkey_type)) {
         // (non-standard output type)
         return true;
       } else if (vout.scriptpubkey_type === 'unknown') {
-        // undefined segwit version/length combinations are actually standard in outputs
+        // undefined witness v1 and v2 program lengths are actually standard in outputs
         // https://github.com/bitcoin/bitcoin/blob/2c79abc7ad4850e9e3ba32a04c530155cda7f980/src/script/interpreter.cpp#L1950-L1951
-        if (vout.scriptpubkey.startsWith('00') || !this.isWitnessProgram(vout.scriptpubkey)) {
+        if (vout.scriptpubkey.startsWith('00') || !witnessProgram) {
           return true;
         }
       } else if (vout.scriptpubkey_type === 'multisig') {
@@ -339,19 +386,22 @@ export class Common {
     return false;
   }
 
+  // qbit prices an output's serialized size plus the size of the input that would spend it at the dust
+  // relay fee, rounding the fee up, and unspendable outputs have no dust threshold
   static getDustThreshold(scriptpubkey: string): number {
-    let dustSize = (scriptpubkey.length / 2);
-    // add varint length overhead
-    dustSize += getVarIntLength(dustSize);
-    // add value size
-    dustSize += 8;
-    if (Common.isWitnessProgram(scriptpubkey)) {
-      dustSize += 67;
-    } else {
-      dustSize += 148;
+    const scriptSize = scriptpubkey.length / 2;
+    if (scriptpubkey.startsWith('6a') || scriptSize > MAX_SCRIPT_SIZE) {
+      return 0;
     }
-    const fee = Math.floor(dustSize * DUST_RELAY_TX_FEE_SATS_PER_KVB / 1000);
-    return fee === 0 && DUST_RELAY_TX_FEE_SATS_PER_KVB > 0 ? 1 : fee;
+    // value, script length and script
+    let dustSize = 8 + getVarIntLength(scriptSize) + scriptSize;
+    const witnessProgram = Common.isWitnessProgram(scriptpubkey);
+    if (witnessProgram && witnessProgram.version === 2 && witnessProgram.program.length === 64) {
+      dustSize += P2MR_DUST_SPEND_SIZE;
+    } else {
+      dustSize += DUST_SPEND_SIZE;
+    }
+    return Math.floor((dustSize * DUST_RELAY_TX_FEE_SATS_PER_KVB + 999) / 1000);
   }
 
   // A witness program is any valid scriptpubkey that consists of a 1-byte push opcode
@@ -373,6 +423,17 @@ export class Common {
       };
     }
     return false;
+  }
+
+  // In a taproot or P2MR witness, a last item that starts with 0x50, after at least one other, is an annex
+  static hasAnnex(witness: string[]): boolean {
+    return witness.length > 1 && witness[witness.length - 1].startsWith('50');
+  }
+
+  // The leaf version of a taproot or P2MR script path spend: the first byte of its control block,
+  // without bit 0, which taproot uses for parity and P2MR always sets
+  static leafVersion(controlBlock: string): number {
+    return parseInt(controlBlock.slice(0, 2), 16) & 0xfe;
   }
 
   // Individual versioned standardness rules
@@ -487,7 +548,7 @@ export class Common {
     'regtest': 0,
     'mainnet': 0,
   };
-  static isNonStandardLegacySigops(tx: TransactionExtended, height?: number): boolean {
+  static isNonStandardLegacySigops(tx: TransactionExtended, height?: number, inputScripts?: DecodedInputScripts[]): boolean {
     const activationHeight = this.getActivationHeight(this.LEGACY_SIGOPS_STANDARDNESS_ACTIVATION_HEIGHT);
     if (
       height == null || (
@@ -495,7 +556,7 @@ export class Common {
         && height >= activationHeight
       )
     ) {
-      if (!transactionUtils.checkSigopsBIP54(tx, MAX_TX_LEGACY_SIGOPS)) {
+      if (!transactionUtils.checkSigopsBIP54(tx, MAX_TX_LEGACY_SIGOPS, inputScripts)) {
         return true;
       }
     }
@@ -697,6 +758,10 @@ export class Common {
             // P2MR shares taproot's script-path witness layout, so its leaf script can carry an inscription envelope too
             if (vin.witness?.length) {
               flags = Common.isInscription(vin, flags);
+              // and P2MR spends can carry an annex, as taproot spends can
+              if (Common.hasAnnex(vin.witness)) {
+                flags |= TransactionFlags.annex;
+              }
             }
           } break;
           case 'anchor': flags |= TransactionFlags.anchor; break;
@@ -704,8 +769,7 @@ export class Common {
             flags |= TransactionFlags.p2tr;
             if (vin.witness?.length) {
               flags = Common.isInscription(vin, flags);
-              const hasAnnex = vin.witness.length > 1 && vin.witness[vin.witness.length - 1].startsWith('50');
-              if (hasAnnex) {
+              if (Common.hasAnnex(vin.witness)) {
                 flags |= TransactionFlags.annex;
               }
             }
@@ -946,139 +1010,16 @@ export class Common {
     );
   }
 
-  static setDateMidnight(date: Date): void {
-    date.setUTCHours(0);
-    date.setUTCMinutes(0);
-    date.setUTCSeconds(0);
-    date.setUTCMilliseconds(0);
-  }
-
-  static channelShortIdToIntegerId(channelId: string): string {
-    if (channelId.indexOf('x') === -1) { // Already an integer id
-      return channelId;
-    }
-    if (channelId.indexOf('/') !== -1) { // Topology import
-      channelId = channelId.slice(0, -2);
-    }
-    const s = channelId.split('x').map(part => BigInt(part));
-    return ((s[0] << 40n) | (s[1] << 16n) | s[2]).toString();
-  }
-
-  /** Decodes a channel id returned by lnd as uint64 to a short channel id */
-  static channelIntegerIdToShortId(id: string): string {
-    if (id.indexOf('/') !== -1) {
-      id = id.slice(0, -2);
-    }
-
-    if (id.indexOf('x') !== -1) { // Already a short id
-      return id;
-    }
-
-    const n = BigInt(id);
-    return [
-      n >> 40n, // nth block
-      (n >> 16n) & 0xffffffn, // nth tx of the block
-      n & 0xffffn // nth output of the tx
-    ].join('x');
-  }
-
-  static utcDateToMysql(date?: number | null): string | null {
-    if (date === null) {
-      return null;
-    }
-    const d = new Date((date || 0) * 1000);
-    return d.toISOString().split('T')[0] + ' ' + d.toTimeString().split(' ')[0];
-  }
-
-  static findSocketNetwork(addr: string): {network: string | null, url: string} {
-    if (!addr?.length) {
-      return {
-        network: null,
-        url: ''
-      };
-    }
-
-    let network: string | null = null;
-    let url: string = addr;
-
-    if (config.LIGHTNING.BACKEND === 'cln') {
-      url = addr.split('://')[1];
-    }
-
-    if (!url?.length) {
-      return {
-        network: null,
-        url: addr,
-      };
-    }
-
-    if (addr.indexOf('onion') !== -1) {
-      if (url.split('.')[0].length >= 56) {
-        network = 'torv3';
-      } else {
-        network = 'torv2';
-      }
-    } else if (addr.indexOf('i2p') !== -1) {
-      network = 'i2p';
-    } else if (addr.indexOf('ipv4') !== -1 || (config.LIGHTNING.BACKEND === 'lnd' && isIP(url.split(':')[0]) === 4)) {
-      const ipv = isIP(url.split(':')[0]);
-      if (ipv === 4) {
-        network = 'ipv4';
-      } else {
-        return {
-          network: null,
-          url: addr,
-        };
-      }
-    } else if (addr.indexOf('ipv6') !== -1 || (config.LIGHTNING.BACKEND === 'lnd' && url.indexOf(']:'))) {
-      const parts = url.split('[');
-      if (parts.length < 2) {
-        return {
-          network: null,
-          url: addr,
-        };
-      } else {
-        url = parts[1].split(']')[0];
-      }
-      const ipv = isIP(url);
-      if (ipv === 6) {
-        const parts = addr.split(':');
-        network = 'ipv6';
-        url = `[${url}]:${parts[parts.length - 1]}`;
-      } else {
-        return {
-          network: null,
-          url: addr,
-        };
-      }
-    } else {
-      return {
-        network: null,
-        url: addr,
-      };
-    }
-
-    return {
-      network: network,
-      url: url,
-    };
-  }
-
-  static formatSocket(publicKey: string, socket: {network: string, addr: string}): NodeSocket {
-    if (config.LIGHTNING.BACKEND === 'cln') {
-      return {
-        publicKey: publicKey,
-        network: socket.network,
-        addr: socket.addr,
-      };
-    } else /* if (config.LIGHTNING.BACKEND === 'lnd') */ {
-      const formatted = this.findSocketNetwork(socket.addr);
-      return {
-        publicKey: publicKey,
-        network: formatted.network,
-        addr: formatted.url,
-      };
-    }
+  // must match the conditions under which the indexer runs the 'blocksPrices' task,
+  // otherwise queries will join against a blocks_prices table that is never populated
+  // qbit: there is no QBT price feed yet, so the price updater never stores a
+  // price and blocks_prices stays empty on every network
+  static blockPricesIndexingEnabled(): boolean {
+    return (
+      QBIT_PRICE_FEEDS_AVAILABLE &&
+      !['testnet', 'signet', 'testnet4', 'regtest'].includes(config.MEMPOOL.NETWORK) &&
+      config.FIAT_PRICE.ENABLED === true
+    );
   }
 
   static calcEffectiveFeeStatistics(transactions: { weight: number, fee?: number, effectiveFeePerVsize?: number, txid: string, acceleration?: boolean }[]): EffectiveFeeStats {
@@ -1213,8 +1154,8 @@ export class Common {
       throw Object.assign(new Error('Invalid transaction (could not parse)'), { code: -4 });
     }
 
-    // Check 2: Simple size check
-    if (tx.weight() > config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT) {
+    // Check 2: Simple size check, of qbit's weight: bitcoinjs-lib's tx.weight() is Bitcoin's
+    if (getTransactionWeight(tx.byteLength(false), tx.byteLength()) > config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT) {
       throw Object.assign(new Error(`Transaction too large (max ${config.MEMPOOL.MAX_PUSH_TX_SIZE_WEIGHT} weight units)`), { code: -3 });
     }
 
@@ -1230,7 +1171,9 @@ export class Common {
 
         if (maybeScriptSpend) {
           const controlBlock = witness[witness.length - scriptSpendMinLength + 1];
-          if (controlBlock.length === 0 || !this.isValidLeafVersion(controlBlock[0])) {
+          // the leaf version is the control byte without bit 0, which taproot uses for parity and P2MR
+          // always sets (qbit v1.0.0 src/script/interpreter.cpp:2378-2381)
+          if (controlBlock.length === 0 || !this.isValidLeafVersion(controlBlock[0] & 0xfe)) {
             // Skip this input, it's not taproot
             return;
           }
