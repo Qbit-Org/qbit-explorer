@@ -3,11 +3,16 @@ const mockGetBlockHashTip = jest.fn();
 const mockGetBlockHash = jest.fn();
 const mockGetBlock = jest.fn();
 const mockDeleteHashrates = jest.fn();
+const mockRetryMissingHashrates = jest.fn();
+const mockDeleteHashratesBetween = jest.fn();
+const mockIndexBlock = jest.fn();
+const mockIndexCpfp = jest.fn();
 const mockDeleteClusters = jest.fn();
 const mockDeleteClustersAt = jest.fn();
 const mockEsploraTip = jest.fn();
 const mockLoggerWarn = jest.fn();
 let mockCpfpIndexing = true;
+let mockIndexingBlocksAmount = 11000;
 
 jest.mock('../../database', () => ({
   __esModule: true,
@@ -24,7 +29,9 @@ jest.mock('../../config', () => ({
     },
     MEMPOOL: {
       NETWORK: 'testnet4',
-      INDEXING_BLOCKS_AMOUNT: 11000,
+      get INDEXING_BLOCKS_AMOUNT(): number {
+        return mockIndexingBlocksAmount;
+      },
     },
   },
 }));
@@ -61,6 +68,8 @@ jest.mock('../../repositories/HashratesRepository', () => ({
   __esModule: true,
   default: {
     $deleteHashratesFromTimestamp: mockDeleteHashrates,
+    retryMissingHashrates: mockRetryMissingHashrates,
+    $deleteHashratesBetween: mockDeleteHashratesBetween,
   },
 }));
 
@@ -89,7 +98,10 @@ jest.mock('../../api/chain-tips', () => ({
 
 jest.mock('../../api/blocks', () => ({
   __esModule: true,
-  default: {},
+  default: {
+    $indexBlock: mockIndexBlock,
+    $indexCPFP: mockIndexCpfp,
+  },
 }));
 
 jest.mock('../../api/disk-cache', () => ({
@@ -173,7 +185,7 @@ const mockChain = (rows: Row[], tip = hash(best[102])): void => {
   const sorted = [...rows].sort((a, b) => b.height - a.height);
   mockDbQuery.mockImplementation(async (sql: string) => {
     if (sql.includes('SELECT')) {
-      return [sorted];
+      return [sql.includes('WHERE stale = 0') ? sorted.filter(stored => !stored.stale) : sorted];
     }
     return [{ affectedRows: 1 }];
   });
@@ -186,6 +198,33 @@ const updates = (): unknown[][] => mockDbQuery.mock.calls
 const markedStaleAt = (height: number, except = ''): unknown[] => ['UPDATE blocks SET stale = 1 WHERE height = ? AND hash != ?', [height, except]];
 const madeCanonical = (fill: string): unknown[] => ['UPDATE blocks SET stale = 0 WHERE hash = ?', [hash(fill)]];
 
+// mocks the node's best chain and a blocks table that the flags written
+// change, failing once on the first write failsOnce picks
+const mockWritableChain = (rows: Row[], failsOnce: (sql: string, params: unknown[]) => boolean): Row[] => {
+  const table = rows.map(stored => ({ ...stored }));
+  mockChain(table);
+  let failed = false;
+  mockDbQuery.mockImplementation(async (sql: string, params: unknown[] = []) => {
+    if (sql.includes('SELECT')) {
+      return [[...table].sort((a, b) => b.height - a.height).map(stored => ({ ...stored }))];
+    }
+    if (!failed && failsOnce(sql, params)) {
+      failed = true;
+      throw new Error('DB unavailable');
+    }
+    const statement = String(sql).replace(/\s+/g, ' ').trim();
+    if (statement === 'UPDATE blocks SET stale = 0 WHERE hash = ?') {
+      table.filter(stored => stored.hash === params[0]).forEach(stored => { stored.stale = 0; });
+    } else if (statement === 'UPDATE blocks SET stale = 1 WHERE height = ? AND hash != ?') {
+      table.filter(stored => stored.height === params[0] && stored.hash !== params[1]).forEach(stored => { stored.stale = 1; });
+    }
+    return [{ affectedRows: 1 }];
+  });
+  return table;
+};
+
+const canonicalAt = (table: Row[], height: number): string[] => table.filter(stored => stored.height === height && !stored.stale).map(stored => stored.hash);
+
 // when the first canonical flag was written, in jest's call order
 const firstUpdateOrder = (): number => mockDbQuery.mock.invocationCallOrder[
   mockDbQuery.mock.calls.findIndex(([sql]) => String(sql).includes('UPDATE blocks'))
@@ -195,6 +234,7 @@ describe('BlocksRepository $validateChain', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCpfpIndexing = true;
+    mockIndexingBlocksAmount = 11000;
   });
 
   test('accepts a chain whose best blocks are its only canonical rows', async () => {
@@ -427,5 +467,355 @@ describe('BlocksRepository $validateChain', () => {
 
     expect(mockGetBlock).toHaveBeenCalledWith(hash(best[103]));
     expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+  });
+
+  describe('below the walk', () => {
+    // the indexing window is 100 to 102, and the walk checks 101 and 102
+    beforeEach(() => {
+      mockIndexingBlocksAmount = 3;
+      (BlocksRepository as unknown as { heightsLeftBelowWalk: Map<number, string> }).heightsLeftBelowWalk.clear();
+    });
+
+    test('repairs a height below the indexing window with two canonical rows, asking qbitd which is its block', async () => {
+      // 99 holds the best block and another chain's, both canonical, as an
+      // older version left them
+      mockChain([bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+      expect(mockGetBlockHash.mock.calls).toEqual([[99]]);
+      expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+      expect(mockLoggerWarn).toHaveBeenCalledWith('Chain divergence detected below block #101: repairing 1 height, #99');
+    });
+
+    test('has the hashrate indexers retry the periods they skipped, and deletes no hashrates or CPFP clusters', async () => {
+      // the hashrate indexers skipped every period whose block window held
+      // both rows at 99. Deleting the hashrates from a week before 99 would
+      // re-index every one since, and the CPFP indexer never indexes 99 again.
+      mockChain([bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockRetryMissingHashrates).toHaveBeenCalledTimes(1);
+      expect(mockRetryMissingHashrates.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
+      expect(mockDeleteHashrates).not.toHaveBeenCalled();
+      expect(mockDeleteClusters).not.toHaveBeenCalled();
+      expect(mockDeleteClustersAt).not.toHaveBeenCalled();
+    });
+
+    test('repairs the window\'s lowest height, which the walk stops above, and the heights below it', async () => {
+      // another chain's o at 99 and p at 100 were left canonical
+      mockChain([
+        bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), row(100, 'p', 'o'), bestRow(101), bestRow(102),
+      ]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(updates()).toEqual([
+        madeCanonical(best[100]), markedStaleAt(100, hash(best[100])),
+        madeCanonical(best[99]), markedStaleAt(99, hash(best[99])),
+      ]);
+      // the walk knows qbitd's block at 100, the one 101's row names
+      expect(mockGetBlockHash.mock.calls).toEqual([[99]]);
+      expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+      expect(mockLoggerWarn).toHaveBeenCalledWith('Chain divergence detected below block #101: repairing 2 heights, #99, #100');
+    });
+
+    test('asks qbitd at a height with two canonical rows even when the canonical row above names one of them', async () => {
+      // 98 holds the best block h and an orphan p, both canonical. 99 holds
+      // only q, p's child, also canonical: the best block i at 99 was never
+      // indexed. q names p, but h is qbitd's block, and must stay canonical.
+      // Then q is canonical on a stale parent, so qbitd is asked about 99
+      // too. i isn't indexed there, so q is left, and that is said.
+      mockChain([bestRow(98), row(98, 'p', 'g'), row(99, 'q', 'p'), bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockGetBlockHash.mock.calls).toEqual([[98], [99]]);
+      expect(updates()).toEqual([madeCanonical(best[98]), markedStaleAt(98, hash(best[98]))]);
+      expect(mockLoggerWarn.mock.calls).toEqual([
+        ['Chain divergence detected below block #101: repairing 1 height, #98'],
+        ['Chain divergence detected below block #101: none of the canonical blocks at #99 is qbitd\'s, so they are left as they are'],
+      ]);
+    });
+
+    test('asks qbitd about the lone canonical rows above a height it asked about, while they name another block below', async () => {
+      // as above, but qbitd's i is indexed at 99, marked stale. Once h is the
+      // only canonical row at 98, q, p's child, can't be qbitd's block: i
+      // becomes canonical at 99. 100's row names i, so the check stops there.
+      mockChain([
+        bestRow(98), row(98, 'p', 'g'), row(99, 'q', 'p'), { ...bestRow(99), stale: 1 }, bestRow(100), bestRow(101), bestRow(102),
+      ]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockGetBlockHash.mock.calls).toEqual([[98], [99]]);
+      // written from the highest height down
+      expect(updates()).toEqual([
+        madeCanonical(best[99]), markedStaleAt(99, hash(best[99])),
+        madeCanonical(best[98]), markedStaleAt(98, hash(best[98])),
+      ]);
+      expect(mockLoggerWarn).toHaveBeenCalledWith('Chain divergence detected below block #101: repairing 2 heights, #98, #99');
+    });
+
+    test('leaves a height where no canonical row is qbitd\'s block as it is, and says so once', async () => {
+      // two other chains' blocks at 99, and qbitd's i isn't indexed. Marking
+      // both stale would leave a gap that nothing below the window indexes,
+      // where the hashrate indexers would stop.
+      mockChain([bestRow(98), row(99, 'o', 'h'), row(99, 'p', 'h'), bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+      expect(mockGetBlockHash.mock.calls).toEqual([[99]]);
+      expect(updates()).toEqual([]);
+      expect(mockRetryMissingHashrates).not.toHaveBeenCalled();
+      expect(mockLoggerWarn.mock.calls).toEqual([
+        ['Chain divergence detected below block #101: none of the canonical blocks at #99 is qbitd\'s, so they are left as they are'],
+      ]);
+
+      // the next run doesn't ask or say it again
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+      expect(mockGetBlockHash).toHaveBeenCalledTimes(1);
+      expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+
+      // until its rows change: here, qbitd's block was indexed there since
+      mockChain([bestRow(98), row(99, 'o', 'h'), row(99, 'p', 'h'), bestRow(99), bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockGetBlockHash).toHaveBeenCalledTimes(2);
+      expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+    });
+
+    test('makes a stale best block canonical once qbitd confirms it, and leaves a height that only holds an orphan without asking', async () => {
+      // the best block at 99 is marked stale, and 100's row names it. 98
+      // holds only an orphan, whose sibling h isn't indexed: asking qbitd
+      // about every such height would repeat on every run.
+      mockChain([{ ...row(98, 'o', 'g'), stale: 1 }, { ...bestRow(99), stale: 1 }, bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+      expect(mockGetBlockHash.mock.calls).toEqual([[99]]);
+      expect(mockLoggerWarn).toHaveBeenCalledWith('Chain divergence detected below block #101: repairing 1 height, #99');
+    });
+
+    test('leaves a stale row stale when the canonical row above names it but qbitd\'s block is another', async () => {
+      // 99's only row is r, another chain's block left canonical, and it
+      // names q, stale at 98. qbitd's block at 98 is h, which isn't indexed.
+      // So r isn't qbitd's block at 99 either: qbitd's i isn't indexed there,
+      // so r is left, and that is said. 100's row names i.
+      mockChain([{ ...row(98, 'q', 'g'), stale: 1 }, row(99, 'r', 'q'), bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+      expect(mockGetBlockHash.mock.calls).toEqual([[98], [99]]);
+      expect(updates()).toEqual([]);
+      expect(mockLoggerWarn.mock.calls).toEqual([
+        ['Chain divergence detected below block #101: none of the canonical blocks at #99 is qbitd\'s, so they are left as they are'],
+      ]);
+
+      // nor asks about them again
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+      expect(mockGetBlockHash).toHaveBeenCalledTimes(2);
+      expect(mockLoggerWarn).toHaveBeenCalledTimes(1);
+    });
+
+    test('repairs below the walk once the walked heights need no repair', async () => {
+      // 101 and 99 each hold another canonical row. The first run repairs
+      // 101 and deletes the derived data from there up, as before; the next
+      // one repairs 99.
+      const other101 = row(101, 'p', 'j');
+      mockChain([bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), bestRow(101), other101, bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(updates()).toEqual([madeCanonical(best[101]), markedStaleAt(101, hash(best[101]))]);
+      expect(mockDeleteHashrates).toHaveBeenCalledWith(other101.timestamp - WEEK);
+      expect(mockDeleteClusters.mock.calls).toEqual([[101]]);
+      expect(mockRetryMissingHashrates).not.toHaveBeenCalled();
+
+      jest.clearAllMocks();
+      mockChain([bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), bestRow(101), { ...other101, stale: 1 }, bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+      expect(mockDeleteHashrates).not.toHaveBeenCalled();
+      expect(mockDeleteClusters).not.toHaveBeenCalled();
+      expect(mockRetryMissingHashrates).toHaveBeenCalledTimes(1);
+    });
+
+    test('writes nothing, and lets the indexer go on, when qbitd fails before a write below the walk', async () => {
+      // 100 is repaired with the block the walk knows, then qbitd doesn't
+      // answer about 98. Nothing has changed, so the indexer goes on to the
+      // hashrates and the rest, as after any failed check, instead of running
+      // again every 10 seconds.
+      mockChain([bestRow(98), row(98, 'o', 'g'), bestRow(100), row(100, 'p', 'i'), bestRow(101), bestRow(102)]);
+      mockGetBlockHash.mockRejectedValueOnce(new Error('RPC unavailable'));
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+      expect(mockGetBlockHash.mock.calls).toEqual([[98]]);
+      expect(updates()).toEqual([]);
+      expect(mockDeleteClustersAt).not.toHaveBeenCalled();
+      expect(mockRetryMissingHashrates).not.toHaveBeenCalled();
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(updates()).toEqual([
+        madeCanonical(best[100]), markedStaleAt(100, hash(best[100])),
+        madeCanonical(best[98]), markedStaleAt(98, hash(best[98])),
+      ]);
+    });
+
+    test('has the indexer run again when a write below the walk fails', async () => {
+      // the database fails on the second flag at 99
+      mockChain([bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), bestRow(101), bestRow(102)]);
+      const snapshot = mockDbQuery.getMockImplementation();
+      let written = 0;
+      mockDbQuery.mockImplementation(async (sql: string) => {
+        if (sql.includes('UPDATE') && ++written === 2) {
+          throw new Error('DB unavailable');
+        }
+        return snapshot?.(sql);
+      });
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+      expect(mockRetryMissingHashrates).toHaveBeenCalledTimes(1);
+    });
+
+    test('writes its repairs from the highest height down, so a failed write leaves the rest for the next run to find', async () => {
+      // 98 holds qbitd's h and an orphan p, both canonical. 99 holds q, p's
+      // child, canonical, and qbitd's i, stale. The check repairs 98, and from
+      // there 99. Had it written 98 first, and then failed at 99, the next run
+      // would find one canonical row at each, and q would stay canonical.
+      const table = mockWritableChain([
+        bestRow(98), row(98, 'p', 'g'), row(99, 'q', 'p'), { ...bestRow(99), stale: 1 }, bestRow(100), bestRow(101), bestRow(102),
+      ], (sql, params) => sql.includes('stale = 0') && params[0] === hash(best[99]));
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+
+      expect(canonicalAt(table, 98)).toEqual([hash(best[98])]);
+      expect(canonicalAt(table, 99)).toEqual([hash(best[99])]);
+    });
+
+    test('remembers a height it leaves alone only once the repairs above it are written', async () => {
+      // 98 holds two other chains' blocks, o and p, both canonical: qbitd's h
+      // isn't indexed, so 98 is left alone. 99 holds q, p's child, canonical,
+      // and qbitd's i, stale: from 98, the check repairs 99. Had it
+      // remembered 98 before the write at 99 failed, the next run would skip
+      // 98, and never get to 99.
+      const table = mockWritableChain([
+        row(98, 'o', 'g'), row(98, 'p', 'g'), row(99, 'q', 'p'), { ...bestRow(99), stale: 1 }, bestRow(100), bestRow(101), bestRow(102),
+      ], (sql, params) => sql.includes('stale = 0') && params[0] === hash(best[99]));
+      const leftAlone = 'Chain divergence detected below block #101: none of the canonical blocks at #98 is qbitd\'s, so they are left as they are';
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockLoggerWarn).not.toHaveBeenCalledWith(leftAlone);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
+
+      expect(canonicalAt(table, 99)).toEqual([hash(best[99])]);
+      expect(canonicalAt(table, 98)).toEqual([hash('o'), hash('p')]);
+      expect(mockLoggerWarn.mock.calls.filter(([line]) => line === leftAlone)).toHaveLength(1);
+    });
+
+    test('indexes the CPFP clusters of qbitd\'s block at the window\'s lowest height as it repairs it', async () => {
+      // the CPFP indexer only indexes heights in its range when it runs, and
+      // 100 leaves its range with the next block: cleared and left to it, 100
+      // could keep no clusters at all
+      mockChain([
+        bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), row(100, 'p', 'o'), bestRow(101), bestRow(102),
+      ]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockDeleteClustersAt.mock.calls).toEqual([[100]]);
+      expect(mockIndexCpfp.mock.calls).toEqual([[hash(best[100]), 100]]);
+      expect(mockDeleteClustersAt.mock.invocationCallOrder[0]).toBeLessThan(mockIndexCpfp.mock.invocationCallOrder[0]);
+      expect(mockIndexCpfp.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
+    });
+
+    test('indexes qbitd\'s block at the window\'s lowest height when none of its rows is it, and doesn\'t leave it', async () => {
+      // 100 holds two other chains' blocks, both canonical, and qbitd's j
+      // isn't indexed. The block indexer covers 100, but by its next run the
+      // window may have moved past it; left as it is, 100 would keep the
+      // wrong block
+      mockChain([bestRow(98), bestRow(99), row(100, 'o', 'i'), row(100, 'p', 'i'), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockGetBlockHash).not.toHaveBeenCalled();
+      expect(mockIndexBlock.mock.calls).toEqual([[hash(best[100])]]);
+      expect(mockIndexBlock.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
+      expect(updates()).toEqual([madeCanonical(best[100]), markedStaleAt(100, hash(best[100]))]);
+      expect(mockLoggerWarn.mock.calls).toEqual([['Chain divergence detected below block #101: repairing 1 height, #100']]);
+    });
+
+    test('deletes the hashrates computed with a lone canonical row it replaces', async () => {
+      // 99's only canonical row was q, so the periods around it were indexed
+      // with q, and the indexers keep periods that have hashrates. 98's two
+      // canonical rows made its periods' windows fail, so they have none.
+      // From a week before q to two weeks after, but only after 98: the
+      // hashrate indexers start after the oldest block of the consecutive
+      // chain, here the lowest row.
+      const q = row(99, 'q', 'p');
+      mockChain([bestRow(98), row(98, 'p', 'g'), q, { ...bestRow(99), stale: 1 }, bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockDeleteHashratesBetween.mock.calls).toEqual([[bestRow(98).timestamp + 1, q.timestamp + 2 * WEEK]]);
+      expect(mockDeleteHashratesBetween.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
+      expect(mockDeleteHashrates).not.toHaveBeenCalled();
+    });
+
+    test('repairs a lone canonical row at the window\'s lowest height that isn\'t qbitd\'s block, with the block the walk knows', async () => {
+      // 100's only canonical row is r, from another chain; qbitd's j is
+      // there, stale. 101's row names j, so no qbitd call is needed.
+      const r = row(100, 'r', 'i');
+      mockChain([bestRow(98), bestRow(99), r, { ...bestRow(100), stale: 1 }, bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(mockGetBlockHash).not.toHaveBeenCalled();
+      expect(mockIndexBlock).not.toHaveBeenCalled();
+      expect(updates()).toEqual([madeCanonical(best[100]), markedStaleAt(100, hash(best[100]))]);
+      expect(mockDeleteHashratesBetween.mock.calls).toEqual([[bestRow(98).timestamp + 1, r.timestamp + 2 * WEEK]]);
+      expect(mockLoggerWarn.mock.calls).toEqual([['Chain divergence detected below block #101: repairing 1 height, #100']]);
+    });
+
+    test('clears the CPFP clusters at the window\'s lowest height before it repairs it, as the CPFP indexer covers that height', async () => {
+      // the CPFP indexer counts a height with clusters as indexed, so the
+      // other block's would stay at 100. It never indexes 99, which keeps its
+      // clusters.
+      const rows = [
+        bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), row(100, 'p', 'o'), bestRow(101), bestRow(102),
+      ];
+      mockChain(rows);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockDeleteClustersAt.mock.calls).toEqual([[100]]);
+      expect(mockDeleteClustersAt.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
+      expect(mockDeleteClusters).not.toHaveBeenCalled();
+
+      // nor when the CPFP indexer is off: nothing would index them again
+      jest.clearAllMocks();
+      mockCpfpIndexing = false;
+      mockChain(rows);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockDeleteClustersAt).not.toHaveBeenCalled();
+      expect(updates()).toHaveLength(4);
+
+      // with INDEXING_BLOCKS_AMOUNT at -1, the CPFP indexer covers every
+      // height, and the walk stops above the lowest indexed one, 98 here
+      jest.clearAllMocks();
+      mockCpfpIndexing = true;
+      mockIndexingBlocksAmount = -1;
+      mockChain([bestRow(98), row(98, 'p', 'g'), bestRow(99), bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockDeleteClustersAt.mock.calls).toEqual([[98]]);
+      expect(updates()).toEqual([madeCanonical(best[98]), markedStaleAt(98, hash(best[98]))]);
+    });
   });
 });
