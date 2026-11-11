@@ -19,7 +19,7 @@ import difficultyAdjustment from '../difficulty-adjustment';
 import transactionRepository from '../../repositories/TransactionRepository';
 import rbfCache from '../rbf-cache';
 import { calculateMempoolTxCpfp } from '../cpfp';
-import { getAddressLookupError, handleError, handleLookupError, isBlockHeightNotFoundError, isBlockNotFoundError, isTxNotFoundError } from '../../utils/api';
+import { getAddressLookupError, handleError, handleLookupError, isBlockHeightNotFoundError, isBlockNotFoundError, isTxIndexUnavailableError, isTxNotFoundError, TXINDEX_UNAVAILABLE } from '../../utils/api';
 import poolsUpdater from '../../tasks/pools-updater';
 import chainTips from '../chain-tips';
 
@@ -699,6 +699,11 @@ class BitcoinRoutes {
         handleError(req, res, lookupError.status, lookupError.reason);
         return;
       }
+      // the electrum backend looks after_txid and the page's transactions up in qbitd
+      if (isTxIndexUnavailableError(e)) {
+        handleError(req, res, 503, TXINDEX_UNAVAILABLE);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;
@@ -876,6 +881,11 @@ class BitcoinRoutes {
       const lookupError = getAddressLookupError(e);
       if (lookupError) {
         handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
+      // the electrum backend looks after_txid and the page's transactions up in qbitd
+      if (isTxIndexUnavailableError(e)) {
+        handleError(req, res, 503, TXINDEX_UNAVAILABLE);
         return;
       }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
