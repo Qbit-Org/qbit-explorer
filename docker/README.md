@@ -74,21 +74,31 @@ script, then put its checksum in both stages of `docker/backend/Dockerfile`.
 ## Run with Docker Compose
 
 `docker-compose.yml` runs the frontend (`web`), the backend (`api`) and MariaDB
-(`db`). It has no default images, so choose them in `docker/.env` first:
+(`db`). It has no default images and no default qbitd login, so set them in
+`docker/.env` first:
 
 ```bash
 cd docker
 cp .env.example .env
 ```
 
-Then set `QBIT_EXPLORER_FRONTEND_IMAGE` and `QBIT_EXPLORER_BACKEND_IMAGE` in
-`.env`: `qbit-explorer-frontend:local` and `qbit-explorer-backend:local` for
-the images built above, or the names you gave them if you pushed them to your
-own registry. Until both are set,
-Compose stops with `required variable ... is missing a value`. Compose reads
-`.env` from `docker/` on every command, so `docker compose ps`, `logs` and
-`down` work in any shell without exporting anything. Variables exported in your shell take
-precedence over `.env`, and `.env` is git-ignored.
+Then set these in `.env`:
+
+- `QBIT_EXPLORER_FRONTEND_IMAGE` and `QBIT_EXPLORER_BACKEND_IMAGE`:
+  `qbit-explorer-frontend:local` and `qbit-explorer-backend:local` for the
+  images built above, or the names you gave them if you pushed them to your
+  own registry.
+- `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD`: the login of an `rpcauth` line
+  in `qbit.conf`, which the backend uses for qbitd's RPC. Use a password of
+  letters, digits, `-` and `_`, as `rpcauth.py` generates. To use qbitd's RPC
+  cookie instead, replace those two lines in `docker-compose.yml`. See
+  [qbitd only](#qbitd-only) for both.
+
+Until each is set, Compose stops with `required variable ... is missing a
+value`. Compose reads `.env` from `docker/` on every command, so
+`docker compose ps`, `logs` and `down` work in any shell without exporting
+anything. Variables exported in your shell take precedence over `.env`, and
+`.env` is git-ignored.
 
 Every container runs as UID/GID 1000. The backend cache lives in `docker/data` and the database in
 `docker/mysql/data`, so UID 1000 must be able to write to both.
@@ -130,13 +140,14 @@ sudo install -d -o qbit -g qbit -m 0750 /var/lib/qbit/rpc
 ```
 
 Set the RPC address and the cookie for the `api` service in
-`docker-compose.yml`. `CORE_RPC_HOST` must be an address of the Docker host that
-the containers can reach. The `172.27.0.1` in the file is a placeholder; the
-host's `docker0` address, usually `172.17.0.1`, is a common choice. Mount the
-cookie's directory read-only, not the cookie itself: qbitd replaces the file at
-every start, and a file mount would keep showing the old one. The container
-runs as UID 1000, so unless qbitd does too, add the GID of the group that owns
-the cookie (`getent group qbit`) with `group_add`:
+`docker-compose.yml`, in place of its `CORE_RPC_USERNAME` and
+`CORE_RPC_PASSWORD` lines. `CORE_RPC_HOST` must be an address of the Docker
+host that the containers can reach. The `172.27.0.1` in the file is a
+placeholder; the host's `docker0` address, usually `172.17.0.1`, is a common
+choice. Mount the cookie's directory read-only, not the cookie itself: qbitd
+replaces the file at every start, and a file mount would keep showing the old
+one. The container runs as UID 1000, so unless qbitd does too, add the GID of
+the group that owns the cookie (`getent group qbit`) with `group_add`:
 
 ```yaml
   api:
@@ -156,11 +167,27 @@ the cookie (`getent group qbit`) with `group_add`:
 Set both cookie variables. The image leaves `CORE_RPC_COOKIE_PATH` empty, so
 with `CORE_RPC_COOKIE` alone the backend has no cookie to read: it logs an error
 at startup, and RPC calls fail. It doesn't fall back to `CORE_RPC_USERNAME` and
-`CORE_RPC_PASSWORD`. To use a password, as the sample `docker-compose.yml`
-does, add an `rpcauth` line to `qbit.conf` (qbit's
+`CORE_RPC_PASSWORD`.
+
+To use a password instead, as the sample `docker-compose.yml` does, add an
+`rpcauth` line to `qbit.conf` and restart qbitd. qbit's
 [`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
-prints one) and set `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD` instead of the
-cookie variables.
+prints one, with a random password:
+
+```bash
+# in a checkout of https://github.com/Qbit-Org/qbit
+python3 share/rpcauth/rpcauth.py mempool
+```
+
+Put the user name and the password it prints in `docker/.env` as
+`CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD`. Keep the compose file's two lines
+that read them, and leave out the cookie variables, the `group_add` and the
+cookie's volume.
+
+Use the password `rpcauth.py` generates, or one of your own with only letters,
+digits, `-` and `_`. The backend image copies it into its config with `sed`,
+which breaks on `!`, `&` and `\`, a `"` breaks the config's JSON, and Compose
+reads a `$` in `.env` as the start of a variable.
 
 Once qbitd is running and synced, start the stack from `docker/`:
 
@@ -244,7 +271,9 @@ defaults to outside the container.
   defaults in `backend/src/config.ts` apply only to keys missing from that file,
   so the image defaults are the ones that take effect. Some differ from the
   built-in defaults, for example `MEMPOOL_BACKEND`, `ESPLORA_REQUEST_TIMEOUT`
-  and `SYSLOG_ENABLED`.
+  and `SYSLOG_ENABLED`. `start.sh` copies each value into the file with `sed`,
+  so a value with `!`, `&` or `\` arrives changed, and one with `"` makes the
+  file invalid JSON. Keep those characters out of passwords.
 - **Frontend:** `docker/frontend/entrypoint.sh` writes `FRONTEND_HTTP_PORT` and
   the backend address into the nginx configuration, then renders the browser
   configuration (`config.js`) from the variables below. `MAINNET_EXPLORER_URL`
@@ -318,6 +347,12 @@ with `127.0.0.1` the backend would only answer from inside its own container.
 | `CORE_RPC_COOKIE` | `CORE_RPC.COOKIE` | `false` |
 | `CORE_RPC_COOKIE_PATH` | `CORE_RPC.COOKIE_PATH` | (empty) |
 | `CORE_RPC_DEBUG_LOG_PATH` | `CORE_RPC.DEBUG_LOG_PATH` | (empty) |
+
+The sample `docker-compose.yml` passes `CORE_RPC_USERNAME` and
+`CORE_RPC_PASSWORD` from `docker/.env`, and every Compose command, `down`
+included, stops until both are set. So the image's `mempool` defaults apply
+only to a container started without those two lines. Don't let qbitd accept
+that login.
 
 **ESPLORA** (qbit-electrs REST API)
 

@@ -187,7 +187,9 @@ The qbit CI/CD workflows are:
   is recreated at another address. It runs the same check on `v*` tags, and
   never pushes images anywhere. The frontend build gets the job's read-only
   `GITHUB_TOKEN` as a BuildKit secret, for the GitHub API calls that list the
-  mining pool logos.
+  mining pool logos. The compose file requires `CORE_RPC_USERNAME` and
+  `CORE_RPC_PASSWORD`; no qbitd runs in this job, so it sets a placeholder
+  login through `GITHUB_ENV`.
 - `.github/workflows/qbit-design-check.yml` — drift gate for the vendored
   qbit.org design contract in `frontend/src/resources/qbit-design/`. Those
   vendored files are machine-managed by `frontend/scripts/sync-qbit-design.mjs`
