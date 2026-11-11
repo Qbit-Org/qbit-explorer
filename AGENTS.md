@@ -125,6 +125,7 @@ testnet4 qbitd or qbit-electrs evidence in the PR or issue comment.
 | Difficulty, subsidy, or mining UI | backend tests and frontend build | qbit source citation plus regtest/testnet4 sample data |
 | Liquid, accelerator, services | frontend/backend build | Confirm disabled or gracefully hidden for qbit |
 | Block, transaction, address or mempool pages | `npm run cypress:run:regtest` against the regtest harness (`docs/qbit-local-dev.md`) | |
+| Server-side rendering (`frontend/server.ts`, `frontend/server.run.ts`) | `cd frontend && npm run build:ssr && npm run smoke:ssr` | |
 
 ## qbit Consensus Quick Reference
 
@@ -174,6 +175,8 @@ The qbit CI/CD workflows are:
   pull requests. Its Rust GBT job runs `cargo test --locked` in `rust/gbt` and
   fails on a RustSec vulnerability or unsound advisory against
   `rust/gbt/Cargo.lock`, with a `cargo-audit` release binary pinned by SHA-256.
+  The frontend prod job also builds the server-side rendering server from its
+  build and checks that it renders `/` (`npm run smoke:ssr`).
 - `.github/workflows/backend-integration.yml` — backend integration tests
   against MariaDB, on a host port Docker picks (`MEMPOOL_TEST_DB_HOST_PORT=0`).
 - `.github/workflows/docker.yml` — on every pull request, builds both images

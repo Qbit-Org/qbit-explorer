@@ -74,7 +74,7 @@ export class StartComponent implements OnInit, AfterViewChecked, OnDestroy {
   }
 
   ngOnInit() {
-    handleDemoRedirect(this.route, this.router);
+    handleDemoRedirect(this.route, this.router, this.stateService.isBrowser);
 
     this.firstPageWidth = 40 + (this.blockWidth * this.dynamicBlocksAmount);
     this.blockCounterSubscription = this.stateService.blocks$.subscribe((blocks) => {

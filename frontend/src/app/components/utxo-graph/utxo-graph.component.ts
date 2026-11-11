@@ -82,6 +82,11 @@ export class UtxoGraphComponent implements OnChanges, OnDestroy {
     private relativeUrlPipe: RelativeUrlPipe,
     private timeService: TimeService,
   ) {
+    // The server renders once, and an interval would keep its render from
+    // ever finishing
+    if (!this.stateService.isBrowser) {
+      return;
+    }
     // re-render the chart every 10 seconds, to keep the age colors up to date
     this.updateInterval = setInterval(() => {
       if (this.lastUpdate < Date.now() - 10000 && this.utxos) {
