@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { WebsocketResponse } from '@interfaces/websocket.interface';
+import { BlockExtended } from '@interfaces/node-api.interface';
 import { StateService } from '@app/services/state.service';
 import { Transaction } from '@interfaces/electrs.interface';
 import { firstValueFrom, Subscription } from 'rxjs';
@@ -308,6 +309,15 @@ export class WebsocketService {
     }, OFFLINE_PING_CHECK_AFTER_MS);
   }
 
+  // whether a list holds a block at a height the page lists or has cached, with another hash
+  private replacesKnownBlock(blocks: BlockExtended[]): boolean {
+    const listed = new Map(this.stateService.blocksSubject$.getValue().map((block) => [block.height, block.id]));
+    return blocks.some((block) => {
+      const known = listed.get(block.height) ?? this.cacheService.getCachedBlock(block.height)?.id;
+      return known !== undefined && known !== block.id;
+    });
+  }
+
   handleResponse(response: WebsocketResponse) {
     let reinitBlocks = false;
 
@@ -317,8 +327,9 @@ export class WebsocketService {
 
     if (response.blocks && response.blocks.length) {
       const blocks = response.blocks;
-      // sets the tip too, which only a reorg's list can lower
-      this.stateService.resetBlocks(blocks, response.reorg === true);
+      // sets the tip too, which only a reorg's list can lower. The list a page gets when it
+      // reconnects isn't marked, so one that replaces a block the page has follows a reorg it missed.
+      this.stateService.resetBlocks(blocks, response.reorg === true || this.replacesKnownBlock(blocks));
     }
 
     if (response.tx) {
