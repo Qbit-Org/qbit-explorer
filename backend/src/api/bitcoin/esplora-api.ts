@@ -447,6 +447,11 @@ class ElectrsApi implements AbstractBitcoinApi {
     return this.failoverRouter.$get<IEsploraApi.MerkleProof>('/tx/' + txId + '/merkle-proof');
   }
 
+  $getTransactionMerkleBlockProof(txId: string): Promise<string> {
+    // electrs answers in hex, as text/plain; 'text' keeps an all-digit hex from becoming a number
+    return this.failoverRouter.$get<string>('/tx/' + txId + '/merkleblock-proof', 'text');
+  }
+
   $getBlockHeightTip(): Promise<number> {
     return this.failoverRouter.$get<number>('/blocks/tip/height');
   }
@@ -499,6 +504,10 @@ class ElectrsApi implements AbstractBitcoinApi {
 
   $getBlock(hash: string): Promise<IEsploraApi.Block> {
     return this.failoverRouter.$get<IEsploraApi.Block>('/block/' + hash);
+  }
+
+  $getBlockStatus(hash: string): Promise<IEsploraApi.BlockStatus> {
+    return this.failoverRouter.$get<IEsploraApi.BlockStatus>('/block/' + hash + '/status');
   }
 
   $getRawBlock(hash: string): Promise<Buffer> {

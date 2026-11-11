@@ -247,11 +247,82 @@ for (const [timestamp, aggregateRate] of aggregate) {
   fi
 }
 
+# The esplora routes the backend serves, on a block and its coinbase: the raw
+# transaction and the first output's spend, which every backend serves, and the
+# block's status and the coinbase's merkle block proof, which the backend gets
+# from qbit-electrs and answers 405 for under the other backends.
+check_backend_esplora_routes() {
+  local hash="$1"
+  local backend="$2"
+
+  local txid=""
+  if fetch "backend coinbase txid" "$API_URL/block/$hash/txid/0"; then
+    txid="$(read_body "$FETCH_OUT")"
+  fi
+  if ! is_hash "$txid"; then
+    fail "backend coinbase txid is not a txid: $txid"
+    return
+  fi
+
+  local hex=""
+  if fetch "backend coinbase hex" "$API_URL/tx/$txid/hex"; then
+    hex="$(read_body "$FETCH_OUT")"
+  fi
+  if fetch "backend coinbase raw" "$API_URL/tx/$txid/raw"; then
+    if [[ -n "$hex" && "$(node -e "process.stdout.write(require('fs').readFileSync(process.argv[1]).toString('hex'))" "$FETCH_OUT")" == "$hex" ]]; then
+      ok "backend raw transaction matches its hex"
+    else
+      fail "backend raw transaction does not match its hex"
+    fi
+  fi
+
+  if fetch "backend coinbase outspend" "$API_URL/tx/$txid/outspend/0"; then
+    if node -e "process.exit(typeof JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).spent === 'boolean' ? 0 : 1)" "$FETCH_OUT" >/dev/null 2>&1; then
+      ok "backend coinbase outspend has a spent flag"
+    else
+      fail "backend coinbase outspend: $(read_body "$FETCH_OUT")"
+    fi
+  fi
+
+  if [[ "$backend" != "esplora" ]]; then
+    warn "backend is ${backend:-unknown}, not esplora; skipping block status and merkleblock proof"
+    return
+  fi
+
+  if fetch "backend block status" "$API_URL/block/$hash/status"; then
+    if node -e "
+const status = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
+process.exit(status.in_best_chain === true && Number.isInteger(status.height) ? 0 : 1);
+" "$FETCH_OUT" >/dev/null 2>&1; then
+      ok "backend block status puts the block in the best chain"
+    else
+      fail "backend block status: $(read_body "$FETCH_OUT")"
+    fi
+  fi
+
+  local header=""
+  if fetch "backend block header" "$API_URL/block/$hash/header"; then
+    header="$(read_body "$FETCH_OUT")"
+  fi
+  if fetch "backend coinbase merkleblock proof" "$API_URL/tx/$txid/merkleblock-proof"; then
+    local proof
+    proof="$(read_body "$FETCH_OUT")"
+    # a merkle block starts with the block's 80-byte header
+    if [[ ${#header} -eq 160 && "$proof" == "$header"* ]]; then
+      ok "backend merkleblock proof starts with the block header"
+    else
+      fail "backend merkleblock proof does not start with the block header: ${proof:0:200}"
+    fi
+  fi
+}
+
 check_backend() {
   printf 'Checking mempool backend at %s\n' "$API_URL"
 
+  local backend=""
   if fetch "backend-info" "$API_URL/backend-info"; then
     require_json "backend-info" "$FETCH_OUT"
+    backend="$(node -e "try { process.stdout.write(String(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).backend)); } catch (e) {}" "$FETCH_OUT")"
   fi
 
   local height=""
@@ -304,6 +375,7 @@ check_backend() {
         warn "backend block detail did not expose a top-level weight field"
       fi
     fi
+    check_backend_esplora_routes "$hash" "$backend"
   else
     warn "backend tip hash unavailable; skipping backend block detail"
   fi

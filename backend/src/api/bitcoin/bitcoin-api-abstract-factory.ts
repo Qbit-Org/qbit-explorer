@@ -9,6 +9,7 @@ export interface AbstractBitcoinApi {
   $getAllMempoolTransactions(lastTxid?: string, max_txs?: number);
   $getTransactionHex(txId: string): Promise<string>;
   $getTransactionMerkleProof(txId: string): Promise<IEsploraApi.MerkleProof>;
+  $getTransactionMerkleBlockProof(txId: string): Promise<string>;
   $getBlockHeightTip(): Promise<number>;
   $getBlockHashTip(): Promise<string>;
   $getTxIdsForBlock(hash: string, fallbackToCore?: boolean): Promise<string[]>;
@@ -16,6 +17,7 @@ export interface AbstractBitcoinApi {
   $getBlockHash(height: number): Promise<string>;
   $getBlockHeader(hash: string): Promise<string>;
   $getBlock(hash: string): Promise<IEsploraApi.Block>;
+  $getBlockStatus(hash: string): Promise<IEsploraApi.BlockStatus>;
   $getRawBlock(hash: string): Promise<Buffer>;
   $getAddress(address: string): Promise<IEsploraApi.Address>;
   $getAddressTransactions(address: string, lastSeenTxId?: string): Promise<IEsploraApi.Transaction[]>;

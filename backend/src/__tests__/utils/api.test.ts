@@ -1,4 +1,8 @@
-import { getAddressLookupError, isAddressSearchDisabledError, isEsploraRequestError, isTxNotFoundError } from '../../utils/api';
+import config from '../../config';
+import {
+  getAddressLookupError, isAddressSearchDisabledError, isBlockHeightNotFoundError, isBlockNotFoundError, isEsploraRequestError,
+  isTxIndexUnavailableError, isTxNotFoundError,
+} from '../../utils/api';
 
 // How the esplora backend surfaces an electrs error: axios rejects with electrs's status, and its
 // plain-text reason as the response body
@@ -6,16 +10,24 @@ function axiosError(status: number, data: unknown): Error {
   return Object.assign(new Error(`Request failed with status code ${status}`), { response: { status, data } });
 }
 
+// qbitd's getrawtransaction answers for a transaction outside its mempool
+const TX_NOT_FOUND = 'No such mempool or blockchain transaction. Use gettransaction for wallet transactions.';
+const TXINDEX_DISABLED = 'No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. '
+  + 'Use gettransaction for wallet transactions.';
+const TXINDEX_BUILDING = 'No such mempool transaction. Blockchain transactions are still in the process of being indexed. '
+  + 'Use gettransaction for wallet transactions.';
+
 describe('isTxNotFoundError', () => {
-  test('matches all Bitcoin Core not-found message variants', () => {
-    const variants = [
-      'No such mempool or blockchain transaction. Use gettransaction for wallet transactions.',
-      'No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries.',
-      'No such mempool transaction. Blockchain transactions are still in the process of being indexed.',
-    ];
-    for (const message of variants) {
-      expect(isTxNotFoundError(new Error(message))).toBe(true);
-    }
+  test('matches Bitcoin Core ruling a transaction out, with txindex synced', () => {
+    expect(isTxNotFoundError(new Error(TX_NOT_FOUND))).toBe(true);
+  });
+
+  // the transaction may exist: Core only can't look outside its mempool
+  test.each([
+    ['txindex disabled', TXINDEX_DISABLED],
+    ['txindex still building', TXINDEX_BUILDING],
+  ])('does not match Bitcoin Core\'s answer with %s', (_label, message) => {
+    expect(isTxNotFoundError(new Error(message))).toBe(false);
   });
 
   test('matches esplora/electrs axios-style 404 errors', () => {
@@ -34,6 +46,95 @@ describe('isTxNotFoundError', () => {
     expect(isTxNotFoundError('No such mempool transaction')).toBe(false);
     expect(isTxNotFoundError(null)).toBe(false);
     expect(isTxNotFoundError(undefined)).toBe(false);
+  });
+});
+
+describe('isTxIndexUnavailableError', () => {
+  test.each([
+    ['txindex disabled', TXINDEX_DISABLED],
+    ['txindex still building', TXINDEX_BUILDING],
+  ])('matches Bitcoin Core\'s answer with %s', (_label, message) => {
+    expect(isTxIndexUnavailableError(new Error(message))).toBe(true);
+  });
+
+  test.each([
+    ['Core ruling the transaction out', new Error(TX_NOT_FOUND)],
+    // blocks.ts's report of a coinbase it couldn't fetch, which block/:hash answers with a 500
+    ['a report that quotes it', new Error(`Cannot fetch coinbase tx ${'ab'.repeat(32)}. Reason: ${TXINDEX_DISABLED}`)],
+    ['an esplora 404', axiosError(404, 'Transaction not found')],
+    ['nothing', undefined],
+  ])('does not match %s', (_label, error) => {
+    expect(isTxIndexUnavailableError(error)).toBe(false);
+  });
+});
+
+describe('isBlockNotFoundError', () => {
+  const coreError = (code: number, message: string): Error => Object.assign(new Error(message), { code });
+
+  test.each([
+    ['Core RPC error -5', coreError(-5, 'Block not found')],
+    ['an esplora 404', axiosError(404, 'Block not found')],
+  ])('matches %s', (_label, error) => {
+    expect(isBlockNotFoundError(error)).toBe(true);
+  });
+
+  test.each([
+    // other RPCs answer -8 for other bad parameters
+    ['Core RPC error -8', coreError(-8, 'Block height out of range')],
+    ['another Core RPC error', coreError(-1, 'Block not available (pruned data)')],
+    // blocks.ts's report of a coinbase it couldn't fetch, which carries no code
+    ['a coinbase that could not be fetched',
+      new Error('Cannot fetch coinbase tx 4a60e113576e895adf6e21011c47a21bf680a52321f4526d762d35316e4ecd64. Reason: No such mempool transaction. '
+        + 'Use -txindex or provide a block hash to enable blockchain transaction queries.')],
+    ['an esplora 503', axiosError(503, 'Service Unavailable')],
+    ['a plain error', new Error('Block not found')],
+    ['nothing', undefined],
+  ])('does not match %s', (_label, error) => {
+    expect(isBlockNotFoundError(error)).toBe(false);
+  });
+});
+
+// In esplora mode only electrs's 404 says a block is missing: Core's -5 or -8 there means Core is behind electrs
+describe('block not-found checks in esplora mode', () => {
+  const coreError = (code: number, message: string): Error => Object.assign(new Error(message), { code });
+  const backend = config.MEMPOOL.BACKEND;
+
+  beforeAll(() => {
+    config.MEMPOOL.BACKEND = 'esplora';
+  });
+
+  afterAll(() => {
+    config.MEMPOOL.BACKEND = backend;
+  });
+
+  test('match electrs\'s 404', () => {
+    expect(isBlockNotFoundError(axiosError(404, 'Block not found'))).toBe(true);
+    expect(isBlockHeightNotFoundError(axiosError(404, 'Block not found'))).toBe(true);
+  });
+
+  test('do not match Core\'s -5 or -8', () => {
+    expect(isBlockNotFoundError(coreError(-5, 'Block not found'))).toBe(false);
+    expect(isBlockHeightNotFoundError(coreError(-5, 'Block not found'))).toBe(false);
+    expect(isBlockHeightNotFoundError(coreError(-8, 'Block height out of range'))).toBe(false);
+  });
+});
+
+describe('isBlockHeightNotFoundError', () => {
+  const coreError = (code: number, message: string): Error => Object.assign(new Error(message), { code });
+
+  test.each([
+    ['Core RPC error -8, which getblockhash gives for a height above the tip', coreError(-8, 'Block height out of range')],
+    ['Core RPC error -5', coreError(-5, 'Block not found')],
+    ['an esplora 404', axiosError(404, 'Block not found')],
+  ])('matches %s', (_label, error) => {
+    expect(isBlockHeightNotFoundError(error)).toBe(true);
+  });
+
+  test.each([
+    ['another Core RPC error', coreError(-1, 'Block not available (pruned data)')],
+    ['an esplora 503', axiosError(503, 'Service Unavailable')],
+  ])('does not match %s', (_label, error) => {
+    expect(isBlockHeightNotFoundError(error)).toBe(false);
   });
 });
 
