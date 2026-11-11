@@ -177,6 +177,86 @@ class CpfpRepository {
     }
   }
 
+  /**
+   * Delete the clusters at a height, as $deleteClustersAt does, but delete a
+   * transaction's mapping only while it maps to one of them: a transaction
+   * that a block higher up holds now can map to that block's cluster
+   */
+  public async $deleteClustersAtKeepingMovedTxs(height: number): Promise<void> {
+    logger.info(`Delete cpfp clusters at height ${height} from the database`);
+    try {
+      const [rows] = await DB.query(
+        `
+          SELECT txs, height, root from compact_cpfp_clusters
+          WHERE height = ?
+        `,
+        [height]
+      ) as RowDataPacket[][];
+      if (rows?.length) {
+        for (const clusterToDelete of rows) {
+          const txs = this.unpack(clusterToDelete?.txs);
+          for (const tx of txs) {
+            await DB.query(
+              `
+                DELETE FROM compact_transactions
+                WHERE txid = UNHEX(?) AND cluster = ?
+              `,
+              [tx.txid, clusterToDelete.root]
+            );
+          }
+        }
+      }
+      await DB.query(
+        `
+          DELETE from compact_cpfp_clusters
+          WHERE height = ?
+        `,
+        [height]
+      );
+    } catch (e) {
+      logger.err(`Cannot delete cpfp clusters from db. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
+    }
+  }
+
+  /**
+   * Save a block's cluster over the row with its root, which can be another
+   * block's cluster with the same root, and map these transactions to it
+   */
+  public async $moveCluster(cluster: CpfpCluster, txids: string[]): Promise<void> {
+    try {
+      // the row stops listing the members the block's cluster doesn't have:
+      // unmap them while they map to it, so that indexing the block that holds
+      // them can map them again
+      const members = new Set(cluster.txs.map(tx => tx.txid));
+      for (const tx of (await this.$getCluster(cluster.root))?.txs ?? []) {
+        if (!members.has(tx.txid)) {
+          await DB.query(
+            `
+              DELETE FROM compact_transactions
+              WHERE txid = UNHEX(?) AND cluster = UNHEX(?)
+            `,
+            [tx.txid, cluster.root]
+          );
+        }
+      }
+      await DB.query(
+        `
+          UPDATE compact_cpfp_clusters
+          SET height = ?, txs = ?, fee_rate = ?
+          WHERE root = UNHEX(?)
+        `,
+        [cluster.height, Buffer.from(this.pack(cluster.txs)), cluster.effectiveFeePerVsize, cluster.root]
+      );
+      for (const txid of txids) {
+        await transactionRepository.$setCluster(txid, cluster.root);
+      }
+    } catch (e) {
+      logger.err(`Cannot move cpfp cluster in db. Reason: ` + (e instanceof Error ? e.message : e));
+      throw e;
+    }
+  }
+
   // insert a dummy row to mark that we've indexed as far as this block
   public async $insertProgressMarker(height: number): Promise<void> {
     try {

@@ -186,6 +186,11 @@ class BlocksRepository {
   // only checked again once their rows change
   private heightsLeftBelowWalk = new Map<number, string>();
 
+  // the heights whose CPFP clusters a repair below the walk deleted and
+  // hasn't yet seen replaced: they're owed new ones even once the window has
+  // moved past them, which a block can do before the next run
+  private cpfpOwedAt = new Set<number>();
+
   /**
    * Save indexed block data in the database
    * @asyncSafe
@@ -1124,14 +1129,17 @@ class BlocksRepository {
     // height. Below that, nothing would index them again.
     if (Common.cpfpIndexingEnabled()) {
       for (const repair of repairs) {
-        if (repair.height >= lowestCpfpHeight) {
-          await cpfpRepository.$deleteClustersAt(repair.height);
+        if (repair.height >= lowestCpfpHeight || this.cpfpOwedAt.has(repair.height)) {
+          await this.$repointCpfpAbove(repair.height, repair.hash);
+          this.cpfpOwedAt.add(repair.height);
+          await cpfpRepository.$deleteClustersAtKeepingMovedTxs(repair.height);
           await blocks.$indexCPFP(repair.hash, repair.height);
           // $indexCPFP logs a failed save without throwing, and once the
           // flags are written nothing would index this height again
           if (!await this.$isCpfpIndexedAt(repair.height)) {
             throw new Error(`the CPFP clusters at #${repair.height} weren't saved`);
           }
+          this.cpfpOwedAt.delete(repair.height);
         }
       }
     }
@@ -1142,6 +1150,47 @@ class BlocksRepository {
     // not remembered.
     for (const repair of [...repairs].sort((a, b) => b.height - a.height)) {
       await this.$setCanonicalBlockAtHeight(repair.hash, repair.height);
+    }
+  }
+
+  /**
+   * Before the CPFP clusters at a height are replaced with those of the
+   * node's block there, map those of their transactions that another block
+   * holds now to that block's clusters. Their mappings point at a cluster
+   * here, or that block's cluster shares its row with one here, and that
+   * block's height counts as indexed, so the CPFP indexer wouldn't save them
+   * again. All before anything is deleted, so a failure is retried.
+   * @asyncUnsafe
+   */
+  private async $repointCpfpAbove(height: number, hash: string): Promise<void> {
+    const txids = [...new Set((await cpfpRepository.$getClustersAt(height)).flatMap(cluster => cluster.txs.map(tx => tx.txid)))];
+    if (txids.length === 0) {
+      return;
+    }
+    const kept = new Set(await bitcoinApi.$getTxIdsForBlock(hash));
+    const moved = txids.filter(txid => !kept.has(txid));
+    if (moved.length === 0) {
+      return;
+    }
+    // the blocks that hold them now; one that isn't confirmed has no cluster
+    const holders = new Map<string, { height: number, txids: string[] }>();
+    for (const tx of await bitcoinApi.$getRawTransactions(moved)) {
+      const status = tx.status;
+      if (status?.confirmed && status.block_hash && status.block_height !== undefined && status.block_height !== height) {
+        const holder = holders.get(status.block_hash) ?? { height: status.block_height, txids: [] };
+        holder.txids.push(tx.txid);
+        holders.set(status.block_hash, holder);
+      }
+    }
+    for (const [holderHash, holder] of holders) {
+      // saves the clusters it's missing; one it doesn't save has no row
+      const summary = await blocks.$indexCPFP(holderHash, holder.height);
+      for (const cluster of summary?.clusters ?? []) {
+        const movedHere = cluster.txs.map(tx => tx.txid).filter(txid => holder.txids.includes(txid));
+        if (movedHere.length > 0 && await cpfpRepository.$getCluster(cluster.root)) {
+          await cpfpRepository.$moveCluster(cluster, movedHere);
+        }
+      }
     }
   }
 
