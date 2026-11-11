@@ -11,7 +11,7 @@ RUN apt-get update && \
     echo "4b735bb6ffba89e2965fa4219ec24c598b19d7ca63796ff6afaa324583333384  /tmp/nodesource-setup.sh" | sha256sum -c - && \
     bash /tmp/nodesource-setup.sh && \
     rm -f /tmp/nodesource-setup.sh && \
-    apt-get install -y nodejs=26.12.1-1nodesource1 build-essential python3 pkg-config && \
+    apt-get install -y nodejs=26.13.1-1nodesource1 build-essential python3 pkg-config && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -35,7 +35,7 @@ RUN apt-get update && \
     echo "4b735bb6ffba89e2965fa4219ec24c598b19d7ca63796ff6afaa324583333384  /tmp/nodesource-setup.sh" | sha256sum -c - && \
     bash /tmp/nodesource-setup.sh && \
     rm -f /tmp/nodesource-setup.sh && \
-    apt-get install -y nodejs=26.12.1-1nodesource1 && \
+    apt-get install -y nodejs=26.13.1-1nodesource1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

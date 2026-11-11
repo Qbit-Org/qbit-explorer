@@ -25,7 +25,7 @@ only. Address pages and electrs passthrough endpoints require qbit-electrs.
 
 ## Prerequisites
 
-- Node `v26.12.1` from `.nvmrc`
+- Node `v26.13.1` from `.nvmrc`
 - npm from the Node install
 - Rust `1.84` for `rust/gbt/rust-toolchain`
 - Docker with Compose for the MariaDB test container

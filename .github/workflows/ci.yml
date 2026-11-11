@@ -18,7 +18,7 @@ jobs:
     if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
     strategy:
       matrix:
-        node: ["26.12.1"]
+        node: ["26.13.1"]
         flavor: ["dev", "prod"]
       fail-fast: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -176,7 +176,7 @@ jobs:
     if: "(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ops') && !contains(github.head_ref, 'ops/')) || github.event_name == 'push'"
     strategy:
       matrix:
-        node: ["26.12.1"]
+        node: ["26.13.1"]
         flavor: ["dev", "prod"]
       fail-fast: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -316,7 +316,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "26.12.1"
+          node-version: "26.13.1"
 
       - name: Test the translation check
         run: node --test frontend/scripts/check-translations.test.mjs
