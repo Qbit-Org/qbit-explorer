@@ -23,9 +23,10 @@ Jump to a section:
 No images are published, so build them yourself as shown below.
 [`.github/workflows/docker.yml`](../.github/workflows/docker.yml) runs the same
 build on every pull request and on every `v*` tag. It then starts both images
-with `docker-compose.yml` and checks that all three containers become healthy
-and that the API answers through nginx, also after the `api` container is
-recreated, without pushing the images anywhere.
+with `docker-compose.yml` and checks that all three containers become healthy,
+that nginx answers a missing bundle with an uncached 404, and that the API
+answers through nginx, also after the `api` container is recreated, without
+pushing the images anywhere.
 
 ### Build the images yourself
 

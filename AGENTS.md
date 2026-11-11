@@ -181,10 +181,11 @@ The qbit CI/CD workflows are:
   against MariaDB, on a host port Docker picks (`MEMPOOL_TEST_DB_HOST_PORT=0`).
 - `.github/workflows/docker.yml` — on every pull request, builds both images
   from the pull request merged onto its base branch and checks that the
-  `docker/docker-compose.yml` stack becomes healthy, and that the API and
-  WebSocket answer through nginx, also after the `api` container is recreated
-  at another address. It runs the same check on `v*` tags, and never pushes
-  images anywhere. The frontend build gets the job's read-only
+  `docker/docker-compose.yml` stack becomes healthy, that a missing bundle
+  gets an uncached 404 from nginx while app routes get the app page, and that
+  the API and WebSocket answer through nginx, also after the `api` container
+  is recreated at another address. It runs the same check on `v*` tags, and
+  never pushes images anywhere. The frontend build gets the job's read-only
   `GITHUB_TOKEN` as a BuildKit secret, for the GitHub API calls that list the
   mining pool logos.
 - `.github/workflows/qbit-design-check.yml` — drift gate for the vendored

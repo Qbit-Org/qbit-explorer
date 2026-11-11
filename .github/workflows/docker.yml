@@ -247,6 +247,33 @@ jobs:
           
           echo "All containers are healthy!"
 
+      # A static file that doesn't exist, such as a bundle name from another
+      # build, answers an uncached 404 instead of the app page
+      # (nginx-mempool.conf). Files that exist and app routes are unchanged.
+      - name: Check static files and app routes through nginx
+        run: |
+          check() {
+            path=$1 status=$2 header=$3
+            headers=$(curl -s -o /dev/null -D - "http://localhost:8080${path}" | tr -d '\r')
+            if ! printf '%s\n' "$headers" | head -1 | grep -q " ${status} " ||
+              ! printf '%s\n' "$headers" | grep -qi "^${header}"; then
+              echo "${path} should answer ${status} with '${header}', and answered:"
+              printf '%s\n' "$headers"
+              exit 1
+            fi
+          }
+          main=$(curl -fs http://localhost:8080/ | grep -o 'main\.[0-9a-f]*\.js' | head -1)
+          if [ -z "$main" ]; then
+            echo "The app page names no main bundle"
+            exit 1
+          fi
+          check "/${main}" 200 'content-type: application/javascript'
+          check /main.0000000000000000.js 404 'cache-control: no-store'
+          check /de/runtime.0000000000000000.js 404 'cache-control: no-store'
+          check /resources/mining-pools/missing.svg 404 'cache-control: no-store'
+          check "/tx/$(printf '%064d' 0)" 200 'content-type: text/html'
+          echo "Bundles that exist answer 200, missing ones an uncached 404, and app routes the app page"
+
       # nginx in the web container looks the api container's name up when a
       # request comes in (nginx-mempool.conf). Check the API and the WebSocket
       # through nginx, then recreate api at another address and check both

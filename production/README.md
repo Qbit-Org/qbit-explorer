@@ -282,6 +282,13 @@ so the line has no effect here; keep an IP address in `$mempool_backend`. If
 your `server` block has a `resolver` directive of its own, delete the one in
 `nginx-mempool.conf`, because nginx refuses two in one block.
 
+A path that matches no file gets the app page, so links such as `/tx/<txid>`
+work. A path to a static file that doesn't exist, one ending in `.js`, `.css`,
+`.map`, `.json`, `.svg`, `.png` or another asset extension listed in
+`@index-redirect`, gets a 404 with `Cache-Control: no-store` instead. So a CDN
+or browser never caches the app page under a script's name, for example while
+one build replaces another.
+
 Run `sudo nginx -t` before reloading nginx.
 
 ## Frontend customization
