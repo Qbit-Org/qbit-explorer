@@ -1,6 +1,6 @@
 {
   "name": "mempool-frontend",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "qbit block explorer and mempool visualizer frontend",
   "license": "GNU Affero General Public License v3.0",
   "homepage": "https://mempool.qbit.org",
