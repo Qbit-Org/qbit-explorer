@@ -1,18 +1,116 @@
 # Changelog
 
-## 1.1.1
+## 1.2.0
 
 ### Fixed
 
 - Under `MEMPOOL.BACKEND` `esplora`, `POST /api/tx` and `POST /api/txs/test`
-  answered 400 for every transaction, so neither the Broadcast Transaction
-  page nor clients of the esplora API's `POST /tx` could broadcast. Both now
-  go through qbitd, as `POST /api/tx/push` does. A broadcast answers the
-  txid, and a transaction qbitd refuses gets 400 with qbitd's error code
+  answered 400 for every transaction. Neither the Broadcast Transaction page
+  nor clients of the esplora API's `POST /tx` could broadcast, and the Test
+  Transactions page couldn't test. Both routes now go through qbitd, as
+  `POST /api/tx/push` does. A broadcast answers the txid, and a transaction
+  qbitd refuses gets 400 with qbitd's error code
   (`sendrawtransaction RPC error: {"code":N}`). Nothing changes under the
-  `none` and `electrum` backends, which already sent both to qbitd. Upgrading
-  needs no database migration or config change: the backend already talks to
-  qbitd's RPC for the chain tip.
+  `none` and `electrum` backends, which already sent both to qbitd.
+- The backend follows `invalidateblock`, and a chain wiped while it runs,
+  such as a regtest reset, without waiting for a new block. It took a qbitd
+  tip below its cached blocks for a node catching up, and kept them.
+  `GET /api/blocks/tip/height` and the block lists showed the invalidated
+  blocks until qbitd's next block, and a wiped chain's blocks until the new
+  chain reached their heights or the backend restarted. Now the backend asks
+  qbitd whether it is still syncing. While qbitd is in initial block
+  download, or has headers above its tip, the blocks stay, as before.
+  Otherwise the backend drops them, as it drops blocks a reorg replaced, and
+  sends pages one reorg.
+- `/blocks` and the mining dashboard's block list follow a reorg without a
+  reload. They used to keep the blocks a reorg replaced, and never showed a
+  block replaced at the same height. After a reorg to a shorter chain, they
+  skipped new blocks until the chain passed the old tip. Now the WebSocket's
+  blocks win at their heights, a page the reorg reached takes the new
+  chain's blocks, and the page count follows the new tip. When an answer
+  from `/api/v1/blocks` doesn't fit that chain, such as a browser's or CDN's
+  copy from before the reorg, the list asks again, past caches, at most
+  twice and 10 seconds apart, then shows the blocks that fit.
+- With indexing on, the chain check repairs heights below the indexing
+  window that hold two or more canonical block rows. Releases before 1.1.0
+  could leave them, and 1.1.0's check stopped at the window. At each such
+  height, it makes qbitd's block the only canonical row, and has the
+  hashrate indexers index the daily and weekly periods they skipped. They
+  logged `Hashrate window is not consecutive at heights <h> and <h>` and
+  skipped every period around such a height, and block lists showed either
+  row. A height where none of the rows is qbitd's block is left as it is,
+  with one warning.
+- A new block's coinbase that qbit-electrs hasn't indexed yet no longer
+  logs an error. The backend fetches it as the block arrives, and logged
+  `Cannot fetch tx <txid>. Reason: Request failed with status code 404`
+  before it got the coinbase from qbitd. On testnet4 that was about one
+  block in three. A first fetch that finds no such transaction now logs at
+  debug level. Any other first failure, such as a refused connection, a
+  timeout or a 5xx, still logs an error, even when qbitd then returns the
+  transaction.
+
+### Changed
+
+- `docker/docker-compose.yml` takes qbitd's RPC login from
+  `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD` in `docker/.env`, instead of
+  setting `mempool` and `mempool`, so a copied compose file no longer
+  carries a known password. `docker/.env.example` lists both. They have no
+  default: until both are set, every `docker compose` command in `docker/`
+  stops, `down`, `ps` and `logs` included. This breaks existing Compose
+  setups until `docker/.env` has the login (see Upgrading).
+- With `MEMPOOL.BACKEND` `electrum` and qbitd's txindex disabled or still
+  building, `GET /api/address/:address/txs` and
+  `GET /api/scripthash/:scripthash/txs` answer 503 and name qbitd's
+  txindex, as the transaction routes have since 1.1.0. They answered 500.
+  Both routes look up an `after_txid` outside the history, and the page's
+  own transactions, in qbitd, so even a first page with a confirmed
+  transaction answered 500. Their other answers keep their status.
+- Node.js 26.12.1 to 26.13.1, the 26.x security release of 2026-11-11, in
+  the backend image, the frontend image's build stage, `.nvmrc` and CI. The
+  backend serves plain HTTP, so the release's high-severity `http2` and TLS
+  fixes don't reach it, but its llhttp update and `https.Agent` fix do.
+- The frontend image's `nginx:1.30.6-alpine` base is pinned to the digest
+  Docker Hub rebuilt on Alpine 3.24.4, for its curl, expat and brotli
+  security fixes. nginx stays 1.30.6.
+- Backend dependencies: `bitcoinjs-lib` 6.1.8 to 6.1.10, for three high
+  advisories in code the explorer doesn't call, and the test tools'
+  `@babel/core` 7.28.5 to 7.29.13, for a low one. Frontend dependencies:
+  `domino` 2.1.6 to 2.1.9, which only the SSR server uses, for
+  CVE-2026-101895 and 2.1.9's serialization XSS fixes.
+
+### Documentation
+
+- docker/README.md shows how to make qbitd's RPC login with qbit's
+  `share/rpcauth/rpcauth.py` and put it in `docker/.env`, or to use qbitd's
+  RPC cookie instead, and which characters to keep out of the password.
+- docs/qbit-local-dev.md describes the regtest smoke script's new last
+  check, which mines a block, runs `invalidateblock` on it and expects the
+  backend's tip to follow. It runs only with the regtest harness's
+  `smoke.env` and a node on `regtest`.
+- .github/rulesets/README.md says how to rename a required check, as a Node
+  update does to five of them, so that pull requests can still merge.
+
+### Upgrading
+
+- Docker Compose: set `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD` in
+  `docker/.env` before you run any `docker compose` command in `docker/`.
+  If your qbitd still accepts the old sample's login, this line, run from
+  the repository root, puts it there:
+
+  ```bash
+  printf '\nCORE_RPC_USERNAME=mempool\nCORE_RPC_PASSWORD=mempool\n' >> docker/.env
+  ```
+
+  That keeps a known password, so replace it next: give qbitd an `rpcauth`
+  line in place of the old login, restart qbitd, and put the new login in
+  `docker/.env`, as docker/README.md shows.
+- No database migration and no config change: the schema stays at
+  version 113. With indexing on, the first chain check may repair rows
+  below the indexing window, as described under Fixed.
+- Rebuild both images: the backend image and the frontend image's build
+  stage use Node.js 26.13.1, and the frontend image serves from the new
+  nginx digest. If you run the backend outside Docker, update Node.js to
+  26.13.1 too.
 
 ## 1.1.0
 
