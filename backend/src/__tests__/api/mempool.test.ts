@@ -43,6 +43,21 @@ describe('Mempool', () => {
       expect(flags & TransactionFlags.p2mr).toBe(TransactionFlags.p2mr);
     });
 
+    test('counts the sigops of restored transactions afresh, as for a live arrival', async () => {
+      const arrival = JSON.parse(JSON.stringify(etching));
+      delete arrival.sigops;
+      const live = transactionUtils.extendMempoolTransaction(arrival);
+      // 1.0.1 counted sigops with a regex over the script ASM, and its cache kept the count
+      const tx = fromOlderRelease();
+      tx.sigops = live.sigops + 100_000;
+      tx.adjustedVsize = tx.sigops * 20;
+
+      await memPool.$setMempool({ [tx.txid]: tx });
+
+      const restored = memPool.getMempool()[tx.txid];
+      expect([restored.sigops, restored.adjustedVsize, restored.flags]).toEqual([live.sigops, live.adjustedVsize, Common.getTransactionFlags(live)]);
+    });
+
     test('keeps the cached flags of a transaction it cannot reclassify, and restores the rest', async () => {
       const broken = fromOlderRelease('00'.repeat(32));
       const good = fromOlderRelease();

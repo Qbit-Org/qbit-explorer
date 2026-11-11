@@ -56,12 +56,13 @@ function chain(name, from, to) {
 
 const changeDetector = { markForCheck: () => undefined, detectChanges: () => undefined };
 
-// A page's StateService and WebsocketService. They start as the server renders a page, which opens
-// no socket; handleResponse() is the same in the browser.
-function openPage() {
+// A page's StateService, CacheService and WebsocketService. They start as the server renders a page,
+// which opens no socket; handleResponse() is the same in the browser.
+function openPage(apiService = { getInitData$: () => EMPTY, getBlocks$: () => EMPTY }) {
   const storage = { getValue: () => null, setValue: () => undefined, removeItem: () => undefined };
   const stateService = new StateService('server', 'en-US', { events: new Subject() }, storage);
-  const websocketService = new WebsocketService(stateService, { getInitData$: () => EMPTY }, null, null);
+  const cacheService = new CacheService(stateService, apiService);
+  const websocketService = new WebsocketService(stateService, apiService, null, cacheService);
   const requests = [];
   websocketService.websocketSubject = { next: (message) => requests.push(message) };
   const tips = [];
@@ -73,6 +74,7 @@ function openPage() {
   stateService.txConfirmed$.subscribe(([txid, block]) => confirmed.push(`${txid} in ${block.id}`));
   return {
     stateService,
+    cacheService,
     websocketService,
     receive: (response) => websocketService.handleResponse(response),
     // the tip, and the blocks the page shows, newest first
@@ -117,9 +119,26 @@ function checkTip() {
   page.receive({ block: { id: 'new51', height: 51 } });
   assert(page.tip() === 51 && page.shown().startsWith('new51 new50 ') && page.requests.length === 0, `the node's next block after a chain wipe should show: tip ${page.tip()}, ${page.shown()}`);
 
+  // A page whose socket drops while the chain moves to a shorter one gets the new list, unmarked, when
+  // it reconnects. The list replaces a block the page has, so the page takes it as the reorg.
+  page = openPage();
+  page.receive({ blocks: chain('A', 94, 101) });
+  page.receive({ blocks: [...chain('A', 93, 99), ...chain('B', 100, 100)] });
+  assert(page.tip() === 100 && page.shown() === 'B100 A99 A98 A97 A96 A95 A94 A93', `a list on reconnecting that replaces A100 should lower the tip to 100: tip ${page.tip()}, ${page.shown()}`);
+  assert(page.cacheService.getCachedBlock(101) === undefined, 'a list on reconnecting that replaces A100 should drop A101 from the block cache');
+  page.receive({ block: { id: 'B101', height: 101 } });
+  assert(page.tip() === 101 && page.shown().startsWith('B101 B100 A99 '), `the block after a reorg missed while offline should show: tip ${page.tip()}, ${page.shown()}`);
+  // The same when the list replaces only blocks the page cached for an older block page: the chain
+  // fell back below the eight blocks it showed
+  page = openPage();
+  page.receive({ blocks: chain('A', 94, 101) });
+  chain('A', 81, 93).forEach((block) => page.cacheService.addBlockToCache(block));
+  page.receive({ blocks: chain('B', 83, 90) });
+  assert(page.tip() === 90 && !page.cacheService.getCachedBlock(91) && !page.cacheService.getCachedBlock(101), `a list on reconnecting that replaces cached blocks should lower the tip to 90 and drop the blocks above: tip ${page.tip()}`);
+
   // Any other list below the tip leaves it, as upstream: here the page reconnects to the network's
-  // other origin, which lags two blocks. The page shows that origin's blocks, and adds its new
-  // blocks once they pass its tip.
+  // other origin, which lags two blocks. Its list agrees with the page's on every height they share.
+  // The page shows that origin's blocks, and adds its new blocks once they pass its tip.
   page = openPage();
   page.receive({ blocks: chain('A', 94, 101) });
   page.receive({ blocks: chain('A', 92, 99) });
@@ -129,6 +148,14 @@ function checkTip() {
   page.receive({ block: { id: 'A101', height: 101 } });
   page.receive({ block: { id: 'A102', height: 102 } });
   assert(page.tip() === 102 && page.shown().startsWith('A102 A99 ') && page.requests.length === 0, `a lagging origin's blocks should show once they pass the tip, as upstream: tip ${page.tip()}, ${page.shown()}`);
+
+  // A list on reconnecting that replaces blocks at the page's tip, or above it, replaces them
+  page = openPage();
+  page.receive({ blocks: chain('A', 94, 101) });
+  page.receive({ blocks: [...chain('A', 94, 99), ...chain('B', 100, 101)] });
+  assert(page.tip() === 101 && page.shown().startsWith('B101 B100 A99 ') && page.cacheService.getCachedBlock(100)?.id === 'B100', `a list on reconnecting that replaces A100 and A101 should show B100 and B101: tip ${page.tip()}, ${page.shown()}`);
+  page.receive({ blocks: [...chain('A', 96, 99), ...chain('C', 100, 102)] });
+  assert(page.tip() === 102 && page.shown().startsWith('C102 C101 C100 A99 '), `a longer list on reconnecting that replaces B100 and B101 should show C100 to C102: tip ${page.tip()}, ${page.shown()}`);
 
   // As upstream: a reorg to a longer chain, the only kind upstream's backend sends, raises the tip.
   // A block at or below the tip is ignored, and one more than one block above it asks the backend for
@@ -193,7 +220,6 @@ function checkMempoolBlocks() {
 // The block cache keeps blocks by height for the start page's older block pages
 async function checkCache() {
   const tick = () => new Promise((resolve) => globalThis.setTimeout(resolve, 0));
-  const page = openPage();
   let nodeChain = chain('old', 900, 1000);
   const requested = [];
   const answers = [];
@@ -206,8 +232,10 @@ async function checkCache() {
       answers.push(() => answer.next(blocks));
       return answer;
     },
+    getInitData$: () => EMPTY,
   };
-  const cache = new CacheService(page.stateService, apiService);
+  const page = openPage(apiService);
+  const cache = page.cacheService;
   page.receive({ blocks: chain('old', 993, 1000) });
   // the page loads an older block page, and starts loading another
   cache.loadBlock(985);

@@ -127,9 +127,10 @@ class Mempool {
       logger.debug(`Migrating ${Object.keys(this.mempoolCache).length} transactions from disk cache to Redis cache`);
     }
     for (const txid of Object.keys(this.mempoolCache)) {
-      if (!this.mempoolCache[txid].adjustedVsize || this.mempoolCache[txid].sigops == null || this.mempoolCache[txid].effectiveFeePerVsize == null) {
-        this.mempoolCache[txid] = transactionUtils.extendMempoolTransaction(this.mempoolCache[txid]);
-      }
+      // a cache written by an older release holds sigops counted by that release's rules, so count
+      // them afresh, as for a transaction that arrives now, with the adjusted vsize that follows.
+      // The disk and Redis caches both restore through here.
+      this.mempoolCache[txid] = transactionUtils.extendMempoolTransaction({ ...this.mempoolCache[txid], sigops: undefined });
       if (this.mempoolCache[txid].order == null) {
         this.mempoolCache[txid].order = transactionUtils.txidToOrdering(txid);
       }
