@@ -5,7 +5,7 @@ import websocketHandler from '../websocket-handler';
 import mempool from '../mempool';
 import feeApi from '../fee-api';
 import mempoolBlocks from '../mempool-blocks';
-import bitcoinApi from './bitcoin-api-factory';
+import bitcoinApi, { bitcoinCoreApi } from './bitcoin-api-factory';
 import { Common } from '../common';
 import backendInfo from '../backend-info';
 import transactionUtils from '../transaction-utils';
@@ -1262,7 +1262,9 @@ class BitcoinRoutes {
     res.setHeader('content-type', 'text/plain');
     try {
       const rawTx = Common.getTransactionFromRequest(req, false);
-      const txIdResult = await bitcoinApi.$sendRawTransaction(rawTx);
+      // Broadcast through qbitd under every backend, as tx/push does. The
+      // esplora backend can't: upstream's nginx sends this route to electrs
+      const txIdResult = await bitcoinCoreApi.$sendRawTransaction(rawTx);
       res.send(txIdResult);
     } catch (e: any) {
       handleError(req, res, 400, (e.message && e.code) ? 'sendrawtransaction RPC error: ' + JSON.stringify({ code: e.code })
@@ -1286,7 +1288,8 @@ class BitcoinRoutes {
     try {
       const rawTxs = Common.getTransactionsFromRequest(req);
       const maxfeerate = parseFloat(req.query.maxfeerate as string);
-      const result = await bitcoinApi.$testMempoolAccept(rawTxs, maxfeerate);
+      // through qbitd under every backend, as $postTransaction
+      const result = await bitcoinCoreApi.$testMempoolAccept(rawTxs, maxfeerate);
       res.send(result);
     } catch (e: any) {
       handleError(req, res, 400, (e.message && e.code) ? 'testmempoolaccept RPC error: ' + JSON.stringify({ code: e.code })
