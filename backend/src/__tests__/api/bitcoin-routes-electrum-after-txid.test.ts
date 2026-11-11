@@ -39,6 +39,7 @@ jest.mock('../../api/bitcoin/bitcoin-api-factory', () => ({
 import config from '../../config';
 import BitcoindElectrsApi from '../../api/bitcoin/electrum-api';
 import bitcoinRoutes from '../../api/bitcoin/bitcoin.routes';
+import { TXINDEX_UNAVAILABLE } from '../../utils/api';
 
 const ADDRESS = 'qb1zjrtrlj26qhlr0qze7x9fszx0aa8k268d48n3gmc097zjugk87qrsq9l22h';
 const SCRIPTHASH = 'ab'.repeat(32);
@@ -53,7 +54,7 @@ const NOT_FOUND = 'No such mempool or blockchain transaction. Use gettransaction
 const TXINDEX_BUILDING = 'No such mempool transaction. Blockchain transactions are still in the process of being indexed. Use gettransaction for wallet transactions.';
 const TXINDEX_DISABLED = 'No such mempool transaction. Use -txindex or provide a block hash to enable blockchain transaction queries. Use gettransaction for wallet transactions.';
 
-// Each route that pages a history, and the error of its 500
+// Each route that pages a history, and the error of its 500 for any other failure
 const routes: [string, string][] = [
   [`address/${ADDRESS}/txs`, 'Failed to get address transactions'],
   [`scripthash/${SCRIPTHASH}/txs`, 'Failed to get script hash transactions'],
@@ -103,8 +104,29 @@ describe('after_txid under the electrum backend', () => {
       expect(node.getRawTransaction).toHaveBeenCalledWith(TXID, false);
     });
 
-    test.each([TXINDEX_BUILDING, TXINDEX_DISABLED])('responds 500, not 422, when the node answers %p', async (message) => {
+    test.each([TXINDEX_BUILDING, TXINDEX_DISABLED])('responds 503, not 422, when the node answers %p', async (message) => {
       node.getRawTransaction.mockRejectedValue(new Error(message));
+
+      const res = await fetch(url(TXID));
+
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ error: TXINDEX_UNAVAILABLE });
+    });
+
+    // the page's transactions come from the node too, so the first page needs txindex as well
+    test.each([TXINDEX_BUILDING, TXINDEX_DISABLED])('responds 503 when the node answers %p for a confirmed transaction of the page', async (message) => {
+      mockGetHistory.mockResolvedValue([HISTORY[0]]);
+      node.getRawTransaction.mockRejectedValue(new Error(message));
+
+      const res = await fetch(baseUrl + path);
+
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ error: TXINDEX_UNAVAILABLE });
+      expect(node.getRawTransaction).toHaveBeenCalledWith(HISTORY[0].tx_hash, true);
+    });
+
+    test('still responds 500 when the node fails otherwise', async () => {
+      node.getRawTransaction.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:8352'));
 
       const res = await fetch(url(TXID));
 
