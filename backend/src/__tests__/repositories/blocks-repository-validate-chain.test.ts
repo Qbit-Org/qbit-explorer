@@ -6,21 +6,12 @@ const mockDeleteHashrates = jest.fn();
 const mockRetryMissingHashrates = jest.fn();
 const mockDeleteHashratesBetween = jest.fn();
 const mockIndexBlock = jest.fn();
-const mockIndexCpfp = jest.fn();
 const mockDeleteClusters = jest.fn();
 const mockDeleteClustersAt = jest.fn();
-const mockDeleteClustersKeepingMoved = jest.fn();
-const mockGetClustersAt = jest.fn();
-const mockGetCluster = jest.fn();
-const mockMoveCluster = jest.fn();
-const mockGetTxIdsForBlock = jest.fn();
-const mockGetRawTransactions = jest.fn();
 const mockEsploraTip = jest.fn();
 const mockLoggerWarn = jest.fn();
 let mockCpfpIndexing = true;
 let mockIndexingBlocksAmount = 11000;
-// whether the CPFP clusters $indexCPFP saves are in the database after it
-let mockCpfpSaved = true;
 
 jest.mock('../../database', () => ({
   __esModule: true,
@@ -54,8 +45,6 @@ jest.mock('../../api/bitcoin/bitcoin-api-factory', () => ({
   // the esplora backend's view, which can lag the node around a reorg
   default: {
     $getBlockHashTip: mockEsploraTip,
-    $getTxIdsForBlock: mockGetTxIdsForBlock,
-    $getRawTransactions: mockGetRawTransactions,
   },
   bitcoinCoreApi: {
     $getBlockHashTip: mockGetBlockHashTip,
@@ -88,10 +77,6 @@ jest.mock('../../repositories/CpfpRepository', () => ({
   default: {
     $deleteClustersFrom: mockDeleteClusters,
     $deleteClustersAt: mockDeleteClustersAt,
-    $deleteClustersAtKeepingMovedTxs: mockDeleteClustersKeepingMoved,
-    $getClustersAt: mockGetClustersAt,
-    $getCluster: mockGetCluster,
-    $moveCluster: mockMoveCluster,
   },
 }));
 
@@ -114,7 +99,6 @@ jest.mock('../../api/blocks', () => ({
   __esModule: true,
   default: {
     $indexBlock: mockIndexBlock,
-    $indexCPFP: mockIndexCpfp,
   },
 }));
 
@@ -198,9 +182,6 @@ const mockChain = (rows: Row[], tip = hash(best[102])): void => {
   });
   const sorted = [...rows].sort((a, b) => b.height - a.height);
   mockDbQuery.mockImplementation(async (sql: string, params: unknown[] = []) => {
-    if (sql.includes('FROM compact_cpfp_clusters')) {
-      return [mockCpfpSaved ? [{ height: params[0] }] : []];
-    }
     if (sql.includes('SELECT')) {
       return [sql.includes('WHERE stale = 0') ? sorted.filter(stored => !stored.stale) : sorted];
     }
@@ -252,8 +233,6 @@ describe('BlocksRepository $validateChain', () => {
     jest.clearAllMocks();
     mockCpfpIndexing = true;
     mockIndexingBlocksAmount = 11000;
-    mockCpfpSaved = true;
-    mockGetClustersAt.mockResolvedValue([]);
   });
 
   test('accepts a chain whose best blocks are its only canonical rows', async () => {
@@ -493,9 +472,6 @@ describe('BlocksRepository $validateChain', () => {
     beforeEach(() => {
       mockIndexingBlocksAmount = 3;
       (BlocksRepository as unknown as { heightsLeftBelowWalk: Map<number, string> }).heightsLeftBelowWalk.clear();
-      (BlocksRepository as unknown as { cpfpOwedAt: Set<number> }).cpfpOwedAt.clear();
-      mockIndexCpfp.mockReset();
-      mockDeleteClustersKeepingMoved.mockReset();
     });
 
     test('repairs a height below the indexing window with two canonical rows, asking qbitd which is its block', async () => {
@@ -523,7 +499,6 @@ describe('BlocksRepository $validateChain', () => {
       expect(mockRetryMissingHashrates.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
       expect(mockDeleteHashrates).not.toHaveBeenCalled();
       expect(mockDeleteClusters).not.toHaveBeenCalled();
-      expect(mockDeleteClustersKeepingMoved).not.toHaveBeenCalled();
     });
 
     test('repairs the window\'s lowest height, which the walk stops above, and the heights below it', async () => {
@@ -675,7 +650,7 @@ describe('BlocksRepository $validateChain', () => {
       await expect(BlocksRepository.$validateChain()).resolves.toBe(true);
       expect(mockGetBlockHash.mock.calls).toEqual([[98]]);
       expect(updates()).toEqual([]);
-      expect(mockDeleteClustersKeepingMoved).not.toHaveBeenCalled();
+      expect(mockDeleteClusters).not.toHaveBeenCalled();
       expect(mockRetryMissingHashrates).not.toHaveBeenCalled();
 
       await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
@@ -741,22 +716,6 @@ describe('BlocksRepository $validateChain', () => {
       expect(mockLoggerWarn.mock.calls.filter(([line]) => line === leftAlone)).toHaveLength(1);
     });
 
-    test('indexes the CPFP clusters of qbitd\'s block at the window\'s lowest height as it repairs it', async () => {
-      // the CPFP indexer only indexes heights in its range when it runs, and
-      // 100 leaves its range with the next block: cleared and left to it, 100
-      // could keep no clusters at all
-      mockChain([
-        bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), row(100, 'p', 'o'), bestRow(101), bestRow(102),
-      ]);
-
-      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-
-      expect(mockDeleteClustersKeepingMoved.mock.calls).toEqual([[100]]);
-      expect(mockIndexCpfp.mock.calls).toEqual([[hash(best[100]), 100]]);
-      expect(mockDeleteClustersKeepingMoved.mock.invocationCallOrder[0]).toBeLessThan(mockIndexCpfp.mock.invocationCallOrder[0]);
-      expect(mockIndexCpfp.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
-    });
-
     test('indexes qbitd\'s block at the window\'s lowest height when none of its rows is it, and doesn\'t leave it', async () => {
       // 100 holds two other chains' blocks, both canonical, and qbitd's j
       // isn't indexed. The block indexer covers 100, but by its next run the
@@ -805,63 +764,6 @@ describe('BlocksRepository $validateChain', () => {
       expect(mockLoggerWarn.mock.calls).toEqual([['Chain divergence detected below block #101: repairing 1 height, #100']]);
     });
 
-    test('still owes a height its CPFP clusters after it failed to save them there and the window moved past it', async () => {
-      // the repair at 100 deletes its clusters, and saving qbitd's block's
-      // fails. A block arrives before the next run, so 100 is below the
-      // window and the CPFP indexer's range: without the debt, that run
-      // wrote the flags with 100 left without clusters for good.
-      const cpfpAt = new Map<number, boolean>();
-      let saving = false;
-      mockDeleteClustersKeepingMoved.mockImplementation(async (height: number) => {
-        cpfpAt.set(height, false);
-      });
-      mockIndexCpfp.mockImplementation(async (blockHash: string, height: number) => {
-        if (saving) {
-          cpfpAt.set(height, true);
-        }
-        return { clusters: [] };
-      });
-      const chainWithCpfp = (rows: Row[], tip?: string): void => {
-        mockChain(rows, tip);
-        const blocksTable = mockDbQuery.getMockImplementation();
-        mockDbQuery.mockImplementation(async (sql: string, params: unknown[] = []) => sql.includes('FROM compact_cpfp_clusters')
-          ? [cpfpAt.get(params[0] as number) === false ? [] : [{ height: params[0] }]]
-          : blocksTable?.(sql, params));
-      };
-      const rows = [bestRow(98), bestRow(99), bestRow(100), row(100, 'p', 'i'), bestRow(101), bestRow(102)];
-      chainWithCpfp(rows);
-
-      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-      expect(cpfpAt.get(100)).toBe(false);
-      expect(updates()).toEqual([]);
-
-      saving = true;
-      chainWithCpfp([...rows, bestRow(103)], hash(best[103]));
-      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-
-      expect(mockIndexCpfp.mock.calls).toEqual([[hash(best[100]), 100], [hash(best[100]), 100]]);
-      expect(cpfpAt.get(100)).toBe(true);
-      expect(mockIndexCpfp.mock.invocationCallOrder[1]).toBeLessThan(firstUpdateOrder());
-      expect(updates()).toEqual([madeCanonical(best[100]), markedStaleAt(100, hash(best[100]))]);
-    });
-
-    test('writes no flag at the window\'s lowest height until its new CPFP clusters are saved', async () => {
-      // $indexCPFP logs a failed save without throwing. With the flags
-      // written, 100 would never be repaired again, and once the window
-      // moves past it the CPFP indexer never indexes it again either.
-      mockChain([bestRow(98), bestRow(99), bestRow(100), row(100, 'p', 'i'), bestRow(101), bestRow(102)]);
-      mockCpfpSaved = false;
-
-      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-      expect(mockIndexCpfp.mock.calls).toEqual([[hash(best[100]), 100]]);
-      expect(updates()).toEqual([]);
-
-      mockCpfpSaved = true;
-      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-      expect(mockIndexCpfp).toHaveBeenCalledTimes(2);
-      expect(updates()).toEqual([madeCanonical(best[100]), markedStaleAt(100, hash(best[100]))]);
-    });
-
     test('deletes the hashrates around a replaced lone row even when the same repairs fill a gap above it', async () => {
       // the window is 101 and 102. 100 holds only qbitd's j, stale, which
       // 101's row names: a gap in the canonical chain, which the repair
@@ -906,53 +808,30 @@ describe('BlocksRepository $validateChain', () => {
       expect(remembered.has(99)).toBe(false);
     });
 
-    test('maps the transactions of the clusters it replaces that a block higher up holds now to that block\'s clusters, first', async () => {
-      // 100 holds qbitd's j and another chain's p, both canonical. p's
-      // cluster at 100 holds a and c, which 101 mined again, b, which j holds
-      // too, and d, which no block holds now. Deleting p's cluster deletes
-      // the mappings that point at it, and 101 counts as indexed, so a and c
-      // would keep no cluster: they're mapped to 101's first. Here 101's
-      // cluster shares its root, c, with p's, so its row moves to 101 too.
-      const txid = (fill: string): string => fill.repeat(64);
-      const ancestor = (fill: string): { txid: string, weight: number, fee: number } => ({ txid: txid(fill), weight: 400, fee: 1000 });
-      mockChain([bestRow(98), bestRow(99), bestRow(100), row(100, 'p', 'i'), bestRow(101), bestRow(102)]);
-      mockGetClustersAt.mockResolvedValue([
-        { root: txid('c'), height: 100, txs: [ancestor('c'), ancestor('a'), ancestor('b'), ancestor('d')], effectiveFeePerVsize: 5 },
-      ]);
-      mockGetTxIdsForBlock.mockResolvedValue([txid('b'), txid('e')]);
-      mockGetRawTransactions.mockResolvedValue([
-        { txid: txid('a'), status: { confirmed: true, block_height: 101, block_hash: hash(best[101]) } },
-        { txid: txid('c'), status: { confirmed: true, block_height: 101, block_hash: hash(best[101]) } },
-        { txid: txid('d'), status: { confirmed: false } },
-      ]);
-      const cluster101 = { root: txid('c'), height: 101, txs: [ancestor('c'), ancestor('a')], effectiveFeePerVsize: 5 };
-      mockIndexCpfp.mockImplementation(async (blockHash: string) => ({ clusters: blockHash === hash(best[101]) ? [cluster101] : [] }));
-      mockGetCluster.mockResolvedValue({ ...cluster101, height: 100 });
-
-      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-
-      expect(mockGetTxIdsForBlock.mock.calls).toEqual([[hash(best[100])]]);
-      expect(mockGetRawTransactions.mock.calls).toEqual([[[txid('c'), txid('a'), txid('d')]]]);
-      expect(mockMoveCluster.mock.calls).toEqual([[cluster101, [txid('c'), txid('a')]]]);
-      expect(mockMoveCluster.mock.invocationCallOrder[0]).toBeLessThan(mockDeleteClustersKeepingMoved.mock.invocationCallOrder[0]);
-      expect(mockDeleteClustersAt).not.toHaveBeenCalled();
-      expect(mockIndexCpfp.mock.calls).toEqual([[hash(best[101]), 101], [hash(best[100]), 100]]);
-      expect(updates()).toEqual([madeCanonical(best[100]), markedStaleAt(100, hash(best[100]))]);
-    });
-
-    test('clears the CPFP clusters at the window\'s lowest height before it repairs it, as the CPFP indexer covers that height', async () => {
-      // the CPFP indexer counts a height with clusters as indexed, so the
-      // other block's would stay at 100. It never indexes 99, which keeps its
-      // clusters.
+    test('deletes the CPFP clusters from the window\'s lowest height up when it repairs that height, as the walk\'s repairs do', async () => {
+      // the CPFP indexer counts a height with clusters as indexed, and covers
+      // 100, so it indexes the clusters from 100 up again. It never indexes
+      // 99, which keeps its clusters. The deletion comes before any flag.
       const rows = [
         bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), row(100, 'p', 'o'), bestRow(101), bestRow(102),
       ];
       mockChain(rows);
 
       await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-      expect(mockDeleteClustersKeepingMoved.mock.calls).toEqual([[100]]);
-      expect(mockDeleteClustersKeepingMoved.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
-      expect(mockDeleteClusters).not.toHaveBeenCalled();
+      expect(mockDeleteClusters.mock.calls).toEqual([[100]]);
+      expect(mockDeleteClusters.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
+      expect(mockDeleteClustersAt).not.toHaveBeenCalled();
+
+      // a failed deletion writes no flag, and the next run deletes again
+      jest.clearAllMocks();
+      mockChain(rows);
+      mockDeleteClusters.mockRejectedValueOnce(new Error('DB unavailable'));
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(updates()).toEqual([]);
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+      expect(mockDeleteClusters.mock.calls).toEqual([[100], [100]]);
+      expect(updates()).toHaveLength(4);
 
       // nor when the CPFP indexer is off: nothing would index them again
       jest.clearAllMocks();
@@ -960,7 +839,7 @@ describe('BlocksRepository $validateChain', () => {
       mockChain(rows);
 
       await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-      expect(mockDeleteClustersKeepingMoved).not.toHaveBeenCalled();
+      expect(mockDeleteClusters).not.toHaveBeenCalled();
       expect(updates()).toHaveLength(4);
 
       // with INDEXING_BLOCKS_AMOUNT at -1, the CPFP indexer covers every
@@ -971,7 +850,7 @@ describe('BlocksRepository $validateChain', () => {
       mockChain([bestRow(98), row(98, 'p', 'g'), bestRow(99), bestRow(100), bestRow(101), bestRow(102)]);
 
       await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
-      expect(mockDeleteClustersKeepingMoved.mock.calls).toEqual([[98]]);
+      expect(mockDeleteClusters.mock.calls).toEqual([[98]]);
       expect(updates()).toEqual([madeCanonical(best[98]), markedStaleAt(98, hash(best[98]))]);
     });
   });
