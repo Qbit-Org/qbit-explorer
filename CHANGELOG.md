@@ -54,13 +54,11 @@
   two canonical rows, the hashrate periods around it stay skipped.
   Hashrates computed with a lone row from another chain that the check
   replaces are computed again.
-- When the chain check repairs the window's lowest height with CPFP
-  indexing on, it replaces that height's CPFP clusters with those of
-  qbitd's block. It first moves the clusters of transactions that another
-  block now holds, as when a block higher up mined them again, to that
-  block, so they keep their CPFP data. If the new clusters aren't saved, it
-  changes no flag and tries again 10 seconds later, also once a new block
-  has moved the window on.
+- With CPFP indexing on, a repair at the window's lowest height deletes the
+  CPFP clusters from there to the tip, as the chain check's repairs above
+  it do, and the CPFP indexer rebuilds them, which can take a long time on
+  a large window. Below that height, which the CPFP indexer doesn't cover,
+  CPFP clusters stay as they are.
 - A new block's coinbase that qbit-electrs hasn't indexed yet no longer
   logs an error. The backend fetches it as the block arrives, and logged
   `Cannot fetch tx <txid>. Reason: Request failed with status code 404`
@@ -158,12 +156,11 @@
 - After a reorg deeper than the indexing window, which in practice only a
   regtest chain sees, the chain check doesn't look again at the heights
   below the window that it repaired or left alone.
-- If saving another block's CPFP clusters fails during a repair at the
-  window's lowest height, a transaction that block holds can lose its CPFP
-  data.
-- The heights owed new CPFP clusters after a failed save are kept in
-  memory. A restart before the next try, with a new block in between,
-  leaves such a height without clusters.
+- With CPFP indexing on, a block that arrives after a repair at the
+  window's lowest height, before the CPFP indexer's next run, moves the
+  window past that height, which then keeps no CPFP clusters: its
+  transactions show no CPFP data rather than wrong data. A reorg that
+  reaches the window's lowest height does the same.
 - Block lists, in regtest or operator cases: nine or more blocks within a
   minute of a deep reorg end the protection against cached answers from
   before it early. After two deep rollbacks in a row, a lagging origin's
