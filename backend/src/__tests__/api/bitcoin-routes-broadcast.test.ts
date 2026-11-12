@@ -14,9 +14,12 @@ jest.mock('../../api/bitcoin/bitcoin-api-factory', () => ({
   },
 }));
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import config from '../../config';
 import bitcoinApi, { bitcoinCoreApi } from '../../api/bitcoin/bitcoin-api-factory';
 import bitcoinRoutes from '../../api/bitcoin/bitcoin.routes';
+import bitcoinClient from '../../api/bitcoin/bitcoin-client';
 
 type BroadcastMethod = '$sendRawTransaction' | '$testMempoolAccept';
 const mockedApi = bitcoinApi as unknown as Record<BroadcastMethod, jest.Mock>;
@@ -39,9 +42,13 @@ describe('broadcast routes', () => {
 
   beforeAll(async () => {
     const app = express();
-    // as the backend's index.ts parses request bodies
-    app.use(express.text({ type: ['text/plain', 'application/base64'] }));
-    app.use(express.json());
+    // index.ts's body parsers, with its options and order (index.ts lines 139-141). index.ts starts the server when
+    // imported, so the tests set them up here, and bitcoin-routes-broadcast.test.ts checks they still match.
+    app
+      .use(express.urlencoded({ extended: true, limit: '10mb' }))
+      .use(express.text({ type: ['text/plain', 'application/base64'], limit: '10mb' }))
+      .use(express.json({ limit: '10mb' }))
+      ;
     bitcoinRoutes.initRoutes(app);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -52,6 +59,16 @@ describe('broadcast routes', () => {
     config.MEMPOOL.BACKEND = backend;
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+  });
+
+  // The tests copy index.ts's body parsers: fail when a copy stops matching what index.ts installs
+  test('index.ts still installs the body parsers the tests copy', () => {
+    const parsers = (file: string): string[] => readFileSync(file, 'utf8').split('\n')
+      .map((line) => line.trim()).filter((line) => line.startsWith('.use(express.'));
+    const installed = parsers(join(__dirname, '../../index.ts'));
+    expect(installed).toHaveLength(3);
+    expect(parsers(__filename)).toEqual(installed);
+    expect(parsers(join(__dirname, 'bitcoin-routes-broadcast-qbitd.test.ts'))).toEqual(installed);
   });
 
   describe('under the esplora backend', () => {
@@ -98,6 +115,85 @@ describe('broadcast routes', () => {
       expect(await res.json()).toEqual(result);
       expect(mockedCoreApi.$testMempoolAccept.mock.calls[0][0]).toEqual([TX_HEX]);
       expect(mockedApi.$testMempoolAccept).not.toHaveBeenCalled();
+    });
+  });
+
+  // POST tx takes the hex as the whole body, whatever its content type, as electrs's POST /tx does
+  describe('POST tx request bodies', () => {
+    const post = (body: string | Uint8Array, headers: Record<string, string> = {}): Promise<Response> =>
+      fetch(baseUrl + 'tx', { method: 'POST', headers: { 'Accept': 'application/json', ...headers }, body });
+
+    beforeEach(() => {
+      jest.resetAllMocks();
+      mockedCoreApi.$sendRawTransaction.mockResolvedValue(TXID);
+    });
+
+    test.each([
+      ['text/plain', { 'Content-Type': 'text/plain' }],
+      // what `curl -d <hex>`, as the API docs show it, sends
+      ['a form, as curl -d sends it', { 'Content-Type': 'application/x-www-form-urlencoded' }],
+      ['application/octet-stream', { 'Content-Type': 'application/octet-stream' }],
+    ])('broadcasts the hex sent as %s', async (_type, headers) => {
+      const res = await post(TX_HEX, headers);
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(TXID);
+      expect(mockedCoreApi.$sendRawTransaction).toHaveBeenCalledWith(TX_HEX);
+    });
+
+    test('broadcasts the hex sent with no content type', async () => {
+      // fetch sends bytes without a Content-Type
+      const res = await post(new TextEncoder().encode(TX_HEX));
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe(TXID);
+      expect(mockedCoreApi.$sendRawTransaction).toHaveBeenCalledWith(TX_HEX);
+    });
+
+    // the request's fault, which never reaches qbitd: not an RPC error
+    test.each([
+      ['an empty text/plain body', '', { 'Content-Type': 'text/plain' }, 'Non-hex request body'],
+      ['an empty form', '', { 'Content-Type': 'application/x-www-form-urlencoded' }, 'Non-string request body'],
+      ['a form with fields', 'txHash=' + TX_HEX + '&x=1', { 'Content-Type': 'application/x-www-form-urlencoded' }, 'Non-string request body'],
+      ['text that isn\'t hex', 'hello', { 'Content-Type': 'text/plain' }, 'Non-hex request body'],
+      ['octet-stream that isn\'t hex', 'hello', { 'Content-Type': 'application/octet-stream' }, 'Non-hex request body'],
+      ['hex that isn\'t a transaction', 'abcd', { 'Content-Type': 'text/plain' }, 'Invalid transaction (could not parse)'],
+    ])('answers 400 with the reason for %s', async (_body, body, headers, reason) => {
+      const res = await post(body, headers);
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: reason });
+      expect(mockedCoreApi.$sendRawTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the other broadcast routes\' request bodies', () => {
+    beforeEach(() => {
+      jest.resetAllMocks();
+    });
+
+    test('POST tx/push still takes a txHash= form sent as text', async () => {
+      const sendRawTransaction = jest.spyOn(bitcoinClient, 'sendRawTransaction').mockResolvedValue(TXID);
+
+      try {
+        const res = await fetch(baseUrl + 'tx/push', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'txHash=' + TX_HEX });
+
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe(TXID);
+        expect(sendRawTransaction).toHaveBeenCalledWith(TX_HEX);
+      } finally {
+        sendRawTransaction.mockRestore();
+      }
+    });
+
+    test.each(['txs/test', 'txs/package'])('POST %s answers 400 with the reason for a body that isn\'t a list of hex', async (route) => {
+      const res = await fetch(baseUrl + route, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ tx: TX_HEX }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: 'Invalid request body (should be an array of hexadecimal strings)' });
+      expect(mockedCoreApi.$testMempoolAccept).not.toHaveBeenCalled();
     });
   });
 });
