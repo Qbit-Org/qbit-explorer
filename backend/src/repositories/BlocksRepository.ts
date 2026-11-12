@@ -73,9 +73,10 @@ interface DatabaseBlock {
 interface BelowWalkRepair {
   hash: string;
   height: number;
-  // the timestamp of the lone canonical row it replaces, if any: the
-  // hashrates of the periods around it were computed with that row
-  replacedTimestamp?: number;
+  // the timestamps of the canonical rows there, which the hashrates of
+  // some periods may have been computed with: those around a lone row, and
+  // the one after two or more, whose window starts there with either row
+  canonicalTimestamps: number[];
   // the node's block isn't indexed there yet
   index?: boolean;
 }
@@ -1040,13 +1041,15 @@ class BlocksRepository {
         const heights = repairsBelowWalk.map(repair => repair.height).sort((a, b) => a - b);
         logger.warn(`Chain divergence detected below block #${lastIndexedBlockHeight + 1}: repairing ${heights.length} ${heights.length === 1 ? 'height' : 'heights'}, ${nameHeights(heights)}`);
         // The hashrate indexers couldn't index a period whose block window
-        // held a height with two canonical rows, or none, and they index
-        // every period without hashrates when they run: they only need to
-        // run again, before the next day or Monday. This asks before
-        // writing, in case a run fails after writing some. Deleting from a
-        // week before the earliest changed block, as above, would re-index
-        // months of hashrates, and CPFP clusters deleted below the window
-        // would never be indexed again.
+        // held two canonical rows at a height other than its first, or a
+        // height with none, and they index every period without hashrates
+        // when they run: they only need to run again, before the next day
+        // or Monday. Those they could index with another chain's block are
+        // deleted first. This asks before writing, in case a run fails
+        // after writing some.
+        // Deleting from a week before the earliest changed block, as above,
+        // would re-index months of hashrates, and CPFP clusters deleted below
+        // the window would never be indexed again.
         HashratesRepository.retryMissingHashrates();
         writingBelowWalk = true;
         await this.$writeRepairsBelowWalk(repairsBelowWalk, lowestCpfpHeight, oldestConsecutiveTimestamp(blocks, blocksByHeight, repairsBelowWalk));
@@ -1096,13 +1099,16 @@ class BlocksRepository {
   private async $writeRepairsBelowWalk(repairs: BelowWalkRepair[], lowestCpfpHeight: number, oldestIndexedFrom: number): Promise<void> {
     // A lone canonical row from another chain made a consecutive block
     // window, so the hashrates of the periods around it were computed with
-    // it, and the indexers keep them: delete those, back to the oldest block
-    // they will index from, to have them computed again. From a week before
-    // it to two weeks after: the periods it's in, and the next ones, which it
-    // can start.
-    const replacedTimestamps = repairs.map(repair => repair.replacedTimestamp).filter((timestamp): timestamp is number => timestamp !== undefined);
-    if (replacedTimestamps.length > 0) {
-      for (const timestamp of replacedTimestamps) {
+    // it, and the indexers keep them. Two or more canonical rows at a height
+    // fail the windows that hold them, but not one that starts there: it
+    // reads one row of its first height, its anchor, either one, so the
+    // period after them may have been computed with another chain's block.
+    // Delete those, back to the oldest block the indexers will index from,
+    // to have them computed again. From a week before each row to two weeks
+    // after: the periods it's in, and the next ones, which it can start.
+    const timestamps = [...new Set(repairs.flatMap(repair => repair.canonicalTimestamps))];
+    if (timestamps.length > 0) {
+      for (const timestamp of timestamps) {
         const from = Math.max(timestamp - 604800, oldestIndexedFrom + 1);
         if (from <= timestamp + 2 * 604800) {
           await HashratesRepository.$deleteHashratesBetween(from, timestamp + 2 * 604800);
@@ -1210,14 +1216,14 @@ class BlocksRepository {
       const nodeHash = (height === highestHeight ? nodeHashAtHighest : undefined) ?? await bitcoinCoreApi.$getBlockHash(height);
       nodeHashAt.set(height, nodeHash);
       const nodeBlock = rows.find(row => row.hash === nodeHash);
-      const replacedTimestamp = canonicalCount === 1 ? canonicalRowsAt(height)[0].timestamp : undefined;
+      const canonicalTimestamps = canonicalRowsAt(height).map(row => row.timestamp);
       if (nodeBlock) {
         if (nodeBlock.stale || canonicalCount > 1) {
           settled.set(height, nodeBlock);
-          repairs.push({ hash: nodeBlock.hash, height, replacedTimestamp });
+          repairs.push({ hash: nodeBlock.hash, height, canonicalTimestamps });
         }
       } else if (height === highestHeight) {
-        repairs.push({ hash: nodeHash, height, replacedTimestamp, index: true });
+        repairs.push({ hash: nodeHash, height, canonicalTimestamps, index: true });
       } else {
         leftAlone.push({ height, rows: rowsKeyOf(rows), canonical: canonicalCount });
       }
