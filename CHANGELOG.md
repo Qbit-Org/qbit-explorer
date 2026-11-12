@@ -47,13 +47,16 @@
   has the hashrate indexers index the daily and weekly periods they
   skipped. They logged
   `Hashrate window is not consecutive at heights <h> and <h>` and skipped
-  every period around such a height, and block lists showed either row. The
-  window's lowest height gets qbitd's block as its only canonical row,
-  indexed first if no row is it. Below that height, a height where none of
-  the rows is qbitd's block is left as it is, with one warning. If it holds
-  two canonical rows, the hashrate periods around it stay skipped.
-  Hashrates computed with a lone row from another chain that the check
-  replaces are computed again.
+  the periods around such a height, and block lists showed either row. The
+  period that begins right after it wasn't skipped: its block window starts
+  at that height and took either row, so the check deletes its hashrates
+  to have them computed again. The window's lowest height gets qbitd's
+  block as its only canonical row, indexed first if no row is it. Below
+  that height, a height where none of the rows is qbitd's block is left as
+  it is, with one warning. If it holds two canonical rows, the hashrate
+  periods around it stay skipped, and the one after it keeps hashrates
+  computed with either row. Hashrates computed with a lone row from
+  another chain that the check replaces are computed again.
 - With CPFP indexing on, a repair at the window's lowest height deletes the
   CPFP clusters from there to the tip, as the chain check's repairs above
   it do, and the CPFP indexer rebuilds them, which can take a long time on

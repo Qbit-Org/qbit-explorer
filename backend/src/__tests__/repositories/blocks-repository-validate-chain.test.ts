@@ -487,8 +487,8 @@ describe('BlocksRepository $validateChain', () => {
       expect(mockLoggerWarn).toHaveBeenCalledWith('Chain divergence detected below block #101: repairing 1 height, #99');
     });
 
-    test('has the hashrate indexers retry the periods they skipped, and deletes no hashrates or CPFP clusters', async () => {
-      // the hashrate indexers skipped every period whose block window held
+    test('has the hashrate indexers retry the periods they skipped, without deleting every hashrate since or the CPFP clusters', async () => {
+      // the hashrate indexers skipped the periods whose block window held
       // both rows at 99. Deleting the hashrates from a week before 99 would
       // re-index every one since, and the CPFP indexer never indexes 99 again.
       mockChain([bestRow(98), bestRow(99), row(99, 'o', 'h'), bestRow(100), bestRow(101), bestRow(102)]);
@@ -735,16 +735,19 @@ describe('BlocksRepository $validateChain', () => {
     test('deletes the hashrates computed with a lone canonical row it replaces', async () => {
       // 99's only canonical row was q, so the periods around it were indexed
       // with q, and the indexers keep periods that have hashrates. 98's two
-      // canonical rows made its periods' windows fail, so they have none.
-      // From a week before q to two weeks after, but only after 98: the
-      // hashrate indexers start after the oldest block of the consecutive
-      // chain, here the lowest row.
+      // canonical rows made the windows that hold both fail, but not the
+      // one that starts at 98, with either row. From a week before each row
+      // to two weeks after, but only after 98: the hashrate indexers start
+      // after the oldest block of the consecutive chain, here the lowest row.
       const q = row(99, 'q', 'p');
       mockChain([bestRow(98), row(98, 'p', 'g'), q, { ...bestRow(99), stale: 1 }, bestRow(100), bestRow(101), bestRow(102)]);
 
       await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
 
-      expect(mockDeleteHashratesBetween.mock.calls).toEqual([[bestRow(98).timestamp + 1, q.timestamp + 2 * WEEK]]);
+      expect(mockDeleteHashratesBetween.mock.calls).toEqual([
+        [bestRow(98).timestamp + 1, bestRow(98).timestamp + 2 * WEEK],
+        [bestRow(98).timestamp + 1, q.timestamp + 2 * WEEK],
+      ]);
       expect(mockDeleteHashratesBetween.mock.invocationCallOrder[0]).toBeLessThan(firstUpdateOrder());
       expect(mockDeleteHashrates).not.toHaveBeenCalled();
     });
@@ -784,7 +787,32 @@ describe('BlocksRepository $validateChain', () => {
       await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
 
       expect(mockGetBlockHash.mock.calls).toEqual([[100], [98], [99]]);
-      expect(mockDeleteHashratesBetween.mock.calls).toEqual([[bestRow(98).timestamp + 1, q.timestamp + 2 * WEEK]]);
+      // and around 98's two rows, the anchors of the period after them
+      expect(mockDeleteHashratesBetween.mock.calls).toEqual([
+        [bestRow(98).timestamp + 1, bestRow(98).timestamp + 2 * WEEK],
+        [bestRow(98).timestamp + 1, q.timestamp + 2 * WEEK],
+      ]);
+    });
+
+    test('deletes the hashrates of the period that starts at a height with two canonical rows, whose window took either row', async () => {
+      // a block window that holds both of 99's rows fails, but one whose
+      // oldest block, its anchor, is at 99 reads only one of them, either
+      // one: the period after 99 may have been computed with o. o is a day
+      // later than i. From a week before each row to two weeks after, but
+      // only after 98, as for a lone row.
+      const o = { ...row(99, 'o', 'h'), timestamp: bestRow(99).timestamp + 86400 };
+      mockChain([bestRow(98), bestRow(99), o, bestRow(100), bestRow(101), bestRow(102)]);
+
+      await expect(BlocksRepository.$validateChain()).resolves.toBe(false);
+
+      expect(updates()).toEqual([madeCanonical(best[99]), markedStaleAt(99, hash(best[99]))]);
+      expect(mockDeleteHashratesBetween.mock.calls).toEqual([
+        [bestRow(98).timestamp + 1, bestRow(99).timestamp + 2 * WEEK],
+        [bestRow(98).timestamp + 1, o.timestamp + 2 * WEEK],
+      ]);
+      expect(mockDeleteHashratesBetween.mock.invocationCallOrder[1]).toBeLessThan(firstUpdateOrder());
+      expect(mockRetryMissingHashrates).toHaveBeenCalledTimes(1);
+      expect(mockDeleteHashrates).not.toHaveBeenCalled();
     });
 
     test('checks a height it left alone again once that is the window\'s lowest height, after the tip went down', async () => {
