@@ -5,7 +5,7 @@ import websocketHandler from '../websocket-handler';
 import mempool from '../mempool';
 import feeApi from '../fee-api';
 import mempoolBlocks from '../mempool-blocks';
-import bitcoinApi from './bitcoin-api-factory';
+import bitcoinApi, { bitcoinCoreApi } from './bitcoin-api-factory';
 import { Common } from '../common';
 import backendInfo from '../backend-info';
 import transactionUtils from '../transaction-utils';
@@ -19,7 +19,8 @@ import difficultyAdjustment from '../difficulty-adjustment';
 import transactionRepository from '../../repositories/TransactionRepository';
 import rbfCache from '../rbf-cache';
 import { calculateMempoolTxCpfp } from '../cpfp';
-import { getAddressLookupError, handleError, handleLookupError, isBlockHeightNotFoundError, isBlockNotFoundError, isTxNotFoundError } from '../../utils/api';
+import { getAddressLookupError, handleError, handleLookupError, handleRpcError, isBlockHeightNotFoundError, isBlockNotFoundError, isTxIndexUnavailableError, isTxNotFoundError, TXINDEX_UNAVAILABLE } from '../../utils/api';
+import { rawTransactionBody } from '../../utils/body-parsers';
 import poolsUpdater from '../../tasks/pools-updater';
 import chainTips from '../chain-tips';
 
@@ -91,7 +92,7 @@ class BitcoinRoutes {
       .get(config.MEMPOOL.API_URL_PREFIX + 'mempool/txids', this.getMempoolTxIds)
       .get(config.MEMPOOL.API_URL_PREFIX + 'mempool/recent', this.getRecentMempoolTransactions)
       .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId', this.getTransaction)
-      .post(config.MEMPOOL.API_URL_PREFIX + 'tx', this.$postTransaction)
+      .post(config.MEMPOOL.API_URL_PREFIX + 'tx', rawTransactionBody, this.$postTransaction)
       .post(config.MEMPOOL.API_URL_PREFIX + 'txs/test', this.$testTransactions)
       .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/hex', (req, res) => this.getRawTransaction(req, res, 'hex'))
       .get(config.MEMPOOL.API_URL_PREFIX + 'tx/:txId/raw', (req, res) => this.getRawTransaction(req, res, 'raw'))
@@ -699,6 +700,11 @@ class BitcoinRoutes {
         handleError(req, res, lookupError.status, lookupError.reason);
         return;
       }
+      // the electrum backend looks after_txid and the page's transactions up in qbitd
+      if (isTxIndexUnavailableError(e)) {
+        handleError(req, res, 503, TXINDEX_UNAVAILABLE);
+        return;
+      }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
         handleError(req, res, 413, e.message);
         return;
@@ -876,6 +882,11 @@ class BitcoinRoutes {
       const lookupError = getAddressLookupError(e);
       if (lookupError) {
         handleError(req, res, lookupError.status, lookupError.reason);
+        return;
+      }
+      // the electrum backend looks after_txid and the page's transactions up in qbitd
+      if (isTxIndexUnavailableError(e)) {
+        handleError(req, res, 503, TXINDEX_UNAVAILABLE);
         return;
       }
       if (e instanceof Error && e.message && (e.message.indexOf('too long') > 0 || e.message.indexOf('confirmed status') > 0)) {
@@ -1260,50 +1271,74 @@ class BitcoinRoutes {
 
   private async $postTransaction(req: Request, res: Response) {
     res.setHeader('content-type', 'text/plain');
+    let rawTx: string;
     try {
-      const rawTx = Common.getTransactionFromRequest(req, false);
-      const txIdResult = await bitcoinApi.$sendRawTransaction(rawTx);
+      rawTx = Common.getTransactionFromRequest(req, false);
+    } catch (e) {
+      // the request's own fault, not an RPC error
+      handleError(req, res, 400, e instanceof Error ? e.message : 'Invalid request body');
+      return;
+    }
+    try {
+      // Broadcast through qbitd under every backend, as tx/push does. The
+      // esplora backend can't: upstream's nginx sends this route to electrs
+      const txIdResult = await bitcoinCoreApi.$sendRawTransaction(rawTx);
       res.send(txIdResult);
     } catch (e: any) {
-      handleError(req, res, 400, (e.message && e.code) ? 'sendrawtransaction RPC error: ' + JSON.stringify({ code: e.code })
-        : 'Failed to send raw transaction');
+      handleRpcError(req, res, e, 'sendrawtransaction', 'Failed to send raw transaction');
     }
   }
 
   private async $postTransactionForm(req: Request, res: Response) {
     res.setHeader('content-type', 'text/plain');
+    let txHex: string;
     try {
-      const txHex = Common.getTransactionFromRequest(req, true);
+      txHex = Common.getTransactionFromRequest(req, true);
+    } catch (e) {
+      handleError(req, res, 400, e instanceof Error ? e.message : 'Invalid request body');
+      return;
+    }
+    try {
       const txIdResult = await bitcoinClient.sendRawTransaction(txHex);
       res.send(txIdResult);
     } catch (e: any) {
-      handleError(req, res, 400, (e.message && e.code) ? 'sendrawtransaction RPC error: ' + JSON.stringify({ code: e.code })
-        : 'Failed to send raw transaction');
+      handleRpcError(req, res, e, 'sendrawtransaction', 'Failed to send raw transaction');
     }
   }
 
   private async $testTransactions(req: Request, res: Response) {
+    let rawTxs: string[];
     try {
-      const rawTxs = Common.getTransactionsFromRequest(req);
+      rawTxs = Common.getTransactionsFromRequest(req);
+    } catch (e) {
+      handleError(req, res, 400, e instanceof Error ? e.message : 'Invalid request body');
+      return;
+    }
+    try {
       const maxfeerate = parseFloat(req.query.maxfeerate as string);
-      const result = await bitcoinApi.$testMempoolAccept(rawTxs, maxfeerate);
+      // through qbitd under every backend, as $postTransaction
+      const result = await bitcoinCoreApi.$testMempoolAccept(rawTxs, maxfeerate);
       res.send(result);
     } catch (e: any) {
-      handleError(req, res, 400, (e.message && e.code) ? 'testmempoolaccept RPC error: ' + JSON.stringify({ code: e.code })
-        : 'Failed to test transactions');
+      handleRpcError(req, res, e, 'testmempoolaccept', 'Failed to test transactions');
     }
   }
 
   private async $submitPackage(req: Request, res: Response) {
+    let rawTxs: string[];
     try {
-      const rawTxs = Common.getTransactionsFromRequest(req);
+      rawTxs = Common.getTransactionsFromRequest(req);
+    } catch (e) {
+      handleError(req, res, 400, e instanceof Error ? e.message : 'Invalid request body');
+      return;
+    }
+    try {
       const maxfeerate = parseFloat(req.query.maxfeerate as string);
       const maxburnamount = parseFloat(req.query.maxburnamount as string);
       const result = await bitcoinClient.submitPackage(rawTxs, maxfeerate ?? undefined, maxburnamount ?? undefined);
       res.send(result);
     } catch (e: any) {
-      handleError(req, res, 400, (e.message && e.code) ? 'submitpackage RPC error: ' + JSON.stringify({ code: e.code })
-        : 'Failed to submit package');
+      handleRpcError(req, res, e, 'submitpackage', 'Failed to submit package');
     }
   }
 

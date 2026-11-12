@@ -65,8 +65,11 @@ gets one commit for each pull request, under GitHub's merge commit. That
 commit's subject is the pull request's title, so write the title in the same
 style. Leave "Allow edits by maintainers" on, so the maintainer can push the
 signed commit to your branch. If your fork can't offer that, a maintainer
-opens the same change from a branch in this repository. The rulesets that
-enforce this are in [`.github/rulesets/`](.github/rulesets/).
+opens the same change from a branch in this repository. An open pull request
+usually shows a failing `signed-landing` check until the maintainer has done
+that, which is expected. The check starts reporting once its workflow has been
+promoted to `main`. The rulesets that enforce this are in
+[`.github/rulesets/`](.github/rulesets/).
 
 ## Review
 

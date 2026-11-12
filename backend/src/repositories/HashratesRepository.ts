@@ -327,6 +327,31 @@ class HashratesRepository {
   }
 
   /**
+   * Have the next indexer run index the missing hashrates. Each run of the
+   * daily and the weekly indexer indexes every period without hashrates, but
+   * after startup they run only once a day, and on Mondays.
+   */
+  public retryMissingHashrates(): void {
+    mining.lastHashrateIndexingDate = null;
+    mining.lastWeeklyHashrateIndexingDate = null;
+  }
+
+  /**
+   * Delete the daily and weekly hashrates of the periods ending between two
+   * timestamps, and have the next indexer run index them again
+   * @asyncUnsafe
+   */
+  public async $deleteHashratesBetween(from: number, to: number): Promise<void> {
+    try {
+      await DB.query(`DELETE FROM hashrates WHERE hashrate_timestamp BETWEEN FROM_UNIXTIME(?) AND FROM_UNIXTIME(?)`, [from, to]);
+      this.retryMissingHashrates();
+    } catch (e) {
+      logger.err('Cannot delete hashrates between two timestamps. Reason: ' + (e instanceof Error ? e.message : e), logger.tags.mining);
+      throw e;
+    }
+  }
+
+  /**
    * Delete hashrates from the database from timestamp
    * @asyncSafe
    */

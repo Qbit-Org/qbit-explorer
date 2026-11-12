@@ -102,12 +102,15 @@ jobs:
             --platform linux/amd64 \
             ./backend/
 
-      # docker/docker-compose.yml selects its images through these variables,
-      # so the test stack exercises the same path operators use.
+      # docker/docker-compose.yml selects its images, and qbitd's RPC login,
+      # through these variables, so the test stack exercises the same path
+      # operators use. No qbitd runs here, so the login is a placeholder.
       - name: Point docker-compose at the locally built images
         run: |
           echo "QBIT_EXPLORER_FRONTEND_IMAGE=test-frontend:${TAG}" >> "$GITHUB_ENV"
           echo "QBIT_EXPLORER_BACKEND_IMAGE=test-backend:${TAG}" >> "$GITHUB_ENV"
+          echo "CORE_RPC_USERNAME=ci" >> "$GITHUB_ENV"
+          echo "CORE_RPC_PASSWORD=no-qbitd-in-this-job" >> "$GITHUB_ENV"
 
       - name: Prepare docker-compose test file
         run: |

@@ -43,10 +43,6 @@ class Blocks {
   private blockSummaries: BlockSummary[] = [];
   private currentBlockHeight = 0;
   private initialSyncComplete = false;
-  // a run has ended with a cached block at or below the node's tip, which it
-  // checked against the node's chain, or with none cached. Until then, a
-  // cache restored from disk or Redis may predate a chain wipe
-  private cacheChecked = false;
   // a reorg changed the cached chain, and clients have not been sent the new
   // chain yet: $syncBlocks sends it once, at the end of its next complete run
   private reorgNotificationPending = false;
@@ -1102,7 +1098,7 @@ class Blocks {
     // fast-forward, check the cached tip (one getblockhash while the node has
     // it). If the node doesn't, roll back to its chain first, and decide on
     // the fast-forward from there.
-    if (cachedTip && blockHeightTip - this.currentBlockHeight > config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 2 && await this.$rollBackToNodeChain(blockHeightTip, timer)) {
+    if (cachedTip && blockHeightTip - this.currentBlockHeight > config.MEMPOOL.INITIAL_BLOCKS_AMOUNT * 2 && await this.$rollBackToNodeChain(blockHeightTip, bestBlockHash, timer)) {
       this.currentBlockHeight = this.syncStartHeight(blockHeightTip);
     }
 
@@ -1111,12 +1107,12 @@ class Blocks {
     // the loop below checks each block it fetches against the cached block
     // below it, but fetches none while the node is no higher than the cached
     // tip. So check the tip here when it isn't the node's best block, as after
-    // a reorg that replaced it at the same height or with a shorter chain, or
-    // when a disk or Redis cache predates a chain wipe. After a rollback, the
-    // fast-forward is decided again: the fork can be below the gap an earlier
-    // fast-forward left.
+    // a reorg that replaced it at the same height or with a shorter chain,
+    // after invalidateblock, or after a chain wipe, which a disk or Redis
+    // cache can also predate. After a rollback, the fast-forward is decided
+    // again: the fork can be below the gap an earlier fast-forward left.
     if (cachedTip && !nodeHasCachedTip && blockHeightTip <= cachedTip.height) {
-      const dropped = await this.$rollBackToNodeChain(blockHeightTip, timer);
+      const dropped = await this.$rollBackToNodeChain(blockHeightTip, bestBlockHash, timer);
       if (dropped > 0) {
         this.currentBlockHeight = this.syncStartHeight(blockHeightTip);
         fastForwarded = this.fastForward(blockHeightTip, dropped) || fastForwarded;
@@ -1148,7 +1144,7 @@ class Blocks {
       // off, as $handleReorgs only compares the block with the database.
       const parent: BlockExtended | undefined = this.blocks[this.blocks.length - 1];
       if (parent && parent.height === block.height - 1 && block.previousblockhash !== parent.id) {
-        const dropped = await this.$rollBackToNodeChain(blockHeightTip, timer);
+        const dropped = await this.$rollBackToNodeChain(blockHeightTip, bestBlockHash, timer);
         if (dropped === 0) {
           // the node has the cached tip on its best chain again, so its chain
           // changed during this run: leave the sync to the next run
@@ -1281,9 +1277,6 @@ class Blocks {
     // this run caught up with the tip the node reported when it started (a
     // run that fails throws before getting here)
     this.initialSyncComplete = true;
-    // with a cached block at or below the node's tip, the run checked one:
-    // the cached tip as its best block, in a rollback, or in the loop
-    this.cacheChecked = this.cacheChecked || this.blocks.length === 0 || this.blocks[0].height <= blockHeightTip;
 
     diskCache.unlock();
 
@@ -1326,16 +1319,16 @@ class Blocks {
    * last one it still has (the fork point), so that $syncBlocks syncs again
    * from there. Returns how many blocks it dropped.
    *
-   * Blocks above the node's tip are kept while the highest cached block at
-   * or below it is on the node's chain: the node may only be catching up, as
-   * after a restart. Once a run has checked the cache, they are also kept
-   * when no cached block is at or below the node's tip. Until then, such a
-   * cache, as a disk or Redis cache from before a chain wipe can be, is kept
-   * only while the node reports itself syncing.
+   * Blocks above the node's tip, when the highest cached block at or below
+   * it is on the node's chain or there is none, are kept while the node
+   * reports itself syncing: it may only be catching up, as after a restart
+   * or with -reindex-chainstate. A node that reports itself synced no longer
+   * has them, as after invalidateblock or a chain wipe, so they are dropped,
+   * if the node is still at the tip this run read.
    *
    * @asyncUnsafe
    */
-  private async $rollBackToNodeChain(blockHeightTip: number, timer: { progress: string }): Promise<number> {
+  private async $rollBackToNodeChain(blockHeightTip: number, bestBlockHash: string, timer: { progress: string }): Promise<number> {
     let kept = this.blocks.length;
     let diverged = false;
     while (kept > 0) {
@@ -1352,16 +1345,19 @@ class Blocks {
     if (kept === this.blocks.length) {
       return 0;
     }
-    if (!diverged && (kept > 0 || this.cacheChecked)) {
-      logger.debug(`The node's tip #${blockHeightTip} is below the cached tip #${this.blocks[this.blocks.length - 1].height}, on the same chain: waiting for the node`, logger.tags.mining);
-      return 0;
-    }
     if (!diverged) {
-      // no cached block can be checked, but the node may only be catching
-      // up, as with -reindex-chainstate or after a long stop
+      // the blocks to drop are all above the node's tip, and the highest
+      // cached block at or below it, if any, is on the node's chain. The node
+      // may only be catching up, as after a restart or -reindex-chainstate
       const blockchainInfo: IBitcoinApi.BlockchainInfo = await bitcoinClient.getBlockchainInfo();
       if (blockchainInfo.initialblockdownload || blockchainInfo.headers > blockchainInfo.blocks) {
-        logger.debug(`The node's tip #${blockHeightTip} is below every cached block (#${this.blocks[0].height} to #${this.blocks[this.blocks.length - 1].height}), and the node is still syncing (headers to #${blockchainInfo.headers}): waiting for it`, logger.tags.mining);
+        logger.debug(`The node's tip #${blockHeightTip} is below the cached tip #${this.blocks[this.blocks.length - 1].height}, and the node is still syncing (headers to #${blockchainInfo.headers}): waiting for it`, logger.tags.mining);
+        return 0;
+      }
+      // synced, but at another tip than the one the cache was checked
+      // against: a block it connected meanwhile may be a cached one
+      if (blockchainInfo.bestblockhash !== bestBlockHash || blockchainInfo.blocks !== blockHeightTip) {
+        logger.debug(`The node's best block changed while the cache was checked against its tip #${blockHeightTip}: checking again on the next run`, logger.tags.mining);
         return 0;
       }
     }

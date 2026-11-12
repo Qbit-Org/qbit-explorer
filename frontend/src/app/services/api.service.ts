@@ -242,10 +242,13 @@ export class ApiService {
       );
   }
 
-  getBlocks$(from: number): Observable<BlockExtended[]> {
+  // qbit: the backend lets browsers and CDNs keep an answer for 60 seconds. With `fresh`, the URL gets a
+  // new query parameter, which the backend ignores, so that none of them answers with a copy.
+  getBlocks$(from: number, fresh = false): Observable<BlockExtended[]> {
     return this.httpClient.get<BlockExtended[]>(
       this.apiBaseUrl + this.apiBasePath + `/api/v1/blocks` +
-      (from !== undefined ? `/${from}` : ``)
+      (from !== undefined ? `/${from}` : ``) +
+      (fresh ? `?fresh=${Date.now()}` : ``)
     );
   }
 

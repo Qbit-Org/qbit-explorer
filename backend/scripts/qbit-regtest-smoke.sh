@@ -9,6 +9,10 @@ QBIT_CLI="${QBIT_CLI:-}"
 QBIT_CLI_ARGS="${QBIT_CLI_ARGS:-}"
 MAX_QBIT_BLOCK_WEIGHT="${MAX_QBIT_BLOCK_WEIGHT:-2000000}"
 SKIP_BACKEND="${SKIP_BACKEND:-0}"
+# Set by the regtest harness's smoke.env only
+QBIT_REGTEST_SEED="${QBIT_REGTEST_SEED:-}"
+# How long the backend gets to follow the node's tip
+TIP_WAIT="${TIP_WAIT:-60}"
 
 TMP_DIR="$(mktemp -d)"
 FETCH_OUT=""
@@ -551,6 +555,81 @@ check_qbit_cli() {
   fi
 }
 
+qbit_cli() {
+  # shellcheck disable=SC2086 # QBIT_CLI_ARGS holds several arguments
+  "$QBIT_CLI" $QBIT_CLI_ARGS "$@"
+}
+
+# backend_tip: print the backend's tip height and the hash of the newest block
+# in /blocks, which the backend serves from its own block cache
+backend_tip() {
+  local height list="$TMP_DIR/backend-tip-blocks"
+  height="$(curl -fsS --max-time "$CURL_TIMEOUT" "$API_URL/blocks/tip/height" 2>/dev/null)" || return 1
+  curl -fsS --max-time "$CURL_TIMEOUT" "$API_URL/blocks" -o "$list" 2>/dev/null || return 1
+  printf '%s %s' "$height" "$(node -e "try { process.stdout.write(String(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'))[0].id)); } catch (e) {}" "$list")"
+}
+
+# wait_for_backend_tip HEIGHT HASH: wait up to TIP_WAIT seconds for the
+# backend's tip to be block HASH at HEIGHT. TIP_SEEN holds the last tip seen.
+wait_for_backend_tip() {
+  local deadline=$((SECONDS + TIP_WAIT))
+  TIP_SEEN=""
+  while ((SECONDS < deadline)); do
+    TIP_SEEN="$(backend_tip)" || TIP_SEEN="no answer"
+    [[ "$TIP_SEEN" == "$1 $2" ]] && return 0
+    sleep 0.5
+  done
+  return 1
+}
+
+# After invalidateblock with no block to replace it, the backend follows the
+# node back down within a few polls, as after any other reorg. The check mines
+# a block and invalidates it, so it runs only against the regtest harness's
+# node: its smoke.env sets QBIT_REGTEST_SEED. The node ends at the tip it had.
+check_invalidated_tip() {
+  if [[ -z "$QBIT_CLI" || -z "$QBIT_REGTEST_SEED" ]]; then
+    warn "QBIT_CLI or QBIT_REGTEST_SEED is not set; skipping the invalidateblock check"
+    return
+  fi
+  local chain wallet address height hash mined
+  chain="$(qbit_cli getblockchaininfo 2>/dev/null | node -e "try { process.stdout.write(String(JSON.parse(require('fs').readFileSync(0, 'utf8')).chain)); } catch (e) {}")"
+  if [[ "$chain" != regtest ]]; then
+    warn "qbitd reports chain '$chain', not regtest; skipping the invalidateblock check"
+    return
+  fi
+  wallet="$(node -e "try { process.stdout.write(String(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).wallet)); } catch (e) {}" "$QBIT_REGTEST_SEED")"
+  if ! height="$(qbit_cli getblockcount 2>/dev/null)" || ! hash="$(qbit_cli getbestblockhash 2>/dev/null)" ||
+    ! address="$(qbit_cli -rpcwallet="$wallet" getnewaddress smoke-invalidateblock p2mr 2>/dev/null)"; then
+    fail "qbit-cli could not read the tip or make an address for the invalidateblock check"
+    return
+  fi
+  if ! wait_for_backend_tip "$height" "$hash"; then
+    fail "backend tip is not the node's #$height $hash before the invalidateblock check (saw: $TIP_SEEN)"
+    return
+  fi
+
+  # an empty block, so the mempool stays as it is
+  mined="$(qbit_cli generateblock "$address" '[]' 2>/dev/null | node -e "try { process.stdout.write(String(JSON.parse(require('fs').readFileSync(0, 'utf8')).hash)); } catch (e) {}")"
+  if ! is_hash "$mined"; then
+    fail "qbit-cli generateblock did not return a block hash: $mined"
+    return
+  fi
+  if ! wait_for_backend_tip "$((height + 1))" "$mined"; then
+    fail "backend did not sync block #$((height + 1)) $mined for the invalidateblock check (saw: $TIP_SEEN)"
+    return
+  fi
+
+  if ! qbit_cli invalidateblock "$mined" >/dev/null 2>&1; then
+    fail "qbit-cli invalidateblock $mined failed"
+    return
+  fi
+  if wait_for_backend_tip "$height" "$hash"; then
+    ok "backend tip follows invalidateblock back to #$height with no new block"
+  else
+    fail "backend tip did not follow invalidateblock back to #$height $hash within ${TIP_WAIT}s (saw: $TIP_SEEN)"
+  fi
+}
+
 if [[ "$SKIP_BACKEND" == "1" || "$SKIP_BACKEND" == "true" ]]; then
   warn "SKIP_BACKEND is set; skipping mempool backend checks"
 else
@@ -558,6 +637,10 @@ else
 fi
 check_esplora
 check_qbit_cli
+# last: it moves the node's tip, and back
+if [[ "$SKIP_BACKEND" != "1" && "$SKIP_BACKEND" != "true" ]]; then
+  check_invalidated_tip
+fi
 
 printf '\nqbit regtest smoke summary: %s passed, %s warnings, %s failed\n' "$PASSED" "$WARNED" "$FAILED"
 

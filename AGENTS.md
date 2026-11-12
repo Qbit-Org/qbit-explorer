@@ -187,7 +187,9 @@ The qbit CI/CD workflows are:
   is recreated at another address. It runs the same check on `v*` tags, and
   never pushes images anywhere. The frontend build gets the job's read-only
   `GITHUB_TOKEN` as a BuildKit secret, for the GitHub API calls that list the
-  mining pool logos.
+  mining pool logos. The compose file requires `CORE_RPC_USERNAME` and
+  `CORE_RPC_PASSWORD`; no qbitd runs in this job, so it sets a placeholder
+  login through `GITHUB_ENV`.
 - `.github/workflows/qbit-design-check.yml` — drift gate for the vendored
   qbit.org design contract in `frontend/src/resources/qbit-design/`. Those
   vendored files are machine-managed by `frontend/scripts/sync-qbit-design.mjs`
@@ -202,15 +204,25 @@ The qbit CI/CD workflows are:
   MariaDB as a service container, and the backend with
   `MEMPOOL.BACKEND=esplora`. It then runs the Cypress specs in
   `frontend/cypress/e2e/regtest/` against that stack.
+- `.github/workflows/signed-landing.yml` — the `signed-landing` check: a pull
+  request passes once it is one commit that a person signed
+  ([`.github/rulesets/README.md`](.github/rulesets/README.md)). It is identical
+  in every Qbit-Org repository except its `AS_IS_HEADS` line, so change the
+  shared part in all of them together. It is the one
+  workflow on `pull_request_target`, which GitHub always runs from `main`'s
+  copy: it reads the pull request through the API with
+  `permissions: pull-requests: read`, checks nothing out and runs none of the
+  pull request's code. It runs on GitHub's `ubuntu-24.04` runner.
 
-Keep the workflows safe for a public repository. Each one sets
+Keep the workflows safe for a public repository. Each of the others sets
 `permissions: contents: read` and checks out with `persist-credentials: false`.
 Third-party actions are pinned to a commit SHA; GitHub-owned `actions/*` stay
 pinned to their major version tag (`@v4`). Only the Docker publish jobs read
 secrets, and they skip pull requests from forks. The automatic `GITHUB_TOKEN`
 isn't a repository secret, and under `contents: read` it can only read; pass
 it only to the step that needs it, as `docker.yml` does. Do not add
-`pull_request_target` or `workflow_run` triggers that run pull request code.
+`pull_request_target` or `workflow_run` triggers that run pull request code;
+`signed-landing.yml` runs none.
 
 `ci.yml`'s Repository checks job fails a pull request with files under
 `contributors/`, which are upstream's CLA signatures (README.md, Upstream).
@@ -219,16 +231,17 @@ in a built translation file whose English text differs from `messages.xlf`, or
 whose translation uses a placeholder `messages.xlf`'s English doesn't have
 (CONTRIBUTING.md, Translations).
 
-Dependabot reads `.github/dependabot.yml` only from `main`, so a change to it
-takes effect when a release brings it there. The file on this branch opens
-version updates, including `cargo` for `rust/gbt`, against `1.x.x`. Security
-updates always open against `main`. Dependabot reads `rust/gbt/rust-toolchain`
-only in TOML form, so keep that file TOML. Workflows and the npm build read its
-channel with `rust/gbt/scripts/toolchain-channel.sh`, which fails when it finds
-none.
+Dependabot version updates are off: the repository has no
+`.github/dependabot.yml`. Dependency changes are made by hand, each with a
+concrete reason (a fixed advisory, a needed fix, or matching upstream
+mempool's versions), checked with a full-tree audit of both lockfiles
+(`npm audit --package-lock-only`, with and without `--omit=dev`) and of
+`rust/gbt/Cargo.lock`. Keep `rust/gbt/rust-toolchain` in TOML form: workflows
+and the npm build read its channel with `rust/gbt/scripts/toolchain-channel.sh`,
+which fails when it finds none.
 
-Every checked-in GitHub Actions job runs on the pinned Blacksmith Ubuntu 24.04
-runner `blacksmith-4vcpu-ubuntu-2404`. The Blacksmith GitHub App must retain
+Every checked-in GitHub Actions job except `signed-landing` runs on the pinned
+Blacksmith Ubuntu 24.04 runner `blacksmith-4vcpu-ubuntu-2404`. The Blacksmith GitHub App must retain
 access to this repository or jobs using that label will remain queued.
 Dependency cache actions work unchanged on Blacksmith; keep the existing
 Docker Buildx/QEMU pipeline until a separately validated native
@@ -256,9 +269,8 @@ cherry-picks) lives in [`CONTRIBUTING.md`](CONTRIBUTING.md).
   NodeSource's `setup_26.x` (in both backend stages), are the ones the
   production image build uses. When NodeSource republishes the script at the
   same URL, the backend build fails that check: review the new script and
-  update both stages. A PR that changes any of these pins, a Dependabot
-  digest bump included, says so in its description, so that the production
-  deployment moves with it.
+  update both stages. A PR that changes any of these pins says so in its
+  description, so that the production deployment moves with it.
 - Check every weight/vsize change for the WSF=1 invariant.
 - Qbit mainnet has launched; mainnet wording is no longer launch-gated. The
   qbit.org design contract (banner and nav) is authoritative for public

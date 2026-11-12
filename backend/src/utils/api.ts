@@ -81,6 +81,45 @@ export function handleLookupError(req: Request, res: Response, e: unknown, isNot
   handleError(req, res, 500, failure);
 }
 
+// What a route that sends transactions to qbitd answers, with 503, when qbitd can't take the call now
+export const QBITD_UNAVAILABLE = 'qbitd is unavailable, try again later';
+
+// qbitd's codes for a node that can't serve calls yet (Qbit-Org/qbit v1.0.0 src/rpc/protocol.h). Every RPC answers
+// RPC_IN_WARMUP, -28, while qbitd starts. RPC_CLIENT_IN_INITIAL_DOWNLOAD, -10, comes only from importmempool in
+// v1.0.0, but means the same.
+const RPC_NOT_READY_CODES = [-28, -10];
+
+// The RPC client's own errors when qbitd's answer isn't a JSON-RPC reply (rpc-api/jsonrpc.ts): an empty 401 for a
+// wrong login, 403 for an address rpcallowip doesn't allow, or 503 "Work queue depth exceeded". Their codes, -32602
+// and -32603, aren't qbitd's.
+const RPC_NO_REPLY = /^(Invalid params, response status code: \d+|Problem parsing JSON response from server)$/;
+
+// Whether a call to qbitd's RPC failed for want of qbitd rather than because of what it sent: qbitd couldn't be
+// reached or didn't answer in time, which the RPC client reports with a string code such as ECONNREFUSED or
+// ETIMEDOUT, gave no JSON-RPC reply, or isn't ready yet.
+export function isRpcUnavailableError(e: unknown): boolean {
+  const code = (e as { code?: unknown })?.code;
+  if (typeof code === 'string') {
+    return true;
+  }
+  if (typeof code === 'number' && RPC_NOT_READY_CODES.includes(code)) {
+    return true;
+  }
+  return e instanceof Error && RPC_NO_REPLY.test(e.message);
+}
+
+// Answers a failed call to qbitd from a route that sends it transactions. 503 when qbitd couldn't take the call, so
+// that a wallet tries again later instead of dropping the transaction, and otherwise 400 with qbitd's code, as qbitd
+// turned the transactions down, or with failure when the error has no code.
+export function handleRpcError(req: Request, res: Response, e: unknown, rpc: string, failure: string): void {
+  if (isRpcUnavailableError(e)) {
+    handleError(req, res, 503, QBITD_UNAVAILABLE);
+    return;
+  }
+  const { message, code } = (e ?? {}) as { message?: unknown, code?: unknown };
+  handleError(req, res, 400, (message && code) ? `${rpc} RPC error: ` + JSON.stringify({ code }) : failure);
+}
+
 // electrs's reason for an after_txid it cannot find, which the electrum backend answers with too
 export const AFTER_TXID_NOT_FOUND = 'after_txid not found';
 

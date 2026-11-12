@@ -239,7 +239,7 @@ class BitcoindElectrsApi extends BitcoinApi implements AbstractBitcoinApi {
         await this.bitcoindClient.getRawTransaction(lastSeenTxId, false);
       } catch (e) {
         // only a definite answer: with txindex disabled or still building, Core cannot rule a
-        // confirmed transaction out, so that error stays a 500
+        // confirmed transaction out, so that error goes on, and the route answers 503
         if (isTxNotInMempoolOrChainError(e)) {
           throw new Error(AFTER_TXID_NOT_FOUND);
         }

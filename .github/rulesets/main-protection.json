@@ -46,23 +46,23 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Backend (dev) - node 26.12.1",
+            "context": "Backend (dev) - node 26.13.1",
             "integration_id": 15368
           },
           {
-            "context": "Backend (prod) - node 26.12.1",
+            "context": "Backend (prod) - node 26.13.1",
             "integration_id": 15368
           },
           {
-            "context": "Frontend (dev) - node 26.12.1",
+            "context": "Frontend (dev) - node 26.13.1",
             "integration_id": 15368
           },
           {
-            "context": "Frontend (prod) - node 26.12.1",
+            "context": "Frontend (prod) - node 26.13.1",
             "integration_id": 15368
           },
           {
-            "context": "Backend Integration Tests - node 26.12.1",
+            "context": "Backend Integration Tests - node 26.13.1",
             "integration_id": 15368
           },
           {

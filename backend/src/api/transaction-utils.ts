@@ -5,6 +5,7 @@ import * as bitcoinjs from 'bitcoinjs-lib';
 import logger from '../logger';
 import config from '../config';
 import pLimit from '../utils/p-limit';
+import { isTxNotFoundError } from '../utils/api';
 import { feeRatePerVsize, sigopsToAdjustedVsize, weightToFractionalVsize, weightToVsize, WITNESS_SCALE_FACTOR } from '../utils/weight-units';
 import { decodeInputScripts, decodeScript, DecodedInputScripts, getSigOpCount, getWitnessSigOps, isP2shScript } from '../utils/bitcoin-script';
 
@@ -27,17 +28,24 @@ class TransactionUtils {
   }
 
   // Wrapper for $getTransactionExtended with an automatic retry direct to Core if the first API request fails.
-  // Propagates any error from the retry request.
+  // Propagates any error from the retry request, which the callers log as an error. A first request that finds no
+  // such transaction logs at debug level: electrs answers 404 for a new block's coinbase until it has indexed the
+  // block. Any other first failure, such as an electrs outage, logs an error even when the retry works.
   public async $getTransactionExtendedRetry(txid: string, addPrevouts = false, lazyPrevouts = false, forceCore = false, addMempoolData = false): Promise<TransactionExtended> {
     try {
       const result = await this.$getTransactionExtended(txid, addPrevouts, lazyPrevouts, forceCore, addMempoolData);
       if (result) {
         return result;
       } else {
-        logger.err(`Cannot fetch tx ${txid}. Reason: backend returned null data`);
+        logger.err(`Cannot fetch tx ${txid} from the backend, retrying with qbitd. Reason: backend returned null data`);
       }
     } catch (e) {
-      logger.err(`Cannot fetch tx ${txid}. Reason: ` + (e instanceof Error ? e.message : e));
+      const msg = `Cannot fetch tx ${txid} from the backend, retrying with qbitd. Reason: ` + (e instanceof Error ? e.message : e);
+      if (isTxNotFoundError(e)) {
+        logger.debug(msg);
+      } else {
+        logger.err(msg);
+      }
     }
     // retry direct from Core if first request failed
     return this.$getTransactionExtended(txid, addPrevouts, lazyPrevouts, true, addMempoolData);

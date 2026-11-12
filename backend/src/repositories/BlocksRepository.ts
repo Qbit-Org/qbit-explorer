@@ -68,6 +68,64 @@ interface DatabaseBlock {
   stale: boolean;
 }
 
+// a repair below the walk in $validateChain: the node's block to make the
+// only canonical row at a height
+interface BelowWalkRepair {
+  hash: string;
+  height: number;
+  // the timestamps of the canonical rows there, which the hashrates of
+  // some periods may have been computed with: those around a lone row, and
+  // the one after two or more, whose window starts there with either row
+  canonicalTimestamps: number[];
+  // the node's block isn't indexed there yet
+  index?: boolean;
+}
+
+// a row of the snapshot $validateChain checks
+interface ChainCheckRow {
+  height: number;
+  hash: string;
+  previous_block_hash: string | null;
+  timestamp: number;
+  stale: number;
+}
+
+// The timestamp of the oldest block the hashrate indexers index from, as
+// $getOldestConsecutiveBlock finds it, once the repairs are written: the
+// lowest of the canonical chain that runs down from the highest canonical
+// row without a gap. Read from the snapshot, with the repaired heights
+// canonical, as a repair can fill a gap.
+function oldestConsecutiveTimestamp(blocks: ChainCheckRow[], blocksByHeight: Record<number, ChainCheckRow[]>, repairs: BelowWalkRepair[]): number {
+  const repairAt = new Map(repairs.map(repair => [repair.height, repair]));
+  let oldest: ChainCheckRow | undefined;
+  for (let i = 0; i < blocks.length; i++) {
+    const height = blocks[i].height;
+    if (blocks[i - 1]?.height === height) {
+      continue;
+    }
+    if (oldest !== undefined && oldest.height - height > 1) {
+      break;
+    }
+    const rows = blocksByHeight[height];
+    const repair = repairAt.get(height);
+    const canonical = repair ? rows.find(row => row.hash === repair.hash) ?? rows[0] : rows.find(row => !row.stale);
+    if (!canonical) {
+      if (oldest === undefined) {
+        continue;
+      }
+      break;
+    }
+    oldest = canonical;
+  }
+  return oldest?.timestamp ?? 0;
+}
+
+// heights for a log line: '#1, #2', or the first 20 and how many more
+function nameHeights(heights: number[]): string {
+  const named = heights.slice(0, 20).map(height => `#${height}`).join(', ');
+  return heights.length > 20 ? `${named} and ${heights.length - 20} more` : named;
+}
+
 const BLOCK_DB_FIELDS = `
   blocks.index_version AS indexVersion,
   blocks.hash AS id,
@@ -123,6 +181,11 @@ export class IncompleteHashrateWindowError extends Error {
 
 class BlocksRepository {
   static version = 2;
+
+  // the heights below the walk that $validateChain left as they are, as none
+  // of their rows is the node's block, with the rows it found there: they are
+  // only checked again once their rows change
+  private heightsLeftBelowWalk = new Map<number, string>();
 
   /**
    * Save indexed block data in the database
@@ -858,6 +921,11 @@ class BlocksRepository {
     // only canonical one at each height. Declared outside the try for a run
     // that fails before it has written them all
     const repairs: { hash: string, height: number }[] = [];
+    // the same, for the heights below the walk
+    const repairsBelowWalk: BelowWalkRepair[] = [];
+    // until a run writes below the walk, a failure there has changed nothing,
+    // and the indexer goes on as after any failed check
+    let writingBelowWalk = false;
     try {
       const start = new Date().getTime();
       // the earliest timestamp of a block whose canonical status changes
@@ -903,6 +971,9 @@ class BlocksRepository {
       if (indexedBlockAmount > 0) {
         lastIndexedBlockHeight = Math.max(0, tipHeight - indexedBlockAmount + 1);
       }
+      // the lowest height the CPFP indexer indexes, as $getCPFPUnindexedBlocks
+      // finds it: every height when INDEXING_BLOCKS_AMOUNT is -1
+      const lowestCpfpHeight = indexedBlockAmount > 0 ? lastIndexedBlockHeight : 0;
 
 
       for (let height = tipHeight; height > lastIndexedBlockHeight; height--) {
@@ -960,11 +1031,53 @@ class BlocksRepository {
         return false;
       }
 
+      // then, once the walked heights need no repair, the heights below them.
+      // The walk ended with the node's block at the highest of them: the one
+      // its lowest block names as its previous block
+      const nodeHashAtHighest: string | undefined = tipHeight > lastIndexedBlockHeight ? hash : undefined;
+      const leftBelowWalk: { height: number, rows: string, canonical: number }[] = [];
+      await this.$findRepairsBelowWalk(blocks, blocksByHeight, lastIndexedBlockHeight, nodeHashAtHighest, repairsBelowWalk, leftBelowWalk);
+      if (repairsBelowWalk.length > 0) {
+        const heights = repairsBelowWalk.map(repair => repair.height).sort((a, b) => a - b);
+        logger.warn(`Chain divergence detected below block #${lastIndexedBlockHeight + 1}: repairing ${heights.length} ${heights.length === 1 ? 'height' : 'heights'}, ${nameHeights(heights)}`);
+        // The hashrate indexers couldn't index a period whose block window
+        // held two canonical rows at a height other than its first, or a
+        // height with none, and they index every period without hashrates
+        // when they run: they only need to run again, before the next day
+        // or Monday. Those they could index with another chain's block are
+        // deleted first. This asks before writing, in case a run fails
+        // after writing some.
+        // Deleting from a week before the earliest changed block, as above,
+        // would re-index months of hashrates, and CPFP clusters deleted below
+        // the window would never be indexed again.
+        HashratesRepository.retryMissingHashrates();
+        writingBelowWalk = true;
+        await this.$writeRepairsBelowWalk(repairsBelowWalk, lowestCpfpHeight, oldestConsecutiveTimestamp(blocks, blocksByHeight, repairsBelowWalk));
+        // they aren't left alone any more
+        for (const repair of repairsBelowWalk) {
+          this.heightsLeftBelowWalk.delete(repair.height);
+        }
+      }
+      // said once, once the repairs are written: the node isn't asked about
+      // these again until their rows change
+      const unrepaired = leftBelowWalk.filter(left => left.canonical > 0).map(left => left.height).sort((a, b) => a - b);
+      if (unrepaired.length > 0) {
+        logger.warn(`Chain divergence detected below block #${lastIndexedBlockHeight + 1}: none of the canonical blocks at ${nameHeights(unrepaired)} is qbitd's, so they are left as they are`);
+      }
+      for (const left of leftBelowWalk) {
+        this.heightsLeftBelowWalk.set(left.height, left.rows);
+      }
+      if (repairsBelowWalk.length > 0) {
+        // the indexer runs again 10 seconds after a false, and validates the
+        // chain again before the hashrate indexers run
+        return false;
+      }
+
       logger.debug(`validated best chain of ${tipHeight} blocks in ${new Date().getTime() - start} ms`);
       return true;
     } catch (e) {
       logger.err('Cannot validate chain of block hash. Reason: ' + (e instanceof Error ? e.message : e));
-      if (repairs.length > 0) {
+      if (repairs.length > 0 || writingBelowWalk) {
         // repairs found but not all written: the indexer runs again 10
         // seconds after a false, and the next walk finds what's left. A
         // database outage fails the indexer in $generateBlockDatabase, before
@@ -972,6 +1085,181 @@ class BlocksRepository {
         return false;
       }
       return true; // Don't do anything if there is a db error
+    }
+  }
+
+  /**
+   * Write the repairs $validateChain found below its walk: first the data
+   * derived from the rows they replace, so a failure is retried, then the
+   * flags, from the highest height down.
+   * @param oldestIndexedFrom the timestamp of the oldest block the hashrate
+   * indexers will index from once the flags are written
+   * @asyncUnsafe
+   */
+  private async $writeRepairsBelowWalk(repairs: BelowWalkRepair[], lowestCpfpHeight: number, oldestIndexedFrom: number): Promise<void> {
+    // A lone canonical row from another chain made a consecutive block
+    // window, so the hashrates of the periods around it were computed with
+    // it, and the indexers keep them. Two or more canonical rows at a height
+    // fail the windows that hold them, but not one that starts there: it
+    // reads one row of its first height, its anchor, either one, so the
+    // period after them may have been computed with another chain's block.
+    // Delete those, back to the oldest block the indexers will index from,
+    // to have them computed again. From a week before each row to two weeks
+    // after: the periods it's in, and the next ones, which it can start.
+    const timestamps = [...new Set(repairs.flatMap(repair => repair.canonicalTimestamps))];
+    if (timestamps.length > 0) {
+      for (const timestamp of timestamps) {
+        const from = Math.max(timestamp - 604800, oldestIndexedFrom + 1);
+        if (from <= timestamp + 2 * 604800) {
+          await HashratesRepository.$deleteHashratesBetween(from, timestamp + 2 * 604800);
+        }
+      }
+    }
+    // the node's block at the window's lowest height, where no row is it:
+    // the block indexer covers that height, but by its next run the window
+    // may have moved past it
+    for (const repair of repairs) {
+      if (repair.index) {
+        await blocks.$indexBlock(repair.hash);
+      }
+    }
+    // The CPFP indexer covers the window's lowest height (every height with
+    // INDEXING_BLOCKS_AMOUNT at -1). As the walk's repairs and the reorg
+    // cleanup do, delete the clusters from the lowest repaired height it
+    // covers up, and it indexes them all again. Below that, nothing would
+    // index them again, so they stay.
+    const cpfpFrom = Math.min(...repairs.map(repair => repair.height).filter(height => height >= lowestCpfpHeight));
+    if (Common.cpfpIndexingEnabled() && Number.isFinite(cpfpFrom)) {
+      await cpfpRepository.$deleteClustersFrom(cpfpFrom);
+    }
+    // From the highest height down. A repair found above a height the node
+    // was asked about, checking upwards from it, is only found again while
+    // that height still needs a repair, or isn't remembered as left alone: a
+    // failed write must leave that height for the next run, unwritten, and
+    // not remembered.
+    for (const repair of [...repairs].sort((a, b) => b.height - a.height)) {
+      await this.$setCanonicalBlockAtHeight(repair.hash, repair.height);
+    }
+  }
+
+  /**
+   * Find what to repair below the walk in $validateChain, which stops above
+   * the indexing window's lowest height. Rows there were last checked while
+   * they were in the window, and versions before 1.1.0 didn't check for a
+   * second canonical row at a height, which they could leave. Walking those
+   * heights again would ask the node about every one that isn't indexed, so
+   * this checks only the heights without exactly one canonical row, and asks
+   * the node about each one it may repair: one call per repaired height.
+   *
+   * At a height with two or more canonical rows, the node's block becomes the
+   * only canonical one. If none of them is the node's block, the height is
+   * left as it is: with no canonical row, it would be a gap that nothing
+   * indexes below the window, and the hashrate indexers stop at a gap. A
+   * height with only stale rows is asked about only when the canonical row
+   * above it names one of them as its previous block: it most often holds an
+   * orphan whose sibling isn't indexed, and asking about every such height
+   * would repeat on every run. The row above isn't trusted on its own, as it
+   * can be another chain's block too.
+   *
+   * A height with one canonical row isn't checked, except above a height the
+   * node was asked about: there, a canonical row that doesn't name the
+   * node's block below it as its previous block isn't the node's block
+   * either, so the node is asked about that height too, and so on upwards,
+   * up to the highest height the walk didn't check.
+   *
+   * At the highest height, the window's lowest, the node's block is known
+   * from the walk, so even a lone canonical row is checked there, at no
+   * cost. If none of its rows is the node's block, that block is indexed
+   * and made canonical: the block indexer covers that height, so it isn't
+   * left as it is.
+   *
+   * @param blocks the snapshot, from the highest height down
+   * @param highestHeight the highest height the walk didn't check
+   * @param nodeHashAtHighest the node's block there, if the walk knows it
+   * @param repairs gets the node's block to make the only canonical row at
+   * each height it repairs
+   * @param leftAlone gets each height the node was asked about where none
+   * of the rows is its block, with those rows and how many are canonical
+   * @asyncUnsafe
+   */
+  private async $findRepairsBelowWalk(
+    blocks: ChainCheckRow[],
+    blocksByHeight: Record<number, ChainCheckRow[]>,
+    highestHeight: number,
+    nodeHashAtHighest: string | undefined,
+    repairs: BelowWalkRepair[],
+    leftAlone: { height: number, rows: string, canonical: number }[],
+  ): Promise<void> {
+    // the row this made the only canonical one at a height
+    const settled = new Map<number, ChainCheckRow>();
+    // the node's block at each height this asked about
+    const nodeHashAt = new Map<number, string>();
+    const canonicalRowsAt = (height: number): ChainCheckRow[] => (blocksByHeight[height] || []).filter(row => !row.stale);
+    const canonicalRowAt = (height: number): ChainCheckRow | undefined => {
+      if (settled.has(height)) {
+        return settled.get(height);
+      }
+      if (nodeHashAt.has(height)) {
+        // none of its rows is the node's block
+        return undefined;
+      }
+      const canonical = canonicalRowsAt(height);
+      return canonical.length === 1 ? canonical[0] : undefined;
+    };
+    const rowsKeyOf = (rows: ChainCheckRow[]): string => rows.map(row => `${row.hash}:${row.stale ? 1 : 0}`).sort().join(',');
+    /**
+     * Make the node's block the only canonical row at a height, or leave the
+     * height as it is if none of its rows is the node's block
+     * @asyncUnsafe
+     */
+    const ask = async (height: number, rows: ChainCheckRow[], canonicalCount: number): Promise<void> => {
+      const nodeHash = (height === highestHeight ? nodeHashAtHighest : undefined) ?? await bitcoinCoreApi.$getBlockHash(height);
+      nodeHashAt.set(height, nodeHash);
+      const nodeBlock = rows.find(row => row.hash === nodeHash);
+      const canonicalTimestamps = canonicalRowsAt(height).map(row => row.timestamp);
+      if (nodeBlock) {
+        if (nodeBlock.stale || canonicalCount > 1) {
+          settled.set(height, nodeBlock);
+          repairs.push({ hash: nodeBlock.hash, height, canonicalTimestamps });
+        }
+      } else if (height === highestHeight) {
+        repairs.push({ hash: nodeHash, height, canonicalTimestamps, index: true });
+      } else {
+        leftAlone.push({ height, rows: rowsKeyOf(rows), canonical: canonicalCount });
+      }
+    };
+
+    for (let i = 0; i < blocks.length; i++) {
+      const height = blocks[i].height;
+      // the rows at a height are next to each other in the snapshot
+      if (height > highestHeight || blocks[i - 1]?.height === height) {
+        continue;
+      }
+      const rows = blocksByHeight[height];
+      const canonical = canonicalRowsAt(height);
+      const canonicalCount = canonical.length;
+      const knownNodeHash = height === highestHeight ? nodeHashAtHighest : undefined;
+      if (canonicalCount === 1 && (knownNodeHash === undefined || canonical[0].hash === knownNodeHash)) {
+        continue;
+      }
+      const namedAbove = knownNodeHash ?? canonicalRowAt(height + 1)?.previous_block_hash;
+      if (canonicalCount === 0 && !rows.some(row => row.hash === namedAbove)) {
+        continue;
+      }
+      // the window's lowest height is never left alone: it can be one
+      // remembered from when the tip was higher
+      if (height !== highestHeight && this.heightsLeftBelowWalk.get(height) === rowsKeyOf(rows)) {
+        continue;
+      }
+      await ask(height, rows, canonicalCount);
+      // the heights above, which were passed for their one canonical row
+      for (let above = height + 1; above <= highestHeight && !nodeHashAt.has(above); above++) {
+        const canonical = canonicalRowsAt(above);
+        if (canonical.length !== 1 || canonical[0].previous_block_hash === nodeHashAt.get(above - 1)) {
+          break;
+        }
+        await ask(above, blocksByHeight[above], 1);
+      }
     }
   }
 

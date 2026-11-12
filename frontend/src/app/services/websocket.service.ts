@@ -10,6 +10,7 @@ import { take } from 'rxjs/operators';
 import { TransferState, makeStateKey } from '@angular/core';
 import { CacheService } from '@app/services/cache.service';
 import { uncompressDeltaChange, uncompressTx } from '@app/shared/common.utils';
+import { compareBlocks } from '@app/shared/block-chain.utils';
 
 const OFFLINE_RETRY_AFTER_MS = 2000;
 const OFFLINE_PING_CHECK_AFTER_MS = 30000;
@@ -309,13 +310,22 @@ export class WebsocketService {
     }, OFFLINE_PING_CHECK_AFTER_MS);
   }
 
-  // whether a list holds a block at a height the page lists or has cached, with another hash
-  private replacesKnownBlock(blocks: BlockExtended[]): boolean {
+  // How a list compares with the blocks the page lists or has cached. `replaces`: whether it holds a
+  // block at one of their heights, with another hash. `from`: the lowest height from which its chain
+  // may differ from theirs, one above the highest height, below any block it replaces, at which it
+  // holds the same block; 0 if there is none. `removed`: the ids of those it holds another block in
+  // place of, and of those above its tip, which as a reorg's list it removes.
+  private compareWithKnownBlocks(blocks: BlockExtended[]): { replaces: boolean, from: number, removed: string[] } {
     const listed = new Map(this.stateService.blocksSubject$.getValue().map((block) => [block.height, block.id]));
-    return blocks.some((block) => {
-      const known = listed.get(block.height) ?? this.cacheService.getCachedBlock(block.height)?.id;
-      return known !== undefined && known !== block.id;
-    });
+    const known = (height: number): string | undefined => listed.get(height) ?? this.cacheService.getCachedBlock(height)?.id;
+    const { replaced, same } = compareBlocks(blocks, known);
+    const inList = new Map(blocks.map((block) => [block.height, block.id]));
+    const tip = Math.max(...inList.keys());
+    const knownHeights = new Set([...listed.keys(), ...Object.keys(this.cacheService.blockCache).map(Number)]);
+    const removed = [...knownHeights]
+      .filter((height) => height > tip || (inList.has(height) && inList.get(height) !== known(height)))
+      .map(known);
+    return { replaces: replaced !== Infinity, from: same + 1, removed };
   }
 
   handleResponse(response: WebsocketResponse) {
@@ -327,9 +337,11 @@ export class WebsocketService {
 
     if (response.blocks && response.blocks.length) {
       const blocks = response.blocks;
+      const compared = this.compareWithKnownBlocks(blocks);
       // sets the tip too, which only a reorg's list can lower. The list a page gets when it
       // reconnects isn't marked, so one that replaces a block the page has follows a reorg it missed.
-      this.stateService.resetBlocks(blocks, response.reorg === true || this.replacesKnownBlock(blocks));
+      const reorg = response.reorg === true || compared.replaces;
+      this.stateService.resetBlocks(blocks, reorg ? { from: compared.from, removed: compared.removed } : undefined);
     }
 
     if (response.tx) {
