@@ -231,13 +231,14 @@ in a built translation file whose English text differs from `messages.xlf`, or
 whose translation uses a placeholder `messages.xlf`'s English doesn't have
 (CONTRIBUTING.md, Translations).
 
-Dependabot reads `.github/dependabot.yml` only from `main`, so a change to it
-takes effect when a release brings it there. The file on this branch opens
-version updates, including `cargo` for `rust/gbt`, against `1.x.x`. Security
-updates always open against `main`. Dependabot reads `rust/gbt/rust-toolchain`
-only in TOML form, so keep that file TOML. Workflows and the npm build read its
-channel with `rust/gbt/scripts/toolchain-channel.sh`, which fails when it finds
-none.
+Dependabot version updates are off: the repository has no
+`.github/dependabot.yml`. Dependency changes are made by hand, each with a
+concrete reason (a fixed advisory, a needed fix, or matching upstream
+mempool's versions), checked with a full-tree audit of both lockfiles
+(`npm audit --package-lock-only`, with and without `--omit=dev`) and of
+`rust/gbt/Cargo.lock`. Keep `rust/gbt/rust-toolchain` in TOML form: workflows
+and the npm build read its channel with `rust/gbt/scripts/toolchain-channel.sh`,
+which fails when it finds none.
 
 Every checked-in GitHub Actions job except `signed-landing` runs on the pinned
 Blacksmith Ubuntu 24.04 runner `blacksmith-4vcpu-ubuntu-2404`. The Blacksmith GitHub App must retain
@@ -268,9 +269,8 @@ cherry-picks) lives in [`CONTRIBUTING.md`](CONTRIBUTING.md).
   NodeSource's `setup_26.x` (in both backend stages), are the ones the
   production image build uses. When NodeSource republishes the script at the
   same URL, the backend build fails that check: review the new script and
-  update both stages. A PR that changes any of these pins, a Dependabot
-  digest bump included, says so in its description, so that the production
-  deployment moves with it.
+  update both stages. A PR that changes any of these pins says so in its
+  description, so that the production deployment moves with it.
 - Check every weight/vsize change for the WSF=1 invariant.
 - Qbit mainnet has launched; mainnet wording is no longer launch-gated. The
   qbit.org design contract (banner and nav) is authoritative for public
