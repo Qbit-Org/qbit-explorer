@@ -67,7 +67,7 @@ options.
 
 The Dockerfiles pin each base image by digest, and the backend image checks
 NodeSource's Node.js setup script against a SHA-256 before running it.
-Dependabot proposes digest updates. NodeSource can republish `setup_26.x` at
+Digest updates are made by hand. NodeSource can republish `setup_26.x` at
 the same URL, and the backend build then stops at that check: read the new
 script, then put its checksum in both stages of `docker/backend/Dockerfile`.
 
