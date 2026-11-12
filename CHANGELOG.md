@@ -10,8 +10,14 @@
   Transactions page couldn't test. Both routes now go through qbitd, as
   `POST /api/tx/push` does. A broadcast answers the txid, and a transaction
   qbitd refuses gets 400 with qbitd's error code
-  (`sendrawtransaction RPC error: {"code":N}`). Nothing changes under the
-  `none` and `electrum` backends, which already sent both to qbitd.
+  (`sendrawtransaction RPC error: {"code":N}`). The `none` and `electrum`
+  backends already sent both to qbitd.
+- `POST /api/tx` takes the hex as the whole body, whatever its content type,
+  as qbit-electrs's `POST /tx` does. A form, which `curl -d` sends and the
+  API docs show, an `application/octet-stream` body and one without a
+  content type got 400 `sendrawtransaction RPC error: {"code":-1}` under
+  every backend, without reaching qbitd, as the route only read a body sent
+  as text.
 - The backend follows `invalidateblock`, and a chain wiped while it runs,
   such as a regtest reset, without waiting for a new block. It took a qbitd
   tip below its cached blocks for a node catching up, and kept them.
@@ -27,19 +33,34 @@
   block replaced at the same height. After a reorg to a shorter chain, they
   skipped new blocks until the chain passed the old tip. Now the WebSocket's
   blocks win at their heights, a page the reorg reached takes the new
-  chain's blocks, and the page count follows the new tip. When an answer
-  from `/api/v1/blocks` doesn't fit that chain, such as a browser's or CDN's
-  copy from before the reorg, the list asks again, past caches, at most
-  twice and 10 seconds apart, then shows the blocks that fit.
+  chain's blocks, and the page count follows the new tip on every page.
+  When the WebSocket's blocks would leave a gap on the first page, as after
+  the tab missed more blocks than they hold, the page asks the API again.
+  When an answer from `/api/v1/blocks` doesn't fit the WebSocket's chain,
+  such as a browser's or CDN's copy from before the reorg, the list asks
+  again 10 seconds later, past caches. From the third request of a page
+  load on, failed ones included, it shows the blocks that fit instead.
 - With indexing on, the chain check repairs heights below the indexing
-  window that hold two or more canonical block rows. Releases before 1.1.0
-  could leave them, and 1.1.0's check stopped at the window. At each such
-  height, it makes qbitd's block the only canonical row, and has the
-  hashrate indexers index the daily and weekly periods they skipped. They
-  logged `Hashrate window is not consecutive at heights <h> and <h>` and
-  skipped every period around such a height, and block lists showed either
-  row. A height where none of the rows is qbitd's block is left as it is,
-  with one warning.
+  window that hold two or more canonical block rows, which releases before
+  1.1.0 could leave. 1.1.0's check stopped above the window's lowest height.
+  At each such height, it makes qbitd's block the only canonical row, and
+  has the hashrate indexers index the daily and weekly periods they
+  skipped. They logged
+  `Hashrate window is not consecutive at heights <h> and <h>` and skipped
+  every period around such a height, and block lists showed either row. The
+  window's lowest height gets qbitd's block as its only canonical row,
+  indexed first if no row is it. Below that height, a height where none of
+  the rows is qbitd's block is left as it is, with one warning. If it holds
+  two canonical rows, the hashrate periods around it stay skipped.
+  Hashrates computed with a lone row from another chain that the check
+  replaces are computed again.
+- When the chain check repairs the window's lowest height with CPFP
+  indexing on, it replaces that height's CPFP clusters with those of
+  qbitd's block. It first moves the clusters of transactions that another
+  block now holds, as when a block higher up mined them again, to that
+  block, so they keep their CPFP data. If the new clusters aren't saved, it
+  changes no flag and tries again 10 seconds later, also once a new block
+  has moved the window on.
 - A new block's coinbase that qbit-electrs hasn't indexed yet no longer
   logs an error. The backend fetches it as the block arrives, and logged
   `Cannot fetch tx <txid>. Reason: Request failed with status code 404`
@@ -54,10 +75,20 @@
 - `docker/docker-compose.yml` takes qbitd's RPC login from
   `CORE_RPC_USERNAME` and `CORE_RPC_PASSWORD` in `docker/.env`, instead of
   setting `mempool` and `mempool`, so a copied compose file no longer
-  carries a known password. `docker/.env.example` lists both. They have no
-  default: until both are set, every `docker compose` command in `docker/`
-  stops, `down`, `ps` and `logs` included. This breaks existing Compose
-  setups until `docker/.env` has the login (see Upgrading).
+  carries a known password. `docker/.env.example` lists both. The compose
+  file has no default for them: until both are set, every `docker compose`
+  command in `docker/` stops, `down`, `ps` and `logs` included. This breaks
+  existing Compose setups until `docker/.env` has the login (see
+  Upgrading). The backend image's `start.sh` still defaults both to
+  `mempool` for a container started without them.
+- `POST /api/tx`, `/api/tx/push`, `/api/txs/test` and `/api/v1/txs/package`
+  answer 503 `qbitd is unavailable, try again later` when qbitd can't take
+  the call: it can't be reached or doesn't answer in time, is warming up
+  (-28) or not ready (-10), turns the backend away with 401 or 403, or has
+  a full work queue. They answered 400, which a wallet can take for a
+  refused transaction. qbitd's refusals still get 400 with its code. A
+  malformed body gets 400 with the reason, such as `Non-hex request body`,
+  instead of an RPC error with a code the explorer made up.
 - With `MEMPOOL.BACKEND` `electrum` and qbitd's txindex disabled or still
   building, `GET /api/address/:address/txs` and
   `GET /api/scripthash/:scripthash/txs` answer 503 and name qbitd's
@@ -65,7 +96,7 @@
   Both routes look up an `after_txid` outside the history, and the page's
   own transactions, in qbitd, so even a first page with a confirmed
   transaction answered 500. Their other answers keep their status.
-- Node.js 26.12.1 to 26.13.1, the 26.x security release of 2026-11-11, in
+- Node.js 26.12.1 to 26.13.1, the 26.x security release of 2026-11-10, in
   the backend image, the frontend image's build stage, `.nvmrc` and CI. The
   backend serves plain HTTP, so the release's high-severity `http2` and TLS
   fixes don't reach it, but its llhttp update and `https.Agent` fix do.
@@ -73,10 +104,13 @@
   Docker Hub rebuilt on Alpine 3.24.4, for its curl, expat and brotli
   security fixes. nginx stays 1.30.6.
 - Backend dependencies: `bitcoinjs-lib` 6.1.8 to 6.1.10, for three high
-  advisories in code the explorer doesn't call, and the test tools'
-  `@babel/core` 7.28.5 to 7.29.13, for a low one. Frontend dependencies:
-  `domino` 2.1.6 to 2.1.9, which only the SSR server uses, for
-  CVE-2026-101895 and 2.1.9's serialization XSS fixes.
+  advisories in its PSBT fee calculation and `Block.checkProofOfWork()`,
+  which the explorer doesn't use, and the test tools' `@babel/core` 7.28.5
+  to 7.29.13, for a low one. Of the code 6.1.10 changes, the explorer calls
+  only `Psbt.updateInput`, from `POST /api/v1/psbt/addparents`, which now
+  also clears cached fee and transaction data the route doesn't read.
+  Frontend dependencies: `domino` 2.1.6 to 2.1.9, which only the SSR server
+  uses, for CVE-2026-101895 and 2.1.9's serialization XSS fixes.
 
 ### Documentation
 
@@ -107,10 +141,44 @@
 - No database migration and no config change: the schema stays at
   version 113. With indexing on, the first chain check may repair rows
   below the indexing window, as described under Fixed.
+- With a full-history index (`MEMPOOL.INDEXING_BLOCKS_AMOUNT` at `-1`, as
+  in the `production/` templates), duplicate canonical rows are inside the
+  walk instead, which has repaired them since 1.1.0. With CPFP indexing on,
+  as there too, its first repair deletes the CPFP clusters from the lowest
+  repaired height to the tip, and the CPFP indexer rebuilds them, which can
+  take hours on a long chain. A database that ran 1.1.0 with `-1` has had
+  that repair already.
 - Rebuild both images: the backend image and the frontend image's build
   stage use Node.js 26.13.1, and the frontend image serves from the new
   nginx digest. If you run the backend outside Docker, update Node.js to
   26.13.1 too.
+
+### Known limits
+
+- After a reorg deeper than the indexing window, which in practice only a
+  regtest chain sees, the chain check doesn't look again at the heights
+  below the window that it repaired or left alone.
+- If saving another block's CPFP clusters fails during a repair at the
+  window's lowest height, a transaction that block holds can lose its CPFP
+  data.
+- The heights owed new CPFP clusters after a failed save are kept in
+  memory. A restart before the next try, with a new block in between,
+  leaves such a height without clusters.
+- Block lists, in regtest or operator cases: nine or more blocks within a
+  minute of a deep reorg end the protection against cached answers from
+  before it early. After two deep rollbacks in a row, a lagging origin's
+  answer from before the first can show blocks above the tip until a
+  reload, or until the chain passes them.
+- Block lists ask past caches more than they need. After a deep reorg,
+  while the API's answers don't fit the WebSocket's chain, as from a
+  backend left on the old chain, each new block can make an open list send
+  up to three such requests, about three a minute. While the API fails,
+  each retry, every 10 seconds, is one too. Answers to `?fresh=` requests
+  carry the same 60-second `Expires` as others, so caches keep copies that
+  nothing asks for again.
+- A stale first answer, such as a browser's copy from before a reorg the
+  tab didn't see, can leave the page count too high until the next reorg.
+  Only the count is off.
 
 ## 1.1.0
 
