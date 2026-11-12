@@ -80,6 +80,10 @@
           {
             "context": "Vendored qbit.org design contract drift check",
             "integration_id": 15368
+          },
+          {
+            "context": "signed-landing",
+            "integration_id": 15368
           }
         ]
       }

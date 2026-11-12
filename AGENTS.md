@@ -202,15 +202,25 @@ The qbit CI/CD workflows are:
   MariaDB as a service container, and the backend with
   `MEMPOOL.BACKEND=esplora`. It then runs the Cypress specs in
   `frontend/cypress/e2e/regtest/` against that stack.
+- `.github/workflows/signed-landing.yml` — the `signed-landing` check: a pull
+  request passes once it is one commit that a person signed
+  ([`.github/rulesets/README.md`](.github/rulesets/README.md)). It is identical
+  in every Qbit-Org repository except its `AS_IS_HEADS` line, so change the
+  shared part in all of them together. It is the one
+  workflow on `pull_request_target`, which GitHub always runs from `main`'s
+  copy: it reads the pull request through the API with
+  `permissions: pull-requests: read`, checks nothing out and runs none of the
+  pull request's code. It runs on GitHub's `ubuntu-24.04` runner.
 
-Keep the workflows safe for a public repository. Each one sets
+Keep the workflows safe for a public repository. Each of the others sets
 `permissions: contents: read` and checks out with `persist-credentials: false`.
 Third-party actions are pinned to a commit SHA; GitHub-owned `actions/*` stay
 pinned to their major version tag (`@v4`). Only the Docker publish jobs read
 secrets, and they skip pull requests from forks. The automatic `GITHUB_TOKEN`
 isn't a repository secret, and under `contents: read` it can only read; pass
 it only to the step that needs it, as `docker.yml` does. Do not add
-`pull_request_target` or `workflow_run` triggers that run pull request code.
+`pull_request_target` or `workflow_run` triggers that run pull request code;
+`signed-landing.yml` runs none.
 
 `ci.yml`'s Repository checks job fails a pull request with files under
 `contributors/`, which are upstream's CLA signatures (README.md, Upstream).
@@ -227,8 +237,8 @@ only in TOML form, so keep that file TOML. Workflows and the npm build read its
 channel with `rust/gbt/scripts/toolchain-channel.sh`, which fails when it finds
 none.
 
-Every checked-in GitHub Actions job runs on the pinned Blacksmith Ubuntu 24.04
-runner `blacksmith-4vcpu-ubuntu-2404`. The Blacksmith GitHub App must retain
+Every checked-in GitHub Actions job except `signed-landing` runs on the pinned
+Blacksmith Ubuntu 24.04 runner `blacksmith-4vcpu-ubuntu-2404`. The Blacksmith GitHub App must retain
 access to this repository or jobs using that label will remain queued.
 Dependency cache actions work unchanged on Blacksmith; keep the existing
 Docker Buildx/QEMU pipeline until a separately validated native
