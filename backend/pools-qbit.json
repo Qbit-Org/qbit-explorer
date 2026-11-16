@@ -129,6 +129,13 @@
       "tags": ["七彩神仙鱼"],
       "parentAddresses": ["1AfCc4F9c4VTYSE31PUe2kUEKs6ZxiDjxm"],
       "parentTags": ["/F2Pool/", "🐟"]
+    },
+    {
+      "id": 16,
+      "name": "SwitchPoolProfit",
+      "link": "https://switchpoolprofit.com",
+      "addresses": [],
+      "tags": ["/SPP switchpoolprofit/"]
     }
   ]
 }

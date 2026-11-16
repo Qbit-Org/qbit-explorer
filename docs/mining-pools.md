@@ -26,6 +26,7 @@ pool.
 | 13 | RedRock Pool | https://redrock.pro/ | Parent address: `3554kSaWNnP3B49Xyybert7gmxq2YSnfnx`; parent tag: `RedRock` | qbit block `8811335efc0fce401cb6483b65572444266515f911bda74aaf9b3b806c804e3f` (height 8770, AuxPoW lane); its unverified Bitcoin parent work carries `RedRock Pool` and pays 3.13772479 BTC to the registered address, matching the upstream Bitcoin pool registry. The separate 546-sat marker and shared qbit payout address are deliberately excluded |
 | 14 | Himpool | https://himpool.com/ | Tag: `Himpool` | qbit block `000000000000000009606f0601274738864c4861837f260387acf6ba4edc3dc2` (height 18307, permissionless lane); coinbase transaction `362e19e8191cdee1c2b47712686e3ec4d226a4758b3f8bfc9acb57c2c0be7b9a` ends with the exact seven-byte ASCII marker `Himpool` and pays the pool's official Qbit address `qb1z0sq5a2d9grg7hd4g8tagzsk8ylmn7jd0hwdaefxu7pu3runqsdgs70eant` |
 | 15 | F2Pool | https://www.f2pool.com | Address: `qb1zpyh3ygrlnrdzk5nrz0wh9usmeex2tfanq89p5yyvqj3pj4tuzlgs4hc5uh`; tag: `七彩神仙鱼`; parent address: `1AfCc4F9c4VTYSE31PUe2kUEKs6ZxiDjxm`; parent tags: `/F2Pool/`, `🐟` | eight AuxPoW blocks at heights 19624–19678 repeat all three fingerprints; the child and parent tags are canonical F2Pool identifiers in the upstream pool registry. The recurring 546-sat parent marker address is deliberately excluded |
+| 16 | SwitchPoolProfit | https://switchpoolprofit.com | Tag: `/SPP switchpoolprofit/` | qbit block `0000000000000002d76289cddd220f75a5d9045ed24d550f131132e0eac1b81b` (height 176779, permissionless lane); coinbase transaction `abab81d49513f9d2dc68dfb26a801a10ec02dc57b3df81fde27c3ee8dcb93704` ends with a 27-byte push of the ASCII marker `/SPP switchpoolprofit/solo/`. Operator-reported; the logo is supplied by the operator |
 
 ### Himpool PPLNS and solo lanes
 
@@ -39,6 +40,19 @@ and 18307. Every coinbase ends with `0748696d706f6f6c` (a seven-byte push of
 The explorer therefore aggregates both reward schemes under one `himpool`
 identity. The tag, rather than the shared payout address, is the registered
 matching rule.
+
+### SwitchPoolProfit PPLNS and solo lanes
+
+SwitchPoolProfit writes `/SPP switchpoolprofit/` into every coinbase it builds
+and appends `solo/` in solo mode, so one tag covers both reward schemes. The
+six blocks the operator reported on 2026-11-15, at heights 176746, 176769,
+176772, 176775, 176779, and 176799, were all mined in solo mode: every
+coinbase ends with a 27-byte push of `/SPP switchpoolprofit/solo/`, pays the
+solo miner in its first output, and pays the pool's 1 % fee to
+`qb1zd8na08t3k0ey6ugrxehtj6pugsjfcquncr58jryvkg34nzv5htzshd5nn2`.
+No address is registered: the first output belongs to whichever miner found
+the block, and the fee address is an operator setting that can change. The
+tag is therefore the only matching rule.
 
 ### F2Pool AuxPoW cluster
 
@@ -155,7 +169,8 @@ transparent, small-icon redraw of the operator-provided logo. The
 operator for 16–32 px block-card use. The upstream logo set does not currently
 provide `redrockpool.svg`, so RedRock Pool uses the frontend's default pool
 icon. `himpool.svg` is vendored verbatim from the operator's official
-`https://himpool.com/assets/brand/logo.svg` asset.
+`https://himpool.com/assets/brand/logo.svg` asset. `switchpoolprofit.svg` is
+the square mark supplied by the operator.
 
 ## Runtime Behavior
 

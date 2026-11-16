@@ -68,6 +68,7 @@ src/resources/mining-pools/*
 !src/resources/mining-pools/deezy.svg
 !src/resources/mining-pools/cornswap.svg
 !src/resources/mining-pools/himpool.svg
+!src/resources/mining-pools/switchpoolprofit.svg
 src/resources/**/*.mp4
 src/resources/**/*.vtt
 src/resources/customize.js
