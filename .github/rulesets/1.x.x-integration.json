@@ -18,6 +18,9 @@
       "type": "non_fast_forward"
     },
     {
+      "type": "creation"
+    },
+    {
       "type": "required_signatures"
     },
     {

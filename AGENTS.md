@@ -207,12 +207,13 @@ The qbit CI/CD workflows are:
 - `.github/workflows/signed-landing.yml` — the `signed-landing` check: a pull
   request passes once it is one commit that a person signed
   ([`.github/rulesets/README.md`](.github/rulesets/README.md)). It is identical
-  in every Qbit-Org repository except its `AS_IS_HEADS` line, so change the
-  shared part in all of them together. It is the one
+  in every Qbit-Org repository except its `AS_IS_HEADS` and `AS_IS_LINES`
+  lines, so change the shared part in all of them together. It is the one
   workflow on `pull_request_target`, which GitHub always runs from `main`'s
-  copy: it reads the pull request through the API with
-  `permissions: pull-requests: read`, checks nothing out and runs none of the
-  pull request's code. It runs on GitHub's `ubuntu-24.04` runner.
+  copy: it reads the pull request through the API with the permissions
+  `actions: read`, `contents: read` and `pull-requests: read`, checks nothing
+  out and runs none of the pull request's code. It runs on GitHub's
+  `ubuntu-24.04` runner.
 
 Keep the workflows safe for a public repository. Each of the others sets
 `permissions: contents: read` and checks out with `persist-credentials: false`.

@@ -9,17 +9,17 @@ are the ones that report its checks (see "Rename a required check").
 
 | File | Enforces |
 | --- | --- |
-| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review, and the nine required checks and `signed-landing`, squash merges and merge commits only; no deletion or force push. No bypass actors. |
-| `1.x.x-integration.json` | `1.x.x`: a verified signature on every commit added; pull requests with the nine required checks and `signed-landing`, and no required approval, squash merges and merge commits only; no deletion or force push. No bypass actors. |
+| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review, and the nine required checks and `signed-landing`, squash merges and merge commits only; no creation, deletion or force push. No bypass actors. |
+| `1.x.x-integration.json` | `1.x.x`: a verified signature on every commit added; pull requests with the nine required checks and `signed-landing`, and no required approval, squash merges and merge commits only; no creation, deletion or force push. No bypass actors. |
 | `release-tags.json` | `v*` tags can't be moved or deleted. No bypass actors. |
 
 The workflow takes effect only from `main`: a change to the copy on `1.x.x`
 does nothing until `1.x.x` is next promoted. The workflow has been on `main`
 since the last promotion, and both `main` and `1.x.x` require
 `signed-landing`. A promotion from `1.x.x` into `main`, and a pull request from
-`main` into `1.x.x`, still land as they are, with a merge commit, and pass the
-check by their branch names: `AS_IS_HEADS` in the workflow lists `1.x.x` and
-`main`.
+`main` into `1.x.x`, still land as they are, with a merge commit:
+`AS_IS_LINES` in the workflow lists `1.x.x` and `main`. The paragraph on
+`signed-landing` below says when the check passes them.
 
 Every commit that a push or merge adds to `main` or `1.x.x` needs a verified
 signature. Commits already on the branch aren't checked again, but an old
@@ -54,10 +54,19 @@ open pull request usually means it hasn't been squashed and signed yet. If its
 message says it could not check, do what the message says, which is usually to
 re-run it. GitHub's signature rule can't tell that by itself, because it
 accepts any verified signature, GitHub's own included, such as on a web edit
-or an "Update branch" merge. A pull request from `1.x.x` or `main` merges as
-it is, and passes without being judged. That goes by the name alone, and only
-for a branch in this repository: whoever can create a branch with such a name
-can open a pull request that isn't judged, so keep those names for that use.
+or an "Update branch" merge. A pull request from `1.x.x` or `main` of this
+repository merges as it is, with any number of commits, and the check passes
+it without reading its head commit when GitHub's rules for that branch require
+`signed-landing` from GitHub Actions and a pull request, and forbid creating,
+deleting and force-pushing it, as `main-protection.json` and
+`1.x.x-integration.json` do. The branch then gains commits only through pull
+requests the check passed, and can't be made, or made again, at another
+commit. If one of those rules is missing on GitHub, the check says which, and
+passes the pull request only if a person signed its head commit with an
+OpenPGP key that is on their own GitHub account. The head of `1.x.x` or `main`
+is usually a commit GitHub made when it merged a pull request, so the pull
+request then fails until an admin applies the missing rules. A fork's branch
+never merges as it is.
 The check is required by a ruleset with no bypass actors, so the merge button
 works only once it is green. It always runs from the default branch's copy of
 the workflow, `main`'s, whatever branch the pull request targets, so a pull
@@ -128,6 +137,13 @@ Don't apply a file that requires `signed-landing` until `signed-landing.yml`
 is on `main` and the Actions policy allows it: until then nothing reports the
 check, and no pull request into a branch that requires it can merge. It is on
 `main` now, and the check reports on every pull request.
+
+Apply `1.x.x-integration.json` and `main-protection.json` together, right
+after the promotion that brings the copy of the workflow listing `1.x.x` and
+`main` in `AS_IS_LINES` to `main`. Until that promotion `main` runs the
+previous copy, which passes `1.x.x` and `main` by name, so nothing fails; from
+the promotion on, the new copy judges a pull request from either branch, and
+it fails until both files are applied.
 
 Then run `apply` once for each ruleset file that changed. It updates the
 ruleset of that name, or creates it when GitHub has none. For example:
