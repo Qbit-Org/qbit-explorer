@@ -9,15 +9,17 @@ are the ones that report its checks (see "Rename a required check").
 
 | File | Enforces |
 | --- | --- |
-| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review and the nine required checks, squash merges and merge commits only; no deletion or force push. No bypass actors. |
+| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review, and the nine required checks and `signed-landing`, squash merges and merge commits only; no deletion or force push. No bypass actors. |
 | `1.x.x-integration.json` | `1.x.x`: a verified signature on every commit added; pull requests with the nine required checks and `signed-landing`, and no required approval, squash merges and merge commits only; no deletion or force push. No bypass actors. |
 | `release-tags.json` | `v*` tags can't be moved or deleted. No bypass actors. |
 
-The workflow takes effect only from `main`: the copy on `1.x.x` does nothing
-until `1.x.x` is next promoted. Apply `1.x.x-integration.json` only after that
-promotion, or every pull request into `1.x.x` waits for a check that nothing
-reports. `main` itself doesn't require `signed-landing`; add the check to
-`main-protection.json` in a change of its own if it should.
+The workflow takes effect only from `main`: a change to the copy on `1.x.x`
+does nothing until `1.x.x` is next promoted. The workflow has been on `main`
+since the last promotion, and both `main` and `1.x.x` require
+`signed-landing`. A promotion from `1.x.x` into `main`, and a pull request from
+`main` into `1.x.x`, still land as they are, with a merge commit, and pass the
+check by their branch names: `AS_IS_HEADS` in the workflow lists `1.x.x` and
+`main`.
 
 Every commit that a push or merge adds to `main` or `1.x.x` needs a verified
 signature. Commits already on the branch aren't checked again, but an old
@@ -69,22 +71,24 @@ seconds after its event, and until then the commit keeps the result it had. A
 change that a workflow makes with its own token starts no run at all. It
 guards against landing a pull request by mistake, not against someone set on
 getting round it: a pull request could still add a workflow of its own that
-reports a check of the same name. `1.x.x` requires no approval, so nothing
-catches that before the merge: the maintainers audit merged pull requests
-daily, from outside this repository, and report anything that got through.
+reports a check of the same name. On `main`, review catches that. `1.x.x`
+requires no approval, so nothing catches it there before the merge: the
+maintainers audit merged pull requests daily, from outside this repository,
+and report anything that got through.
 
 If the check stops reporting, no pull request can merge into a branch that
 requires it, and that includes the pull request that fixes the workflow,
 because it too is judged by `main`'s copy. GitHub blocks `pull_request_target`
 workflows in public repositories unless an Actions policy allows them. If that
 policy names this file by its path, renaming the file stops the check. To get
-out, merge the fix straight into `main`, which doesn't require
-`signed-landing`: a fix merged into `1.x.x` does nothing until it is promoted.
-If `1.x.x` has to merge something meanwhile, a repository admin removes only
-the `signed-landing` entry from the `1.x.x-integration` ruleset on GitHub
-(Settings → Rules → Rulesets), and applies the file again afterwards. Don't
-disable that ruleset: it also holds the signature and pull-request rules. Each
-open pull request then needs a push or an edit to be judged by the fixed copy.
+out, a repository admin removes only the `signed-landing` entry from the
+`main-protection` ruleset on GitHub (Settings → Rules → Rulesets), merges the
+fix straight into `main`, and applies the file again afterwards: a fix merged
+into `1.x.x` does nothing until it is promoted. If `1.x.x` has to merge
+something meanwhile, the admin does the same with the `1.x.x-integration`
+ruleset. Don't disable either ruleset: each also holds the signature and
+pull-request rules. Each open pull request then needs a push or an edit to be
+judged by the fixed copy.
 The same way out serves when another required check can't run. A run that
 stays queued, as can happen after an Actions incident, leaves the commit's
 last result in place too: cancel it, and edit the pull request's description
@@ -96,12 +100,11 @@ pull request until the hour is over.
 The repository's settings allow squash merges and merge commits (Settings →
 General → Pull Requests). An ordinary pull request is squash-merged. GitHub
 signs the commit its squash merge makes, so GitHub's own signature satisfies
-the signature rule on the branch. On `1.x.x`, what requires a person's
-signature is the `signed-landing` check, which a ruleset nobody can bypass
-requires; `main` doesn't require that check (see above). A pull request from
-`1.x.x` or `main` lands as it is, with a merge commit, because squashing it
-would lose its history. GitHub's rebase merge makes commits with no signature,
-which the rule refuses.
+the signature rule on the branch. What requires a person's signature is the
+`signed-landing` check, which a ruleset nobody can bypass requires on each
+branch. A pull request from `1.x.x` or `main` lands as it is, with a merge
+commit, because squashing it would lose its history. GitHub's rebase merge
+makes commits with no signature, which the rule refuses.
 
 ## Apply a change
 
@@ -123,7 +126,8 @@ apply() {
 
 Don't apply a file that requires `signed-landing` until `signed-landing.yml`
 is on `main` and the Actions policy allows it: until then nothing reports the
-check, and no pull request into a branch that requires it can merge.
+check, and no pull request into a branch that requires it can merge. It is on
+`main` now, and the check reports on every pull request.
 
 Then run `apply` once for each ruleset file that changed. It updates the
 ruleset of that name, or creates it when GitHub has none. For example:
