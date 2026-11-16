@@ -17,7 +17,7 @@ pool.
 | 4 | deezy | https://deezy.io | Address: `qb1zsgjp00kl4ghjkhsmernut7x5vpx4xsf0mf8eedjftdssf0hqneyqtcdeez` | qbit block `000000000000000064f7f50834e7cce35218dfc45f492a741a20081de89d866c` (height 7107, permissionless lane); its sole transaction is coinbase `e8833ae173450ec4923e3c2a6dfa0f1aacdc458ee95b3d631569333073e7839d`, which pays the address as P2MR; logo supplied by the operator |
 | 5 | AntPool | https://www.antpool.com | Parent address: `39C7fxSzEACPjM78Z7xdPxhf7mKxJwvfMJ`; parent tag: `Mined by AntPool` | qbit block `373ffac217ec48755c908321909ebf8879963242802cbb386028aef4c8c4e542` (height 7883, AuxPoW lane); its embedded parent coinbase carries `Mined by AntPool906` and pays the registered address. The separate 546-sat marker output and shared qbit payout address are deliberately not registered as AntPool identifiers |
 | 6 | WhitePool | https://whitebit.com/mining-pool | Parent address: `3QmwRxUVQSobeKnNWSjtYmRbU2uxYQzRrG`; parent tag: `WhitePool` | qbit block `bd3434ea9cc6f43e691a09b513139815db06a07a8ed865728d0c872716b90897` (height 7957, AuxPoW lane); its embedded parent coinbase carries `WhitePool` and pays the registered address. The same evidence recurs at qbit heights 7886 and 7913 |
-| 7 | BTC.com | https://cloverpool.com | Parent address: `36cWgjEtxQSFgbHTJDw5AB96ZX7fJk1URd`; parent tag: `btccom` | qbit block `0754c76cb68966768c99783e8bc0f29a9b3b337113c654f87f75c1a15766cb8a` (height 7927, AuxPoW lane); its embedded parent coinbase carries `btccom956` and pays the registered address. This identifies the BTC.com lineage now branded CloverPool; the `BTC.com` name and `btccom` slug follow the upstream pool registry and logo |
+| 7 | CloverPool | https://cloverpool.com | Parent address: `36cWgjEtxQSFgbHTJDw5AB96ZX7fJk1URd`; parent tags: `btccom`, `cloverpool` | qbit block `0754c76cb68966768c99783e8bc0f29a9b3b337113c654f87f75c1a15766cb8a` (height 7927, AuxPoW lane); its embedded parent coinbase carries `btccom956` and pays the registered address. The pool was BTC.com until 2024 and went on signing `btccom` after the rename. It first signed `cloverpool` at qbit height 147597 (2026-10-26) and then used both tags side by side: a 2026-11-16 census of its 883 qbit blocks found 38 `btccom` and 39 `cloverpool` blocks from there to height 166921 (2026-11-08), its last `btccom` block, `22a5b64c7ec419499fc04e60086cb2984c018202778cae68aff5e53b1d23e942`, and `cloverpool` on all 40 since, as in qbit block `bf4aad951d6b1202bac0b9e87bedd41b74775fa64273f06ecd880c31dd124d1b` (height 178169). Every one of the 883 pays the registered address. Both tags are registered, and both are in the upstream pool registry. The `CloverPool` name and `cloverpool` slug follow that registry and its logo, and `/mining/pool/btccom` redirects to the new slug |
 | 8 | Binance Pool | https://pool.binance.com | Parent address: `3G7jcEELKh38L6kaSV8K35pTqsh5bgZW2D`; parent tag: `binance` | qbit block `c2e32d2f068de635b0db60809f24628c0cbd3132d4b06b808cba0c6a0729e8d4` (height 7924, AuxPoW lane); its embedded parent coinbase carries `binance/` and pays the registered address, which is also present in the upstream Bitcoin pool registry |
 | 9 | ULTIMUSPOOL | https://www.ultimuspool.com | Parent address: `3C9sAKXrBVpJVe3b738yik4LPHpPmceBgd`; parent tag: `/ultimus/` | qbit block `fa32fc824a061faa135d1814b7c9b104d6ac4f67f888adda1d98158a5dbc9c8c` (height 7925, AuxPoW lane); its embedded parent coinbase carries `/ultimus/783` and pays the registered address, which is also present in the upstream Bitcoin pool registry |
 | 10 | SECPOOL | https://www.secpool.com | Parent address: `3Awm3FNpmwrbvAFVThRUFqgpbVuqWisni9`; parent tag: `Mined by SecPool` | qbit block `f3a90f4e71e8c83d068e141762bb7ed46420136f05bf789c628ec7a1d1a9c686` (height 8204, AuxPoW lane); its embedded parent coinbase carries `Mined by Secpool` and pays 3.14286894 BTC to the registered address. The separate 546-sat marker and qbit payout address are deliberately excluded |
@@ -26,6 +26,7 @@ pool.
 | 13 | RedRock Pool | https://redrock.pro/ | Parent address: `3554kSaWNnP3B49Xyybert7gmxq2YSnfnx`; parent tag: `RedRock` | qbit block `8811335efc0fce401cb6483b65572444266515f911bda74aaf9b3b806c804e3f` (height 8770, AuxPoW lane); its unverified Bitcoin parent work carries `RedRock Pool` and pays 3.13772479 BTC to the registered address, matching the upstream Bitcoin pool registry. The separate 546-sat marker and shared qbit payout address are deliberately excluded |
 | 14 | Himpool | https://himpool.com/ | Tag: `Himpool` | qbit block `000000000000000009606f0601274738864c4861837f260387acf6ba4edc3dc2` (height 18307, permissionless lane); coinbase transaction `362e19e8191cdee1c2b47712686e3ec4d226a4758b3f8bfc9acb57c2c0be7b9a` ends with the exact seven-byte ASCII marker `Himpool` and pays the pool's official Qbit address `qb1z0sq5a2d9grg7hd4g8tagzsk8ylmn7jd0hwdaefxu7pu3runqsdgs70eant` |
 | 15 | F2Pool | https://www.f2pool.com | Address: `qb1zpyh3ygrlnrdzk5nrz0wh9usmeex2tfanq89p5yyvqj3pj4tuzlgs4hc5uh`; tag: `七彩神仙鱼`; parent address: `1AfCc4F9c4VTYSE31PUe2kUEKs6ZxiDjxm`; parent tags: `/F2Pool/`, `🐟` | eight AuxPoW blocks at heights 19624–19678 repeat all three fingerprints; the child and parent tags are canonical F2Pool identifiers in the upstream pool registry. The recurring 546-sat parent marker address is deliberately excluded |
+| 16 | SwitchPoolProfit | https://switchpoolprofit.com | Tag: `/SPP switchpoolprofit/` | qbit block `0000000000000002d76289cddd220f75a5d9045ed24d550f131132e0eac1b81b` (height 176779, permissionless lane); coinbase transaction `abab81d49513f9d2dc68dfb26a801a10ec02dc57b3df81fde27c3ee8dcb93704` ends with a 27-byte push of the ASCII marker `/SPP switchpoolprofit/solo/`. Operator-reported; the logo is supplied by the operator |
 
 ### Himpool PPLNS and solo lanes
 
@@ -39,6 +40,19 @@ and 18307. Every coinbase ends with `0748696d706f6f6c` (a seven-byte push of
 The explorer therefore aggregates both reward schemes under one `himpool`
 identity. The tag, rather than the shared payout address, is the registered
 matching rule.
+
+### SwitchPoolProfit PPLNS and solo lanes
+
+SwitchPoolProfit writes `/SPP switchpoolprofit/` into every coinbase it builds
+and appends `solo/` in solo mode, so one tag covers both reward schemes. The
+six blocks the operator reported on 2026-11-15, at heights 176746, 176769,
+176772, 176775, 176779, and 176799, were all mined in solo mode: every
+coinbase ends with a 27-byte push of `/SPP switchpoolprofit/solo/`, pays the
+solo miner in its first output, and pays the pool's 1 % fee to
+`qb1zd8na08t3k0ey6ugrxehtj6pugsjfcquncr58jryvkg34nzv5htzshd5nn2`.
+No address is registered: the first output belongs to whichever miner found
+the block, and the fee address is an operator setting that can change. The
+tag is therefore the only matching rule.
 
 ### F2Pool AuxPoW cluster
 
@@ -104,7 +118,7 @@ parent coinbase:
 | Parent pool | Blocks | Identifying qbit heights |
 | --- | ---: | --- |
 | AntPool | 42 | all remaining payments in the snapshot |
-| BTC.com | 4 | 7827, 7832, 7918, 7927 |
+| CloverPool | 4 | 7827, 7832, 7918, 7927 |
 | WhitePool | 3 | 7886, 7913, 7957 |
 | Binance Pool | 3 | 7870, 7924, 7973 |
 | ULTIMUSPOOL | 2 | 7920, 7925 |
@@ -112,7 +126,7 @@ parent coinbase:
 The census fetched every address transaction with the explorer's
 `after_txid` pagination, required the block to be in the AuxPoW lane, and
 clustered the decoded `extras.auxpow` tag and Bitcoin outputs. AntPool,
-BTC.com, Binance Pool, and ULTIMUSPOOL templates each also contain a recurring
+CloverPool, Binance Pool, and ULTIMUSPOOL templates each also contain a recurring
 546-sat marker output; those marker addresses remain visible in the raw parent
 data but are excluded from matching. Only the substantive payout and the
 pool-specific parent tag are registered.
@@ -130,7 +144,7 @@ AuxPoW parent coinbases, and matched them as follows:
 | Luxor | 204 |
 | SECPOOL | 54 |
 | Binance Pool | 37 |
-| BTC.com | 32 |
+| CloverPool | 32 |
 | WhitePool | 5 |
 | ULTIMUSPOOL | 5 |
 | Poolin | 2 |
@@ -143,7 +157,7 @@ provide independent evidence for the definition above; after adding it, all
 permissionless, so adding Cornswap does not change the AuxPoW census.
 
 Pool logos resolve from each pool's generated slug. The frontend asset sync
-downloads `luxor.svg`, `antpool.svg`, `whitepool.svg`, `btccom.svg`,
+downloads `luxor.svg`, `antpool.svg`, `whitepool.svg`, `cloverpool.svg`,
 `binancepool.svg`, `ultimuspool.svg`, `secpool.svg`, and `poolin.svg` from
 `mempool/mining-pool-logos`; F2Pool similarly resolves to the upstream
 `f2pool.svg`. The qbit-specific `qbitpool.svg` is the Qbit mark. Because the upstream logo set has no LuckyPool.IO
@@ -155,7 +169,8 @@ transparent, small-icon redraw of the operator-provided logo. The
 operator for 16–32 px block-card use. The upstream logo set does not currently
 provide `redrockpool.svg`, so RedRock Pool uses the frontend's default pool
 icon. `himpool.svg` is vendored verbatim from the operator's official
-`https://himpool.com/assets/brand/logo.svg` asset.
+`https://himpool.com/assets/brand/logo.svg` asset. `switchpoolprofit.svg` is
+the square mark supplied by the operator.
 
 ## Runtime Behavior
 

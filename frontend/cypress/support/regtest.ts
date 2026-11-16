@@ -36,6 +36,12 @@ export function qbitCliJson<T>(...args: string[]): Cypress.Chainable<T> {
   return qbitCli(...args).then((out) => cy.wrap<T>(JSON.parse(out), { log: false }));
 }
 
+// The browser keeps a cacheable answer, such as the 60 seconds /api/v1/blocks allows. cy.intercept()
+// doesn't see the answers it takes from that cache.
+export function clearBrowserCache(): void {
+  cy.wrap(Cypress.automation('remote:debugger:protocol', { command: 'Network.clearBrowserCache' }), { log: false });
+}
+
 // The cell next to a row's label, such as "Weight" on a block page. A label can
 // repeat, as "Type" does for each output of a transaction, so this yields them all.
 export function rowValues(label: string): Cypress.Chainable<JQuery<HTMLElement>> {

@@ -127,12 +127,15 @@ class MiningRoutes {
   }
 
   private async $getPools(req: Request, res: Response) {
+    if (!mining.isPoolsStatsInterval(req.params.interval)) {
+      handleError(req, res, 400, 'Invalid interval');
+      return;
+    }
     try {
-      const stats = await mining.$getPoolsStats(req.params.interval);
-      const blockCount = await BlocksRepository.$blockCount(null, null);
+      const { stats, totalBlockCount } = await mining.$getPoolsStatsResponse(req.params.interval);
       res.header('Pragma', 'public');
       res.header('Cache-control', 'public');
-      res.header('X-total-count', blockCount.toString());
+      res.header('X-total-count', totalBlockCount.toString());
       res.setHeader('Expires', new Date(Date.now() + 1000 * 60).toUTCString());
       res.json(stats);
     } catch (e) {

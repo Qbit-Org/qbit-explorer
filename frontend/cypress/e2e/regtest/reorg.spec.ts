@@ -1,4 +1,4 @@
-import { loadSeed, qbitCli, qbitCliJson, RegtestSeed } from '../../support/regtest';
+import { clearBrowserCache, loadSeed, qbitCli, qbitCliJson, RegtestSeed } from '../../support/regtest';
 
 // This spec moves the chain's tip, so it leaves the seeded blocks in place and
 // only replaces blocks that it mined itself.
@@ -122,12 +122,6 @@ describe('Cadence lanes across reorgs', () => {
       replaceListedTip(tip + 3);
     });
   });
-
-  // The browser keeps an answer from /api/v1/blocks for 60 seconds. cy.intercept() doesn't see the
-  // answers it takes from that cache.
-  function clearBrowserCache(): void {
-    cy.wrap(Cypress.automation('remote:debugger:protocol', { command: 'Network.clearBrowserCache' }), { log: false });
-  }
 
   // From the mining dashboard to /blocks, in the page: the tab keeps the websocket's blocks
   function openBlocksFromMiningDashboard(): void {

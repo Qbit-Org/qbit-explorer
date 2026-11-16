@@ -218,7 +218,7 @@ placeholders, so tooling that fills them in now does nothing. Either add the
 backend's user to the `qbit` group as above, or keep the password: set
 `CORE_RPC.COOKIE` to `false`, set `CORE_RPC.USERNAME` and `CORE_RPC.PASSWORD`,
 and keep the `rpcauth` line in `qbit.conf`. qbit's
-[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
+[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.1/share/rpcauth/rpcauth.py)
 generates that line.
 
 Start the backend with:

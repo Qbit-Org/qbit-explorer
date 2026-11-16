@@ -14,8 +14,8 @@ only. Address pages and electrs passthrough endpoints require qbit-electrs.
 
 ## Source References
 
-- qbit source ref: `Qbit-Org/qbit@v1.0.0`, the mainnet release
-  (`7ebcddb622d6e639041f005a189b048ec2a221fe`)
+- qbit source ref: `Qbit-Org/qbit@v1.0.1`, the mainnet release
+  (`0439a7e5b37fb3f7e4ddfb735b68961445a882c8`)
 - qbit-electrs contract: `Qbit-Org/qbit-electrs@53102e925713211ebf9ee8fe34b2f68534740fd9:doc/qbit-contract.md`
 - qbit-electrs default ports: `Qbit-Org/qbit-electrs@53102e925713211ebf9ee8fe34b2f68534740fd9:src/config.rs`
 - Backend defaults: `backend/src/config.ts`
@@ -110,13 +110,13 @@ to `http://127.0.0.1:8999` (`frontend/proxy.conf.local.js:15-32`).
 
 `backend/scripts/qbit-regtest-harness.sh` runs the backend steps of this guide
 in one command, as the `qbit Regtest Smoke` workflow does in CI. It needs
-`qbitd` and `qbit-cli` (the v1.0.0 release binaries work), Python 3 and a built
+`qbitd` and `qbit-cli` (the v1.0.1 release binaries work), Python 3 and a built
 backend:
 
 ```bash
 cd backend
 npm run build
-export QBITD=/path/to/qbit-1.0.0/bin/qbitd QBIT_CLI=/path/to/qbit-1.0.0/bin/qbit-cli
+export QBITD=/path/to/qbit-1.0.1/bin/qbitd QBIT_CLI=/path/to/qbit-1.0.1/bin/qbit-cli
 export QBIT_REGTEST_DIR="$HOME/.qbit-regtest-harness"
 # Optional: a qbit-electrs binary switches the backend to MEMPOOL.BACKEND=esplora
 export QBIT_ELECTRS=/path/to/qbit-electrs/target/release/electrs
@@ -195,7 +195,7 @@ smoke script's `backend mining hashrate` check fails.
 ## Start qbitd Regtest
 
 Build qbit, after installing the dependencies listed in its
-[`doc/build/`](https://github.com/Qbit-Org/qbit/tree/v1.0.0/doc/build) guides:
+[`doc/build/`](https://github.com/Qbit-Org/qbit/tree/v1.0.1/doc/build) guides:
 
 ```bash
 cd /path/to/qbit

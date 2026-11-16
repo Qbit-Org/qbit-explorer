@@ -1,5 +1,73 @@
 # Changelog
 
+## 1.2.1
+
+### Fixed
+
+- A page load no longer costs the database a full pass over the pool
+  statistics. Every transaction page fetched
+  `GET /api/v1/mining/pools/1m`, and each request ran ten queries, two of
+  them aggregations over `blocks`, with nothing shared between requests.
+  Crawlers walking transaction pages drove hundreds of megabytes a second
+  of MariaDB disk reads on each mainnet origin. The backend now keeps each
+  interval's answer, block count included, in memory for 60 seconds, and
+  requests that arrive while one is being worked out share that one
+  computation. The transaction page and the mobile tracker fetch the
+  statistics only for an accelerated transaction's ETA (#104).
+
+### Changed
+
+- The pool this explorer called BTC.com is now CloverPool, as it has called
+  itself since 2024 and as the upstream pool registry now has it. Its
+  definition keeps id 7, so the import renames the database row in place
+  and its blocks and hashrate history stay with it. Its slug is
+  `cloverpool`, which brings in the upstream `cloverpool.svg` logo, and
+  `/mining/pool/btccom` redirects to `/mining/pool/cloverpool`. The API has
+  no alias: `/api/v1/mining/pool/btccom`, with its `/blocks` and
+  `/hashrate` routes, answers 404 (see Upgrading). The definition also
+  matches the `cloverpool` tag, which the pool has signed its Bitcoin
+  blocks with since qbit height 147597, beside `btccom`, which it signed
+  until height 166921 (#109, #111).
+- SwitchPoolProfit has a pool definition, matched by its coinbase tag
+  `/SPP switchpoolprofit/`, with the logo its operator supplied. Its
+  blocks, on the permissionless lane, attributed to Unknown before (#106).
+- `GET /api/v1/mining/pools/:interval` answers
+  `400 {"error":"Invalid interval"}` for an interval it doesn't know,
+  before any SQL. It used to answer with the statistics of the whole
+  indexed history. The intervals are `1h`, `24h`, `3d`, `1w`, `1m`, `3m`,
+  `6m`, `1y`, `2y`, `3y`, `4y` and `all` (#104).
+- The same route answers 500 when a hashrate-window query fails in the
+  database, where it used to answer 200 with zeroed hashrates. A window the
+  hashrate indexers haven't completed still answers 200 with zeroes, as
+  before. After a failure the interval answers 500 for five seconds before
+  the database is asked again (#104).
+- Pool statistics lag the chain by up to 60 seconds. The `Expires` header
+  is unchanged, so a client or CDN that honours it can hold an answer for
+  up to two minutes in all (#104).
+
+### Documentation
+
+- docs/mining-pools.md has the evidence for CloverPool's two tags, with a
+  census of its 883 qbit blocks, and for SwitchPoolProfit's tag and its two
+  reward schemes.
+- AGENTS.md, docs/qbit-local-dev.md and the Docker and production READMEs
+  cite qbit v1.0.1, the mainnet maintenance release, and the regtest smoke
+  job in CI runs against its qbitd (#107).
+
+### Upgrading
+
+- No database migration and no config change: the schema stays at
+  version 113.
+- On its first start the backend imports the new pool definitions. It
+  renames CloverPool's row, matches its blocks and the Unknown pool's
+  blocks again, which moves SwitchPoolProfit's blocks to its own pool, and
+  has the hashrate indexers run again. The mining pages can be behind
+  until that finishes.
+- If a client of yours calls `/api/v1/mining/pool/btccom`, change it to
+  `/api/v1/mining/pool/cloverpool`. Pool ids don't change.
+- If a client of yours sends `mining/pools/:interval` an interval outside
+  the list above, it now gets 400.
+
 ## 1.2.0
 
 ### Fixed

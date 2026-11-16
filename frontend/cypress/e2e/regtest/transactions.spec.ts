@@ -1,4 +1,4 @@
-import { loadSeed, qbitCli, qbitCliJson, RegtestSeed, rowValues, seedOutput, showTransactionDetails } from '../../support/regtest';
+import { clearBrowserCache, loadSeed, qbitCli, qbitCliJson, RegtestSeed, rowValues, seedOutput, showTransactionDetails } from '../../support/regtest';
 
 describe('transaction page', () => {
   let seed: RegtestSeed;
@@ -81,6 +81,20 @@ describe('transaction page', () => {
     rowValues('Size').should('contain.text', '101 B');
     rowValues('Virtual size').should('contain.text', '101 vB');
     rowValues('Weight').should('contain.text', '101 WU');
+  });
+
+  // Only the ETA of an accelerated transaction reads the pool statistics, which cost the backend several
+  // aggregate queries over the blocks table (mempool.spec.ts covers unconfirmed transactions)
+  it('loads a confirmed transaction without the mining pool statistics', () => {
+    const txid = seedOutput(seed, 'p2mr').txid;
+    clearBrowserCache();
+    cy.intercept({ method: 'GET', pathname: '/regtest/api/v1/mining/pools/*' }).as('poolStats');
+    cy.intercept({ method: 'GET', pathname: `/regtest/api/v1/cpfp/${txid}` }).as('cpfp');
+
+    cy.visit(`/regtest/tx/${txid}`);
+    cy.wait('@cpfp');
+    showTransactionDetails();
+    cy.get('@poolStats.all').should('have.length', 0);
   });
 
   // On regtest, only unconfirmed transactions show their features, but the preview page always does. A

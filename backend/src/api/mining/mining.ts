@@ -16,6 +16,7 @@ import database from '../../database';
 import { expectedBlocksForTimespan } from '../../utils/block-target';
 import { attributePoolHashrates, calcLaneHashratesForWindow, PoolLaneWork, QbitLaneHashrates, sumPoolLaneWork } from '../../utils/qbit-lane-hashrate';
 import { laneOf } from '../../utils/qbit-version';
+import { SingleFlightCache } from '../../utils/single-flight-cache';
 
 interface HashrateWindowStats {
   laneHashrates: QbitLaneHashrates;
@@ -23,7 +24,23 @@ interface HashrateWindowStats {
   poolBlockCounts: Map<number, number>;
 }
 
+/** The time periods mining/pools/:interval has statistics for: trailing windows, and `all` for the whole indexed history */
+export type PoolsStatsInterval = '1h' | '24h' | '3d' | '1w' | '1m' | '3m' | '6m' | '1y' | '2y' | '3y' | '4y' | 'all';
+
+/** What mining/pools/:interval answers with: its body, and the indexed block count its X-total-count header carries */
+export interface PoolsStatsResponse {
+  stats: object;
+  totalBlockCount: number;
+}
+
+// How long mining/pools/:interval answers from memory. Its Expires header lets a client keep an answer
+// for as long again, as it did before the answers were cached here.
+const POOLS_STATS_TTL_MS = 60_000;
+// How long an interval whose statistics failed answers with that failure before the database is asked again
+const POOLS_STATS_FAILURE_COOLDOWN_MS = 5_000;
+
 class Mining {
+  private poolsStatsCache = new SingleFlightCache<PoolsStatsResponse>(POOLS_STATS_TTL_MS, POOLS_STATS_FAILURE_COOLDOWN_MS);
   private blocksPriceIndexingRunning = false;
   public lastHashrateIndexingDate: number | null = null;
   public lastWeeklyHashrateIndexingDate: number | null = null;
@@ -108,6 +125,34 @@ class Mining {
   }
 
   /**
+   * Whether mining/pools/:interval has statistics for an interval: a trailing window the queries
+   * know, or `all`. The queries read any other value as the whole indexed history, their most
+   * expensive answer, so the route turns those down instead of computing and caching it under
+   * every spelling a client comes up with.
+   */
+  public isPoolsStatsInterval(interval: string): interval is PoolsStatsInterval {
+    return interval === 'all' || Common.getSqlInterval(interval) !== null;
+  }
+
+  /**
+   * The pool statistics of an interval with the indexed block count, both from one run of their
+   * queries. A run's result is kept for a minute, and the requests that arrive during a run share
+   * it, so however many clients ask, an interval runs its queries once a minute at most, or once
+   * every five seconds while they fail. In return the answer can lag the chain by that minute: a
+   * block or a reorg shows up when it ends.
+   */
+  public $getPoolsStatsResponse(interval: PoolsStatsInterval): Promise<PoolsStatsResponse> {
+    return this.poolsStatsCache.get(`${config.MEMPOOL.NETWORK}:${interval}`, () => this.$computePoolsStatsResponse(interval));
+  }
+
+  /** @asyncUnsafe */
+  private async $computePoolsStatsResponse(interval: PoolsStatsInterval): Promise<PoolsStatsResponse> {
+    const stats = await this.$getPoolsStats(interval);
+    const totalBlockCount = await BlocksRepository.$blockCount(null, null);
+    return { stats, totalBlockCount };
+  }
+
+  /**
    * Generate high level overview of the pool ranks and general stats
    */
   public async $getPoolsStats(interval: string | null): Promise<object> {
@@ -164,6 +209,11 @@ class Mining {
         poolStat.lastEstimatedHashrate1w = estimates1w.get(poolStat.poolId) ?? 0;
       }
     } catch (e) {
+      // A window the indexed blocks don't complete leaves the hashrates unknown. Anything else is
+      // the database failing, and has to fail the statistics: zeroes would be cached as their answer.
+      if (!(e instanceof IncompleteHashrateWindowError)) {
+        throw e;
+      }
       poolsStatistics['lastEstimatedHashrate'] = 0;
       poolsStatistics['lastEstimatedHashrate3d'] = 0;
       poolsStatistics['lastEstimatedHashrate1w'] = 0;

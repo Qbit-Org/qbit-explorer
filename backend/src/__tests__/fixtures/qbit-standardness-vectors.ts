@@ -5,7 +5,13 @@
 // frontend/scripts/qbit-script-smoke.js, so a rule that changes in one copy only fails one of them.
 //
 // Keep this file free of imports: the frontend smoke compiles it with the frontend's TypeScript settings.
-// Rules are from qbit v1.0.0 (Qbit-Org/qbit commit 7ebcddb622d6e639041f005a189b048ec2a221fe).
+// Rules are from qbit v1.0.0 (Qbit-Org/qbit commit 7ebcddb622d6e639041f005a189b048ec2a221fe), and
+// v1.0.1 (commit 0439a7e5b37fb3f7e4ddfb735b68961445a882c8) leaves every rule here unchanged. v1.0.1
+// adds two P2MR standardness limits that depend on running the leaf script, a 1 MiB stack plus
+// alt-stack limit and a per-input budget for hashing stack elements over 520 bytes: the flags
+// SCRIPT_VERIFY_P2MR_STACK_BYTES and SCRIPT_VERIFY_P2MR_HASH_WEIGHT (src/script/interpreter.h), with
+// their limits in src/script/script.h, enforced in EvalScript (src/script/interpreter.cpp) and made
+// standard in src/policy/policy.h. Neither copy implements them, and no vector here covers them.
 
 export interface VectorVout {
   scriptpubkey: string;

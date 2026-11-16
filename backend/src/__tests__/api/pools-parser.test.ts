@@ -198,8 +198,8 @@ const SHARED_AUXPOW_MINERS = [
   {
     definitionId: 7,
     databaseId: 11,
-    name: 'BTC.com',
-    slug: 'btccom',
+    name: 'CloverPool',
+    slug: 'cloverpool',
     link: 'https://cloverpool.com',
     height: 7927,
     blockHash: '0754c76cb68966768c99783e8bc0f29a9b3b337113c654f87f75c1a15766cb8a',
@@ -214,7 +214,7 @@ const SHARED_AUXPOW_MINERS = [
       '36cWgjEtxQSFgbHTJDw5AB96ZX7fJk1URd',
     ],
     registeredParentAddresses: ['36cWgjEtxQSFgbHTJDw5AB96ZX7fJk1URd'],
-    parentTags: ['btccom'],
+    parentTags: ['btccom', 'cloverpool'],
     parentOutputScripts: [
       'a914b318ac9dd6edf46e9a875498843633350ac27b8587',
       'a91435fe8eea72c226a327ef7136789304868fb59d2a87',
@@ -385,6 +385,23 @@ const HIMPOOL_MINER = {
   coinbaseRaw: '02834704f3b6686a00f000003a09004a03000000000748696d706f6f6c',
 };
 
+const SWITCHPOOLPROFIT_MINER = {
+  definitionId: 16,
+  databaseId: 20,
+  name: 'SwitchPoolProfit',
+  slug: 'switchpoolprofit',
+  link: 'https://switchpoolprofit.com',
+  tag: '/SPP switchpoolprofit/',
+  // solo block: the first output pays the miner, the second the pool fee
+  qbitAddresses: [
+    'qb1zjy2sq30ps2gyyktaqxt6gzllu5epk3hymcwz8mcsp4un0kegqs2q4j84ty',
+    'qb1zd8na08t3k0ey6ugrxehtj6pugsjfcquncr58jryvkg34nzv5htzshd5nn2',
+  ],
+  height: 176779,
+  blockHash: '0000000000000002d76289cddd220f75a5d9045ed24d550f131132e0eac1b81b',
+  coinbaseRaw: '038bb2020c9f6add2703000300000000001b2f53505020737769746368706f6f6c70726f6669742f736f6c6f2f',
+};
+
 const F2POOL_QBIT_ADDRESS = 'qb1zpyh3ygrlnrdzk5nrz0wh9usmeex2tfanq89p5yyvqj3pj4tuzlgs4hc5uh';
 const F2POOL_PARENT_MARKER_ADDRESS = '1K6KoYC69NnafWJ7YgtrpwJxBLiijWqwa6';
 const F2POOL_PARENT_PAYOUT_ADDRESS = '1AfCc4F9c4VTYSE31PUe2kUEKs6ZxiDjxm';
@@ -503,6 +520,19 @@ const QBIT_POOL = {
   // the same layout with the tag the pool used for ten blocks before /Qbit Pool/
   satflowTagCoinbaseRaw: '03a08d002f5162697420506f6f6c20627920536174666c6f772f0001e81146de000000000000',
 };
+
+// CloverPool was BTC.com until 2024 and went on signing its blocks `btccom`
+// (definition 7's fixture, above). It first signed `cloverpool` at qbit height
+// 147597, used both tags side by side until its last `btccom` block at height
+// 166921, and has signed `cloverpool` since. This is the parent coinbase of
+// qbit block
+// bf4aad951d6b1202bac0b9e87bedd41b74775fa64273f06ecd880c31dd124d1b (height
+// 178169), from Bitcoin block
+// 0000000000000000000a57bba9cf484e14d93e6d07ce09aa1746fdd7f43be62e.
+const CLOVERPOOL_CURRENT_TAG_PARENT_COINBASE_RAW =
+  '0315e50e12636c6f766572706f6f6ce4009f07857c728afabe6d6dff6c986266' +
+  'cc9b5c6a79293e3afca9237cb2965ac4f0c423c1c3aaa5c6a5df801000000000' +
+  '0000000000d6f15f47000571120000';
 
 const AUXPOW_PARENT_MINERS = [
   ...SHARED_AUXPOW_MINERS,
@@ -743,6 +773,23 @@ describe('PoolsParser qbit vendored pool definitions', () => {
     expect(match?.slug).toBe(HIMPOOL_MINER.slug);
   });
 
+  test('matches SwitchPoolProfit from the coinbase scriptsig of qbit block 176779', () => {
+    poolsParser.setMiningPools(loadVendoredPools());
+
+    // coinbaseRaw of 0000000000000002d76289cddd220f75a5d9045ed24d550f131132e0eac1b81b;
+    // the terminal push decodes to `/SPP switchpoolprofit/solo/`. The pool's
+    // tag carries no `solo/` suffix, so it covers both of its reward schemes.
+    const match = poolsParser.matchBlockMiner(
+      SWITCHPOOLPROFIT_MINER.coinbaseRaw,
+      SWITCHPOOLPROFIT_MINER.qbitAddresses,
+      poolsParser.miningPools
+    );
+
+    expect(match).toBeDefined();
+    expect(match?.name).toBe(SWITCHPOOLPROFIT_MINER.name);
+    expect(match?.slug).toBe(SWITCHPOOLPROFIT_MINER.slug);
+  });
+
   test.each(F2POOL_AUXPOW_BLOCKS)(
     'matches F2Pool from the child and parent coinbase tags of qbit block $height',
     (miner) => {
@@ -821,6 +868,23 @@ describe('PoolsParser qbit vendored pool definitions', () => {
 
     expect(payoutMatch?.name).toBe(F2POOL_MINER.name);
     expect(markerMatch).toBeUndefined();
+  });
+
+  test.each([
+    ['its btccom tag', AUXPOW_PARENT_MINERS.find(miner => miner.definitionId === 7)?.parentCoinbaseRaw ?? ''],
+    ['its cloverpool tag', CLOVERPOOL_CURRENT_TAG_PARENT_COINBASE_RAW],
+  ])('matches CloverPool from %s alone', (_label, scriptsig) => {
+    poolsParser.setMiningPools(loadVendoredPools());
+
+    // No parent payout address is supplied, so the tag does the matching.
+    const match = poolsParser.matchBlockMiner('03f9b70200', [], poolsParser.miningPools, {
+      scriptsig,
+      addresses: [],
+      parentBlockHash: '00'.repeat(32),
+    });
+
+    expect(match?.name).toBe('CloverPool');
+    expect(match?.slug).toBe('cloverpool');
   });
 
   test.each([
@@ -1107,6 +1171,15 @@ describe('PoolsParser qbit non-empty pool migration', () => {
     addresses: '[]',
     regexes: '["Himpool"]',
   };
+  const currentSwitchpoolprofitPool = {
+    id: SWITCHPOOLPROFIT_MINER.databaseId,
+    uniqueId: SWITCHPOOLPROFIT_MINER.definitionId,
+    name: SWITCHPOOLPROFIT_MINER.name,
+    slug: SWITCHPOOLPROFIT_MINER.slug,
+    link: SWITCHPOOLPROFIT_MINER.link,
+    addresses: '[]',
+    regexes: JSON.stringify([SWITCHPOOLPROFIT_MINER.tag]),
+  };
   const currentF2poolPool = {
     id: F2POOL_MINER.databaseId,
     uniqueId: F2POOL_MINER.definitionId,
@@ -1154,6 +1227,7 @@ describe('PoolsParser qbit non-empty pool migration', () => {
       })),
       currentCornswapPool,
       currentHimpoolPool,
+      currentSwitchpoolprofitPool,
       {
         ...currentF2poolPool,
         parentAddresses: currentF2poolPool.parent_addresses,
@@ -1252,6 +1326,14 @@ describe('PoolsParser qbit non-empty pool migration', () => {
             coinbase_addresses: `["${F2POOL_MINER.qbitAddress}"]`,
             header: F2POOL_MINER.header,
           },
+          // SwitchPoolProfit registers no address: a solo block pays the
+          // miner and the pool fee, and only the coinbase tag identifies it.
+          {
+            height: SWITCHPOOLPROFIT_MINER.height,
+            hash: SWITCHPOOLPROFIT_MINER.blockHash,
+            coinbase_raw: SWITCHPOOLPROFIT_MINER.coinbaseRaw,
+            coinbase_addresses: JSON.stringify(SWITCHPOOLPROFIT_MINER.qbitAddresses),
+          },
         ]];
       }
       return [[], []];
@@ -1315,6 +1397,15 @@ describe('PoolsParser qbit non-empty pool migration', () => {
     );
     expect(mockInsertNewMiningPool).toHaveBeenCalledWith(
       expect.objectContaining({
+        id: SWITCHPOOLPROFIT_MINER.definitionId,
+        name: SWITCHPOOLPROFIT_MINER.name,
+        addresses: [],
+        regexes: [SWITCHPOOLPROFIT_MINER.tag],
+      }),
+      SWITCHPOOLPROFIT_MINER.slug
+    );
+    expect(mockInsertNewMiningPool).toHaveBeenCalledWith(
+      expect.objectContaining({
         id: F2POOL_MINER.definitionId,
         name: F2POOL_MINER.name,
         addresses: [F2POOL_MINER.qbitAddress],
@@ -1337,7 +1428,7 @@ describe('PoolsParser qbit non-empty pool migration', () => {
       );
     }
     // stale pools purged, keeping Unknown (0) and the vendored ids
-    expect(mockDeleteStalePools).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 0, 'qbit-testsha');
+    expect(mockDeleteStalePools).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0, 'qbit-testsha');
     // Unknown blocks re-matched from height 0, not the Bitcoin heights
     expect(mockDbQuery).toHaveBeenCalledWith(expect.stringContaining('FROM blocks'), [0, 0]);
     // both the legacy /PRISM Pool/ block and a /Qbit Pool/ block
@@ -1364,6 +1455,8 @@ describe('PoolsParser qbit non-empty pool migration', () => {
     }
     // F2Pool's UTF-8 qbit tag backfills its previously Unknown block
     expect(mockSavePool).toHaveBeenCalledWith(F2POOL_MINER.blockHash, F2POOL_MINER.databaseId);
+    // SwitchPoolProfit's coinbase tag backfills its previously Unknown solo block
+    expect(mockSavePool).toHaveBeenCalledWith(SWITCHPOOLPROFIT_MINER.blockHash, SWITCHPOOLPROFIT_MINER.databaseId);
     // the unmatched block stays on Unknown without a per-block update...
     expect(mockSavePool).not.toHaveBeenCalledWith('unmatched-block-hash', 0);
     // ...because all blocks get the new definition hash stamped in bulk
@@ -1398,8 +1491,8 @@ describe('PoolsParser qbit non-empty pool migration', () => {
 
     await poolsParser.migratePoolsJson('qbit-testsha');
 
-    expect(mockInsertNewMiningPool).toHaveBeenCalledTimes(15);
-    expect(mockDeleteStalePools).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 0, 'qbit-testsha');
+    expect(mockInsertNewMiningPool).toHaveBeenCalledTimes(16);
+    expect(mockDeleteStalePools).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0, 'qbit-testsha');
   });
 
   test('re-indexes Unknown blocks even when pool definitions are already current', async () => {
@@ -1433,6 +1526,9 @@ describe('PoolsParser qbit non-empty pool migration', () => {
       }
       if (id === HIMPOOL_MINER.definitionId) {
         return currentHimpoolPool;
+      }
+      if (id === SWITCHPOOLPROFIT_MINER.definitionId) {
+        return currentSwitchpoolprofitPool;
       }
       if (id === F2POOL_MINER.definitionId) {
         return currentF2poolPool;
@@ -1486,6 +1582,9 @@ describe('PoolsParser qbit non-empty pool migration', () => {
       if (id === HIMPOOL_MINER.definitionId) {
         return currentHimpoolPool;
       }
+      if (id === SWITCHPOOLPROFIT_MINER.definitionId) {
+        return currentSwitchpoolprofitPool;
+      }
       if (id === F2POOL_MINER.definitionId) {
         return currentF2poolPool;
       }
@@ -1523,7 +1622,7 @@ describe('PoolsParser qbit non-empty pool migration', () => {
     expect(mockUpdateMiningPoolLink).toHaveBeenCalledWith(5, QBIT_POOL.link);
     expect(mockUpdateMiningPoolTags).toHaveBeenCalledTimes(1);
     expect(mockUpdateMiningPoolTags).toHaveBeenCalledWith(5, QBIT_POOL.addresses, QBIT_POOL.tags, [], [], 'any');
-    expect(mockDeleteStalePools).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 0, 'qbit-testsha');
+    expect(mockDeleteStalePools).toHaveBeenCalledWith([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0, 'qbit-testsha');
     // the tag change re-indexes the pool's own blocks, then Unknown is re-matched
     expect(mockDbQuery).toHaveBeenCalledWith(expect.stringContaining('FROM blocks'), [5, 0]);
     expect(mockDbQuery).toHaveBeenCalledWith(expect.stringContaining('FROM blocks'), [0, 0]);
@@ -1535,6 +1634,114 @@ describe('PoolsParser qbit non-empty pool migration', () => {
     expect(mockUpdateDefinitionHash).toHaveBeenCalledWith('qbit-testsha');
     expect(mockRefreshCachedBlocks).toHaveBeenCalled();
     expect(mockMining.reindexHashrateRequested).toBe(true);
+  });
+
+  test('renames the BTC.com row to CloverPool in place, adds its cloverpool tag and re-attributes its blocks', async () => {
+    // Database as deployed before the rename: unique_id 7 is 'BTC.com' under
+    // the btccom slug, matching only the `btccom` parent tag. Every other
+    // pool is already current.
+    const cloverPool = currentAuxpowPools.find(pool => pool.uniqueId === 7);
+    const cloverPoolMiner = AUXPOW_PARENT_MINERS.find(miner => miner.definitionId === 7);
+    // Two AuxPoW blocks that pay no registered address, so only the parent
+    // tag attributes them: one signed `btccom`, already the pool's, and one
+    // signed `cloverpool`, left on Unknown because the old definition didn't
+    // know that tag.
+    const unregisteredPayout = ['a914b318ac9dd6edf46e9a875498843633350ac27b8587'];
+    const btccomBlock = {
+      height: 7927, hash: cloverPoolMiner?.blockHash, coinbase_raw: '02f71e00', coinbase_addresses: null,
+      header: buildAuxPowHeader(cloverPoolMiner?.parentCoinbaseRaw ?? '', unregisteredPayout),
+    };
+    const cloverpoolBlock = {
+      height: 178169, hash: 'bf4aad951d6b1202bac0b9e87bedd41b74775fa64273f06ecd880c31dd124d1b', coinbase_raw: '03f9b70200', coinbase_addresses: null,
+      header: buildAuxPowHeader(CLOVERPOOL_CURRENT_TAG_PARENT_COINBASE_RAW, unregisteredPayout),
+    };
+    mockDbQuery.mockImplementation(async (sql: any, params?: any[]) => {
+      const text = typeof sql === 'string' ? sql : sql.sql;
+      if (text.includes('SELECT name from pools')) {
+        return [[{ name: 'Unknown' }]];
+      }
+      if (text.includes('FROM blocks')) {
+        if (params?.[0] === cloverPool?.id) {
+          return [[btccomBlock]];
+        }
+        if (params?.[0] === 0) {
+          return [[cloverpoolBlock]];
+        }
+      }
+      return [[], []];
+    });
+    mockGetPoolByUniqueId.mockImplementation(async (id: number) => {
+      if (id === 1) {
+        return currentSatflowPool;
+      }
+      if (id === 2) {
+        return {
+          id: 6, uniqueId: 2, name: 'Luxor', slug: 'luxor',
+          link: 'https://mining.luxor.tech',
+          addresses: '["qb1zn9wxf7450m2gv70j5jje2sl68r3qm38ksjpfuhlppra2k02su0hqkgq8x7"]',
+          regexes: '[]',
+          parent_addresses: luxorParentAddresses,
+          parent_regexes: luxorParentRegexes,
+        };
+      }
+      if (id === 3) {
+        return {
+          id: 7, uniqueId: 3, name: 'LuckyPool.IO', slug: 'luckypoolio',
+          link: 'https://qbit.luckypool.io/', addresses: '[]', regexes: '["/LuckyPool-Qbit/"]',
+        };
+      }
+      if (id === 4) {
+        return currentDeezyPool;
+      }
+      if (id === 7) {
+        return { ...cloverPool, name: 'BTC.com', slug: 'btccom', parent_regexes: '["btccom"]' };
+      }
+      if (id === CORNSWAP_MINER.definitionId) {
+        return currentCornswapPool;
+      }
+      if (id === HIMPOOL_MINER.definitionId) {
+        return currentHimpoolPool;
+      }
+      if (id === SWITCHPOOLPROFIT_MINER.definitionId) {
+        return currentSwitchpoolprofitPool;
+      }
+      if (id === F2POOL_MINER.definitionId) {
+        return currentF2poolPool;
+      }
+      return currentAuxpowPools.find(pool => pool.uniqueId === id) ?? null;
+    });
+    poolsParser.setMiningPools(loadVendoredPools());
+
+    await poolsParser.migratePoolsJson('qbit-testsha');
+
+    // same database row under the new name and slug, so its blocks and
+    // hashrate history stay with it
+    expect(cloverPool).toBeDefined();
+    expect(mockInsertNewMiningPool).not.toHaveBeenCalled();
+    expect(mockRenameMiningPool).toHaveBeenCalledTimes(1);
+    expect(mockRenameMiningPool).toHaveBeenCalledWith(cloverPool?.id, 'cloverpool', 'CloverPool');
+    expect(mockUpdateMiningPoolLink).not.toHaveBeenCalled();
+    // both tags are kept: the pool signed each of them as CloverPool
+    expect(mockUpdateMiningPoolTags).toHaveBeenCalledTimes(1);
+    expect(mockUpdateMiningPoolTags).toHaveBeenCalledWith(
+      cloverPool?.id,
+      [],
+      [],
+      ['36cWgjEtxQSFgbHTJDw5AB96ZX7fJk1URd'],
+      ['btccom', 'cloverpool'],
+      'any'
+    );
+    // the tag change re-indexes the pool's own blocks, then Unknown is re-matched
+    expect(mockDbQuery).toHaveBeenCalledWith(expect.stringContaining('FROM blocks'), [cloverPool?.id, 0]);
+    expect(mockDbQuery).toHaveBeenCalledWith(expect.stringContaining('FROM blocks'), [0, 0]);
+    // the `btccom` block still matches and stays where it is
+    expect(mockSavePool).not.toHaveBeenCalledWith(btccomBlock.hash, expect.anything());
+    // the Unknown block signed `cloverpool` moves to the pool
+    expect(mockSavePool).toHaveBeenCalledWith(cloverpoolBlock.hash, cloverPool?.id);
+    expect(mockSavePool).toHaveBeenCalledTimes(1);
+    // cached blocks would otherwise go on answering with the btccom slug
+    expect(mockRefreshCachedBlocks).toHaveBeenCalled();
+    expect(mockUpdateDefinitionHash).toHaveBeenCalledWith('qbit-testsha');
   });
 
   test('detects parent-identifier additions against NULL pre-migration columns', async () => {
@@ -1671,7 +1878,7 @@ describe('PoolsParser qbit non-empty pool migration', () => {
 
     // Prism is renamed/retagged instead of inserted; all other definitions
     // are inserted, and the non-matching legacy block falls back to Unknown.
-    expect(mockInsertNewMiningPool).toHaveBeenCalledTimes(14);
+    expect(mockInsertNewMiningPool).toHaveBeenCalledTimes(15);
     expect(mockInsertNewMiningPool).toHaveBeenCalledWith(
       expect.objectContaining({ id: 2, name: 'Luxor' }),
       'luxor'

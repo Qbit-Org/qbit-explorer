@@ -236,12 +236,6 @@ export class TransactionComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.hideAccelerationSummary = this.stateService.isMempoolSpaceBuild ? this.storageService.getValue('hide-accelerator-pref') == 'true' : true;
 
-    if (!this.stateService.isLiquid()) {
-      this.miningService.getMiningStats('1m').subscribe(stats => {
-        this.miningStats = stats;
-      });
-    }
-
     this.websocketService.want(['blocks', 'mempool-blocks']);
     this.stateService.networkChanged$.subscribe(
       (network) => {
