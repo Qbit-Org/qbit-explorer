@@ -61,7 +61,9 @@ it without reading its head commit when GitHub's rules for that branch require
 deleting and force-pushing it, as `main-protection.json` and
 `1.x.x-integration.json` do. The branch then gains commits only through pull
 requests the check passed, and can't be made, or made again, at another
-commit. If one of those rules is missing on GitHub, the check says which, and
+commit. The check can't see who may bypass a ruleset, so keep these two free
+of bypass actors. If one of those rules is missing on GitHub, the check says
+which, and
 passes the pull request only if a person signed its head commit with an
 OpenPGP key that is on their own GitHub account. The head of `1.x.x` or `main`
 is usually a commit GitHub made when it merged a pull request, so the pull
