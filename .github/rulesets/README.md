@@ -9,8 +9,8 @@ are the ones that report its checks (see "Rename a required check").
 
 | File | Enforces |
 | --- | --- |
-| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review and the nine required checks, merge commits only; no deletion or force push. No bypass actors. |
-| `1.x.x-integration.json` | `1.x.x`: a verified signature on every commit added; pull requests with the nine required checks and `signed-landing`, and no required approval, merge commits only; no deletion or force push. No bypass actors. |
+| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review and the nine required checks, squash merges and merge commits only; no deletion or force push. No bypass actors. |
+| `1.x.x-integration.json` | `1.x.x`: a verified signature on every commit added; pull requests with the nine required checks and `signed-landing`, and no required approval, squash merges and merge commits only; no deletion or force push. No bypass actors. |
 | `release-tags.json` | `v*` tags can't be moved or deleted. No bypass actors. |
 
 The workflow takes effect only from `main`: the copy on `1.x.x` does nothing
@@ -24,13 +24,17 @@ signature. Commits already on the branch aren't checked again, but an old
 unsigned commit that a push or merge brings into an existing branch from
 another one is refused like a new one. Commits on a pull request's branch
 don't need one while it is open. Before it merges, a maintainer rewrites the
-branch as one commit, signs that commit with their own key and pushes it, and
-then merges it with a merge commit, which GitHub signs. So the target branch
-gains one commit a person signed, and one merge commit. For a pull request
-from a fork, that push needs "Allow edits by maintainers". Without it, a
-maintainer opens the same change from a branch in this repository.
-[CONTRIBUTING.md](../../CONTRIBUTING.md#commit-messages) has the contributor's
-side of this.
+branch as one commit, signs that commit with their own key and pushes it. For
+a pull request from a fork, that push needs "Allow edits by maintainers".
+Without it, a maintainer opens the same change from a branch in this
+repository. Once `signed-landing` passes, the pull request is squash-merged:
+GitHub makes one commit on the target branch, carrying the signed commit's
+message, and signs it itself. So the target branch gains that one commit, and
+no merge commit. The commit the maintainer signed stays as the pull request's
+head, which GitHub keeps as `refs/pull/<number>/head`; when
+`squash-sign merge` makes the merge, the landed commit's `Signed-commit:` line
+names it. [CONTRIBUTING.md](../../CONTRIBUTING.md#commit-messages) has the
+contributor's side of this.
 
 A pull request that promotes `1.x.x` into `main` is the exception. `1.x.x`
 can't be rewritten, so it merges as it is, with a merge commit, and every
@@ -89,10 +93,15 @@ run in the repository draws on that token's hourly allowance of requests. A
 flood of pull request events can use it up, and the check then fails for every
 pull request until the hour is over.
 
-The repository's settings allow merge commits only (Settings → General → Pull
-Requests). GitHub's squash merge would make the commit itself and sign it with
-GitHub's key, so no person's signature would reach the branch. Its rebase
-merge makes commits with no signature, which the rule refuses.
+The repository's settings allow squash merges and merge commits (Settings →
+General → Pull Requests). An ordinary pull request is squash-merged. GitHub
+signs the commit its squash merge makes, so GitHub's own signature satisfies
+the signature rule on the branch. On `1.x.x`, what requires a person's
+signature is the `signed-landing` check, which a ruleset nobody can bypass
+requires; `main` doesn't require that check (see above). A pull request from
+`1.x.x` or `main` lands as it is, with a merge commit, because squashing it
+would lose its history. GitHub's rebase merge makes commits with no signature,
+which the rule refuses.
 
 ## Apply a change
 
@@ -128,20 +137,20 @@ apply the file. When a required check moves from one ruleset to another, apply
 the one that gains it first.
 
 The merge-method setting isn't a ruleset. To set a repository up from these
-files, allow merge commits, apply the files, then turn squash and rebase
-merges off. No step leaves the repository unable to merge. The chain stops at
-the first step that fails. Fix that step and run the chain again: applying a
-file twice is harmless. Run it only once `signed-landing.yml` is on `main`,
-the default branch, and the Actions policy allows it. A pull request that is
-already open shows the check as expected until its next push or edit: edit its
-title or description to start a run.
+files, allow merge commits, apply the files, then allow squash merges and turn
+rebase merges off. No step leaves the repository unable to merge. The chain
+stops at the first step that fails. Fix that step and run the chain again:
+applying a file twice is harmless. Run it only once `signed-landing.yml` is on
+`main`, the default branch, and the Actions policy allows it. A pull request
+that is already open shows the check as expected until its next push or edit:
+edit its title or description to start a run.
 
 ```bash
 gh api -X PATCH "$repo" -F allow_merge_commit=true --silent &&
   apply .github/rulesets/main-protection.json &&
   apply .github/rulesets/1.x.x-integration.json &&
   apply .github/rulesets/release-tags.json &&
-  gh api -X PATCH "$repo" -F allow_merge_commit=true -F allow_squash_merge=false -F allow_rebase_merge=false --silent
+  gh api -X PATCH "$repo" -F allow_merge_commit=true -F allow_squash_merge=true -F allow_rebase_merge=false --silent
 ```
 
 ## Rename a required check
@@ -210,5 +219,5 @@ fi
 ```
 
 Every line should say `matches`, and the settings should show merge commits
-only. `includes_parents=false` leaves out organization rulesets, which these
-files don't hold.
+and squash merges, and no rebase merges. `includes_parents=false` leaves out
+organization rulesets, which these files don't hold.
