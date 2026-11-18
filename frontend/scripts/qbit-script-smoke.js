@@ -398,6 +398,32 @@ assert(decoded.vout[0].scriptpubkey_asm === 'OP_CHECKSIGPQC', `0xb3 ASM mismatch
     const [read] = ordApi.decodeInscriptions(ordLeaf(textField + '00' + push + '616263' + '68'));
     assert(read?.content_type_str === 'text/plain' && Buffer.from(read.body).toString() === 'abc', `${push} body: ${JSON.stringify(read)}`);
   }
+  // An envelope starts where an instruction starts: the bytes of a mark inside a data push are data. So a body of
+  // 50,000 pushes that each hold a mark is one qscription, read in linear time, and it is none when the envelope
+  // then cannot be read (0xff is no push), also when the pushes are in its fields.
+  {
+    const marks = '070063036f726400'.repeat(50_000);
+    for (const [rest, count] of [[textField + '00' + marks + '68', 1], [textField + '00' + marks + 'ff', 0], [marks + 'ff', 0]]) {
+      const big = ordLeaf(rest);
+      const started = Date.now();
+      const read = ordApi.decodeInscriptions(big);
+      const elapsed = Date.now() - started;
+      assert(big.length / 2 > 400_000 && read.length === count && elapsed < 2000, `50,000 marks in pushes, ending in ${rest.slice(-2)}: ${read.length} qscriptions in ${elapsed} ms`);
+      assert(count === 0 || (read[0].body_length === 7 * 50_000 && read[0].is_cropped && read[0].content_type_str === 'text/plain'), `body of marks: ${read[0]?.body_length}`);
+    }
+    const hi = '0063036f7264' + textField + '00' + '026869' + '68';
+    const pushOf = (hex) => (hex.length / 2).toString(16).padStart(2, '0') + hex;
+    const outer = ordApi.decodeInscriptions(ordLeaf(textField + '00' + pushOf(hi) + '68'));
+    assert(outer.length === 1 && Buffer.from(outer[0].body).toString('hex') === hi, `envelope bytes in a body push: ${JSON.stringify(outer)}`);
+    // a mark in a push outside any envelope hides nothing: the envelope after it is read
+    const afterData = ordApi.decodeInscriptions('20' + '02'.repeat(32) + 'b3' + pushOf('0063036f726418') + '75' + hi + 'ff');
+    assert(afterData.length === 1 && Buffer.from(afterData[0].body).toString() === 'hi', `envelope after a mark in a dropped push: ${JSON.stringify(afterData)}`);
+    // an envelope that cannot be read does not hide the one after it, whose OP_FALSE it read as an empty push
+    const afterBroken = ordApi.decodeInscriptions(ordLeaf(textField + '00' + '0161') + hi);
+    assert(afterBroken.length === 1 && Buffer.from(afterBroken[0].body).toString() === 'hi', `envelope after one without OP_ENDIF: ${JSON.stringify(afterBroken)}`);
+    // nothing is read after a push that runs past the end of the script: where instructions start is not known there
+    assert(ordApi.decodeInscriptions(ordLeaf('4efbffffff') + hi).length === 0, 'an envelope after a push past the end of the script was read');
+  }
 
   const etched = decipherRunestone(etching)?.etching;
   assert(etched?.spacedName === 'POST•QUANTUM•GOODS' && etched.symbol === '⚛' && etched.supply === 21000000n, `etching: ${etched?.spacedName}`);

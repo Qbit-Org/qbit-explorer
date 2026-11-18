@@ -149,6 +149,40 @@ export function getNextInscriptionMark(raw: Uint8Array, startPosition: number): 
 /////////////////////////////// Reader ///////////////////////////////
 
 /**
+ * Marks where each instruction of a script starts, reading it from its first byte as opcodes and data pushes.
+ * Reading stops at a push that runs past the end of the script: nothing after such a push is marked.
+ *
+ * @param raw - The script.
+ * @returns An array as long as the script, with 1 at every position where an instruction starts.
+ */
+export function instructionStarts(raw: Uint8Array): Uint8Array {
+  const starts = new Uint8Array(raw.length);
+  let position = 0;
+  while (position < raw.length) {
+    starts[position] = 1;
+    const opcode = raw[position];
+    let lengthBytes = 0;
+    let dataSize = 0;
+    if (opcode >= 1 && opcode <= 75) {
+      dataSize = opcode;
+    } else if (opcode === OP_PUSHDATA1 || opcode === OP_PUSHDATA2 || opcode === OP_PUSHDATA4) {
+      lengthBytes = opcode === OP_PUSHDATA1 ? 1 : opcode === OP_PUSHDATA2 ? 2 : 4;
+      if (position + 1 + lengthBytes > raw.length) {
+        break;
+      }
+      for (let i = lengthBytes - 1; i >= 0; i--) {
+        dataSize = dataSize * 256 + raw[position + 1 + i];
+      }
+    }
+    if (position + 1 + lengthBytes + dataSize > raw.length) {
+      break;
+    }
+    position += 1 + lengthBytes + dataSize;
+  }
+  return starts;
+}
+
+/**
  * Reads a specified number of bytes from a Uint8Array starting from a given pointer.
  *
  * @param raw - The Uint8Array from which bytes are to be read.
