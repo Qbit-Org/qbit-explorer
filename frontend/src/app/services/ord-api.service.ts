@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { catchError, forkJoin, map, Observable, of, switchMap, tap } from 'rxjs';
 import { Inscription } from '@app/shared/ord/inscription.utils';
 import { Transaction } from '@interfaces/electrs.interface';
-import { getNextInscriptionMark, hexToBytes, extractInscriptionData } from '@app/shared/ord/inscription.utils';
+import { getNextInscriptionMark, hexToBytes, extractInscriptionData, instructionStarts } from '@app/shared/ord/inscription.utils';
 import { parsePinsEnvelopes, pinsEnvelopeToInscription } from '@app/shared/ord/pins.utils';
 import { decipherRunestone, Runestone, Etching } from '@app/shared/ord/rune.utils';
 import { ElectrsApiService } from '@app/services/electrs-api.service';
@@ -79,11 +79,19 @@ export class OrdApiService {
 
     const inscriptions: Inscription[] = [];
     const raw = hexToBytes(witness);
+    // An envelope starts where an instruction starts. The same bytes inside a data push are data, as they are for
+    // ord, so they are skipped: reading them as envelopes too made a script of such pushes cost its size squared.
+    const starts = instructionStarts(raw);
     let startPosition = 0;
 
     while (true) {
       const pointer = getNextInscriptionMark(raw, startPosition);
       if (pointer === -1) {break;}
+
+      if (!starts[pointer - 6]) {
+        startPosition = pointer - 5;
+        continue;
+      }
 
       const inscription = extractInscriptionData(raw, pointer);
       if (inscription) {
