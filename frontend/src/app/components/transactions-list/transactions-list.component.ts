@@ -293,22 +293,7 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
             }
           }
 
-          // process signature data
-          if (tx.vin.length && !tx.vin[0].is_coinbase) {
-            tx['_sigs'] = tx.vin.map(vin => processInputSignatures(vin));
-            tx['_sigmap'] = tx['_sigs'].reduce((map, sigs, vindex) => {
-              sigs.forEach(sig => {
-                map[sig.signature] = { sig, vindex };
-              });
-              return map;
-            }, {});
-
-            if (!tx['_interestingSignatures']) {
-              tx['_interestingSignatures'] = tx['_sigs'].some(sigs => sigs.some(sig => this.sigIsInteresting(sig)))
-                || tx['_sigs'].every(sigs => !sigs?.length);
-            }
-          }
-          tx['_showSignatures'] = this.shouldShowSignatures(tx);
+          this.processSignatures(tx);
         }
         // parse taproot spends
         for (const vin of tx.vin) {
@@ -518,6 +503,12 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
             this.parseScriptPathSpend(tx, vin);
             this.detectPinsInscription(tx, vin);
           }
+          // signatures are read with the prevout's script type, and the amount column is sized by the prevout's value
+          if (this.stateService.network !== 'liquid' && this.stateService.network !== 'liquidtestnet') {
+            tx['_interestingSignatures'] = false;
+            this.processSignatures(tx);
+          }
+          tx.largeInput = tx.largeInput || tx.vin.some(vin => (vin?.prevout?.value > 1000000000));
           this.ref.markForCheck();
         });
     }
@@ -539,7 +530,11 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
     } else {
       limit = Math.min((next ? this.showMoreIncrement : this.inputRowLimit), tx.vin.length);
     }
-    if (tx.vin.length - limit <= 5) {
+    // A few inputs left are shown at once. Not while "show more" still has something to load for them, which is
+    // the only thing that does: prevouts left out by lazyPrevouts, or the fee that comes with them (-1 until then).
+    // `next` asks for the limit after that click, when they are loaded.
+    const toLoad = !next && (tx.fee === -1 || tx.vin.slice(limit).some(vin => vin.lazy));
+    if (tx.vin.length - limit <= 5 && !toLoad) {
       limit = tx.vin.length;
     }
     return limit;
@@ -584,6 +579,29 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
 
   toggleTaprootControlBlock(vinIndex: number): void {
     this.showTaprootControlBlock[vinIndex] = !this.showTaprootControlBlock[vinIndex];
+  }
+
+  /**
+   * Reads the signatures of a transaction's inputs, and whether the signature column is shown for it. An input's
+   * signatures are found by its prevout's script type, so this runs again once inputs that came without a prevout
+   * (lazyPrevouts) are loaded.
+   */
+  processSignatures(tx: Transaction): void {
+    if (tx.vin.length && !tx.vin[0].is_coinbase) {
+      tx['_sigs'] = tx.vin.map(vin => processInputSignatures(vin));
+      tx['_sigmap'] = tx['_sigs'].reduce((map, sigs, vindex) => {
+        sigs.forEach(sig => {
+          map[sig.signature] = { sig, vindex };
+        });
+        return map;
+      }, {});
+
+      if (!tx['_interestingSignatures']) {
+        tx['_interestingSignatures'] = tx['_sigs'].some(sigs => sigs.some(sig => this.sigIsInteresting(sig)))
+          || tx['_sigs'].every(sigs => !sigs?.length);
+      }
+    }
+    tx['_showSignatures'] = this.shouldShowSignatures(tx);
   }
 
   /**
