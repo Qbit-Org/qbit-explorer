@@ -509,6 +509,9 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
             this.processSignatures(tx);
           }
           tx.largeInput = tx.largeInput || tx.vin.some(vin => (vin?.prevout?.value > 1000000000));
+          // lookalike addresses are searched among the first inputs' prevouts, some of which have only arrived now
+          this.similarityMatches.delete(tx.txid);
+          this.updateAddressSimilarities();
           this.ref.markForCheck();
         });
     }
