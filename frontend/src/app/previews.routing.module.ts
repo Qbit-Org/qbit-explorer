@@ -36,6 +36,11 @@ const routes: Routes = [
         redirectTo: 'mining/pool/qbitpool',
       },
       {
+        path: 'mining/pool/btccom',
+        pathMatch: 'full',
+        redirectTo: 'mining/pool/cloverpool',
+      },
+      {
         path: 'mining/pool/:slug',
         component: PoolPreviewComponent
       },

@@ -155,8 +155,12 @@ export function getNextInscriptionMark(raw: Uint8Array, startPosition: number): 
  * @param pointer - The position in the array from where to start reading.
  * @param n - The number of bytes to read.
  * @returns A tuple containing the read bytes as Uint8Array and the updated pointer position.
+ * @throws If fewer than n bytes are left, so a truncated push is a failed parse.
  */
 export function readBytes(raw: Uint8Array, pointer: number, n: number): [Uint8Array, number] {
+  if (n < 0 || pointer + n > raw.length) {
+    throw new Error(`Cannot read ${n} bytes at position ${pointer} of ${raw.length}`);
+  }
   const slice = raw.slice(pointer, pointer + n);
   return [slice, pointer + n];
 }
@@ -210,7 +214,8 @@ export function readPushdata(raw: Uint8Array, pointer: number): [Uint8Array, num
   }
 
   const [dataSizeArray, nextPointer] = readBytes(raw, newPointer, numBytes);
-  const dataSize = littleEndianBytesToNumber(dataSizeArray);
+  // push lengths are unsigned: OP_PUSHDATA4 fbffffff is 4294967291 bytes, not -5
+  const dataSize = littleEndianBytesToNumber(dataSizeArray) >>> 0;
   return readBytes(raw, nextPointer, dataSize);
 }
 

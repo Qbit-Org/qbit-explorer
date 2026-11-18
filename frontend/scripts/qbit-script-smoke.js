@@ -383,6 +383,21 @@ assert(decoded.vout[0].scriptpubkey_asm === 'OP_CHECKSIGPQC', `0xb3 ASM mismatch
   assert(pinsLeafScript(pinsWitness) === revealLeafScript && pinsLeafScript([...pinsWitness, '50']) === revealLeafScript, 'leaf script of a 0xc0 spend');
   assert(pinsLeafScript(['00', revealLeafScript, 'c1' + revealControl.slice(2)]) === revealLeafScript, 'leaf version 0xc0 with the parity bit');
   assert(pinsLeafScript(['00', revealLeafScript, 'c2' + revealControl.slice(2)]) === null && pinsLeafScript([revealLeafScript, '50']) === null && pinsLeafScript([revealControl]) === null, 'leaf script outside leaf version 0xc0');
+  // push lengths are read unsigned, and a push past the end of the leaf script is a failed parse: an OP_PUSHDATA4
+  // length of fbffffff (4294967291 bytes, -5 when read signed) returns at once, in a field or in the body, and a
+  // truncated direct push gives no qscription
+  const ordLeaf = (rest) => '20' + '02'.repeat(32) + 'b3' + '0063036f7264' + rest;
+  const textField = '01010a' + Buffer.from('text/plain').toString('hex');
+  for (const scriptHex of [ordLeaf('4efbffffff'), ordLeaf(textField + '00' + '4efbffffff' + '68'), ordLeaf(textField + '00' + '056869' + '68')]) {
+    const started = Date.now();
+    const read = ordApi.decodeInscriptions(scriptHex);
+    assert(read.length === 0 && Date.now() - started < 1000, `push past the end of ${scriptHex.slice(68)}: ${JSON.stringify(read)}`);
+  }
+  // OP_PUSHDATA1, 2 and 4 bodies within the script are read as before
+  for (const push of ['4c03', '4d0300', '4e03000000']) {
+    const [read] = ordApi.decodeInscriptions(ordLeaf(textField + '00' + push + '616263' + '68'));
+    assert(read?.content_type_str === 'text/plain' && Buffer.from(read.body).toString() === 'abc', `${push} body: ${JSON.stringify(read)}`);
+  }
 
   const etched = decipherRunestone(etching)?.etching;
   assert(etched?.spacedName === 'POST•QUANTUM•GOODS' && etched.symbol === '⚛' && etched.supply === 21000000n, `etching: ${etched?.spacedName}`);
@@ -618,6 +633,44 @@ require('@angular/compiler');
   ]) {
     const shown = ordData(runestone, runeInfo);
     assert(shown.text === text && JSON.stringify(shown.links) === JSON.stringify(links), `${name}: ${JSON.stringify(shown)}`);
+  }
+
+  // "show more inputs" replaces tx.vin with the inputs of the full transaction. Inputs past the first ones can come
+  // without a prevout (lazyPrevouts), so their qscription is only found once they are loaded, and every loaded
+  // input gets its taprootInfo again, which the Qscription panel of a taproot input reads its leaf script from.
+  {
+    const { of } = require('rxjs');
+    const { TransactionsListComponent } = require('../src/app/components/transactions-list/transactions-list.component.ts');
+    const { OrdApiService } = require('../src/app/services/ord-api.service.ts');
+    const clone = (tx) => JSON.parse(JSON.stringify(tx));
+    const ordScript = '20' + '02'.repeat(32) + 'ac' + '0063036f7264' + '01010a' + Buffer.from('text/plain').toString('hex') + '00' + '05' + Buffer.from('hello').toString('hex') + '68';
+    const taprootReveal = {
+      ...clone(mint.vin[0]),
+      prevout: { scriptpubkey: '5120' + '33'.repeat(32), scriptpubkey_type: 'v1_p2tr', value: 10000 },
+      witness: ['11'.repeat(64), ordScript, 'c0' + '50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0'],
+    };
+    const full = clone(mint);
+    full.vin = [taprootReveal, ...Array(12).fill(clone(mint).vin[0]), clone(etching).vin[0]].map(clone);
+    full.status = { confirmed: true, block_height: 10000, block_time: 1 };
+    const lazy = clone(full);
+    lazy.vin[13] = { ...lazy.vin[13], prevout: null, lazy: true };
+    const list = Object.assign(Object.create(TransactionsListComponent.prototype), {
+      transactions: [lazy], txPreview: true, blockTime: 1, similarityMatches: new Map(), showOrdData: {},
+      stateService: { network: '' }, ordApiService: new OrdApiService({}), updateAddressSimilarities: () => {}, refreshOutspends$: { next: () => {} },
+    });
+    list.ngOnChanges({ transactions: {} });
+    assert(lazy.vin[0].isInscription === true && lazy.vin[0].taprootInfo?.scriptPath?.script === ordScript, 'taproot qscription input before loading');
+    assert(!lazy.vin[13].isInscription, 'Qscription button on an input without a prevout');
+    Object.assign(list, { txPreview: false, electrsApiService: { getTransaction$: () => of(clone(full)) }, ref: { markForCheck: () => {} } });
+    list.loadMoreInputs(lazy);
+    assert(lazy.vin[13].isInscription === true && lazy.vin.slice(1, 13).every((vin) => !vin.isInscription), 'Qscription button after the inputs are loaded');
+    assert(lazy.vin[0].isInscription === true && lazy.vin[0].taprootInfo?.scriptPath?.script === ordScript, 'taprootInfo after the inputs are loaded');
+    for (const index of [0, 13]) {
+      list.toggleOrdData(lazy.txid, 'vin', index);
+      const entry = list.showOrdData[`${lazy.txid}-vin-${index}`];
+      const expected = index === 0 ? 'text/plain' : 'image/svg+xml';
+      assert(entry.show && entry.inscriptions.length === 1 && entry.inscriptions[0].content_type_str === expected, `Qscription panel of loaded input ${index}: ${JSON.stringify(entry.inscriptions)}`);
+    }
   }
 }
 

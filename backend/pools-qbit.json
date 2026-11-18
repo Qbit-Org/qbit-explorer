@@ -54,12 +54,12 @@
     },
     {
       "id": 7,
-      "name": "BTC.com",
+      "name": "CloverPool",
       "link": "https://cloverpool.com",
       "addresses": [],
       "tags": [],
       "parentAddresses": ["36cWgjEtxQSFgbHTJDw5AB96ZX7fJk1URd"],
-      "parentTags": ["btccom"]
+      "parentTags": ["btccom", "cloverpool"]
     },
     {
       "id": 8,

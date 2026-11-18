@@ -41,6 +41,12 @@ const routes: Routes = [
         redirectTo: 'mining/pool/qbitpool',
       },
       {
+        // CloverPool's earlier name, BTC.com.
+        path: 'mining/pool/btccom',
+        pathMatch: 'full',
+        redirectTo: 'mining/pool/cloverpool',
+      },
+      {
         path: 'mining/pool/:slug',
         data: { networks: ['bitcoin'] },
         component: PoolComponent,

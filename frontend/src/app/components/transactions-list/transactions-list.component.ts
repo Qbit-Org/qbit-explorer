@@ -312,27 +312,9 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
         }
         // parse taproot spends
         for (const vin of tx.vin) {
-          if (vin.prevout?.scriptpubkey_type === 'v1_p2tr') {
-            vin.taprootInfo = parseTaproot(vin.witness);
-            if (this.stateService.network !== 'liquid' && this.stateService.network !== 'liquidtestnet') {
-              if (vin.taprootInfo?.scriptPath?.script.includes('0063036f7264')) {
-                vin.isInscription = true;
-                tx.largeInput = true;
-              }
-            } else {
-              if (vin.taprootInfo?.scriptPath?.leafVersion === 0xbe) {
-                vin.inner_simplicityscript = vin.witness[1]; // simplicity program is the second witness element
-              }
-            }
-          } else if (isP2mrType(vin.prevout?.scriptpubkey_type) && vin.witness?.length) {
-            // P2MR shares taproot's script-path witness layout, so its leaf script can carry an inscription envelope too
-            if (witnessToP2TRScript(vin.witness)?.includes('0063036f7264')) {
-              vin.isInscription = true;
-              tx.largeInput = true;
-            }
-            // a P2MR Inscription (PINS-1) has its own marker and its own button
-            this.detectPinsInscription(tx, vin);
-          }
+          this.parseScriptPathSpend(tx, vin);
+          // a P2MR Inscription (PINS-1) has its own marker and its own button
+          this.detectPinsInscription(tx, vin);
         }
 
         tx.largeInput = tx.largeInput || tx.vin.some(vin => (vin?.prevout?.value > 1000000000));
@@ -530,8 +512,10 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
           for (const [index, vin] of temp.entries()) {
             newTx.vin[index].isInscription = vin.isInscription;
           }
-          // inputs that came without a prevout (lazyPrevouts) are only checked now that they have one
+          // the loaded inputs are new objects, and the ones that came without a prevout (lazyPrevouts) were not
+          // parsed yet, so taprootInfo, isInscription and isPinsInscription are set again for all of them
           for (const vin of newTx.vin) {
+            this.parseScriptPathSpend(tx, vin);
             this.detectPinsInscription(tx, vin);
           }
           this.ref.markForCheck();
@@ -600,6 +584,32 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
 
   toggleTaprootControlBlock(vinIndex: number): void {
     this.showTaprootControlBlock[vinIndex] = !this.showTaprootControlBlock[vinIndex];
+  }
+
+  /**
+   * Parses the script path of a taproot or P2MR input: sets vin.taprootInfo for taproot, and vin.isInscription
+   * when the leaf script holds an inscription envelope.
+   */
+  parseScriptPathSpend(tx: Transaction, vin: Vin): void {
+    if (vin.prevout?.scriptpubkey_type === 'v1_p2tr') {
+      vin.taprootInfo = parseTaproot(vin.witness);
+      if (this.stateService.network !== 'liquid' && this.stateService.network !== 'liquidtestnet') {
+        if (vin.taprootInfo?.scriptPath?.script.includes('0063036f7264')) {
+          vin.isInscription = true;
+          tx.largeInput = true;
+        }
+      } else {
+        if (vin.taprootInfo?.scriptPath?.leafVersion === 0xbe) {
+          vin.inner_simplicityscript = vin.witness[1]; // simplicity program is the second witness element
+        }
+      }
+    } else if (isP2mrType(vin.prevout?.scriptpubkey_type) && vin.witness?.length) {
+      // P2MR shares taproot's script-path witness layout, so its leaf script can carry an inscription envelope too
+      if (witnessToP2TRScript(vin.witness)?.includes('0063036f7264')) {
+        vin.isInscription = true;
+        tx.largeInput = true;
+      }
+    }
   }
 
   /**

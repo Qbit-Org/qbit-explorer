@@ -129,8 +129,8 @@ testnet4 qbitd or qbit-electrs evidence in the PR or issue comment.
 
 ## qbit Consensus Quick Reference
 
-Source references are from `Qbit-Org/qbit` at the `v1.0.0` mainnet release
-(commit `7ebcddb622d6e639041f005a189b048ec2a221fe`), and the qbit-electrs
+Source references are from `Qbit-Org/qbit` at the `v1.0.1` mainnet release
+(commit `0439a7e5b37fb3f7e4ddfb735b68961445a882c8`), and the qbit-electrs
 contract `doc/qbit-contract.md` at `Qbit-Org/qbit-electrs`
 `53102e925713211ebf9ee8fe34b2f68534740fd9`. Where a row cites three
 `chainparams.cpp` lines, they are the mainnet, testnet4, and regtest
@@ -155,8 +155,8 @@ parameters in that order.
 | Bech32 HRPs | Mainnet `qb`, testnet4 `tq`, regtest `qbrt` | `src/kernel/chainparams.cpp:219`, `:413`, `:657` |
 | Base58 P2PKH | Mainnet 58 (`Q`), testnet4/regtest 120 (`q`) | `src/kernel/chainparams.cpp:213`, `:407`, `:651` |
 | Base58 P2SH | Mainnet 63 (`S`), testnet4/regtest 125 (`s`) | `src/kernel/chainparams.cpp:214`, `:408`, `:652` |
-| New script types | `witness_v2_p2mr`, `anchor` | `src/script/solver.cpp:28`, `:32`; qbit-electrs `doc/qbit-contract.md` P2MR section |
-| qbit opcode | `OP_CHECKSIGPQC = 0xb3` | `src/script/script.h:306` |
+| New script types | `witness_v2_p2mr`, `anchor` | `src/script/solver.cpp:32`, `:28`; qbit-electrs `doc/qbit-contract.md` P2MR section |
+| qbit opcode | `OP_CHECKSIGPQC = 0xb3` | `src/script/script.h:318` |
 | PQC signature size | 3,680 bytes | `src/libbitcoinpqc/include/libbitcoinpqc/slh_dsa.h:19-21` |
 | PQC public key size | 32 bytes | `src/libbitcoinpqc/include/libbitcoinpqc/slh_dsa.h:19-21` |
 | Dust relay fee | 750 bits/kvB, about 0.75 bits/vB | `src/policy/policy.h:66-71` |
@@ -199,7 +199,7 @@ The qbit CI/CD workflows are:
   check still skips with a warning if publishing regresses to HTTP 404.
 - `.github/workflows/qbit-regtest.yml` — starts a regtest stack with
   `backend/scripts/qbit-regtest-harness.sh` and runs `npm run smoke:qbit-regtest`
-  against it: qbitd from the `v1.0.0` release tarball, checked against a SHA256
+  against it: qbitd from the `v1.0.1` release tarball, checked against a SHA256
   pinned in the workflow, qbit-electrs built at its pinned contract commit,
   MariaDB as a service container, and the backend with
   `MEMPOOL.BACKEND=esplora`. It then runs the Cypress specs in
@@ -207,12 +207,13 @@ The qbit CI/CD workflows are:
 - `.github/workflows/signed-landing.yml` — the `signed-landing` check: a pull
   request passes once it is one commit that a person signed
   ([`.github/rulesets/README.md`](.github/rulesets/README.md)). It is identical
-  in every Qbit-Org repository except its `AS_IS_HEADS` line, so change the
-  shared part in all of them together. It is the one
+  in every Qbit-Org repository except its `AS_IS_HEADS` and `AS_IS_LINES`
+  lines, so change the shared part in all of them together. It is the one
   workflow on `pull_request_target`, which GitHub always runs from `main`'s
-  copy: it reads the pull request through the API with
-  `permissions: pull-requests: read`, checks nothing out and runs none of the
-  pull request's code. It runs on GitHub's `ubuntu-24.04` runner.
+  copy: it reads the pull request through the API with the permissions
+  `actions: read`, `contents: read` and `pull-requests: read`, checks nothing
+  out and runs none of the pull request's code. It runs on GitHub's
+  `ubuntu-24.04` runner.
 
 Keep the workflows safe for a public repository. Each of the others sets
 `permissions: contents: read` and checks out with `persist-credentials: false`.

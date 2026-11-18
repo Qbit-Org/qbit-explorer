@@ -171,7 +171,7 @@ at startup, and RPC calls fail. It doesn't fall back to `CORE_RPC_USERNAME` and
 
 To use a password instead, as the sample `docker-compose.yml` does, add an
 `rpcauth` line to `qbit.conf` and restart qbitd. qbit's
-[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.0/share/rpcauth/rpcauth.py)
+[`share/rpcauth/rpcauth.py`](https://github.com/Qbit-Org/qbit/blob/v1.0.1/share/rpcauth/rpcauth.py)
 prints one, with a random password:
 
 ```bash

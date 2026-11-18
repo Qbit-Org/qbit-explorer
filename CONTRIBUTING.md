@@ -58,18 +58,28 @@ Mining: the pool is now Qbit Pool
 Use the body to explain why the change is needed.
 
 Every commit on `main` and `1.x.x` must carry a verified signature, and pull
-requests merge with a merge commit: squash and rebase merges are off. You
-don't need to sign your own commits. When a pull request is ready, a
-maintainer squashes it into one commit, signs it and merges it, so the branch
-gets one commit for each pull request, under GitHub's merge commit. That
-commit's subject is the pull request's title, so write the title in the same
-style. Leave "Allow edits by maintainers" on, so the maintainer can push the
-signed commit to your branch. If your fork can't offer that, a maintainer
-opens the same change from a branch in this repository. An open pull request
-usually shows a failing `signed-landing` check until the maintainer has done
-that, which is expected. The check starts reporting once its workflow has been
-promoted to `main`. The rulesets that enforce this are in
-[`.github/rulesets/`](.github/rulesets/).
+requests land with GitHub's squash merge: rebase merges are off. You don't
+need to sign your own commits. When a pull request is ready, a maintainer
+squashes it into one commit, signs it and pushes it. That commit's subject is
+the pull request's title and its body starts with the pull request's
+description, so write the title in the same style and the description to be
+read in the history.
+
+A pull request from a fork is reviewed where you opened it. When it is ready,
+a maintainer pushes your commits to a branch in this repository and opens a
+pull request from that branch with your title and description. That one lands,
+and yours is closed with a link to it. The landed commit names each author of
+your commits in a `Co-authored-by` line. Your branch is never rewritten, so
+"Allow edits by maintainers" makes no difference.
+
+An open pull request usually shows a failing `signed-landing` check until the
+maintainer has signed its commit, which is expected. On a pull request from a
+fork it stays red until that pull request is closed, because the signed commit
+is on the other one. The check reports on every pull request, and `main` and
+`1.x.x` both require it. The pull request then lands with GitHub's squash
+merge, so the branch gets one commit for each pull request, which GitHub makes
+with the signed commit's message and signs, and no merge commit. The rulesets
+that enforce this are in [`.github/rulesets/`](.github/rulesets/).
 
 ## Review
 

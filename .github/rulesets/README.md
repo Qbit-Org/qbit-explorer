@@ -9,26 +9,34 @@ are the ones that report its checks (see "Rename a required check").
 
 | File | Enforces |
 | --- | --- |
-| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review and the nine required checks, merge commits only; no deletion or force push. No bypass actors. |
-| `1.x.x-integration.json` | `1.x.x`: a verified signature on every commit added; pull requests with the nine required checks and `signed-landing`, and no required approval, merge commits only; no deletion or force push. No bypass actors. |
+| `main-protection.json` | `main`: a verified signature on every commit added; pull requests with one approval, a code owner's review, and the nine required checks and `signed-landing`, squash merges and merge commits only; no creation, deletion or force push. No bypass actors. |
+| `1.x.x-integration.json` | `1.x.x`: a verified signature on every commit added; pull requests with the nine required checks and `signed-landing`, and no required approval, squash merges and merge commits only; no creation, deletion or force push. No bypass actors. |
 | `release-tags.json` | `v*` tags can't be moved or deleted. No bypass actors. |
 
-The workflow takes effect only from `main`: the copy on `1.x.x` does nothing
-until `1.x.x` is next promoted. Apply `1.x.x-integration.json` only after that
-promotion, or every pull request into `1.x.x` waits for a check that nothing
-reports. `main` itself doesn't require `signed-landing`; add the check to
-`main-protection.json` in a change of its own if it should.
+The workflow takes effect only from `main`: a change to the copy on `1.x.x`
+does nothing until `1.x.x` is next promoted. The workflow has been on `main`
+since the last promotion, and both `main` and `1.x.x` require
+`signed-landing`. A promotion from `1.x.x` into `main`, and a pull request from
+`main` into `1.x.x`, still land as they are, with a merge commit:
+`AS_IS_LINES` in the workflow lists `1.x.x` and `main`. The paragraph on
+`signed-landing` below says when the check passes them.
 
 Every commit that a push or merge adds to `main` or `1.x.x` needs a verified
 signature. Commits already on the branch aren't checked again, but an old
 unsigned commit that a push or merge brings into an existing branch from
 another one is refused like a new one. Commits on a pull request's branch
 don't need one while it is open. Before it merges, a maintainer rewrites the
-branch as one commit, signs that commit with their own key and pushes it, and
-then merges it with a merge commit, which GitHub signs. So the target branch
-gains one commit a person signed, and one merge commit. For a pull request
-from a fork, that push needs "Allow edits by maintainers". Without it, a
-maintainer opens the same change from a branch in this repository.
+branch as one commit, signs that commit with their own key and pushes it. Once
+`signed-landing` passes, the pull request is squash-merged: GitHub makes one
+commit on the target branch, carrying the signed commit's message, and signs
+it itself. So the target branch gains that one commit, and no merge commit.
+The commit the maintainer signed stays as the pull request's head, which
+GitHub keeps as `refs/pull/<number>/head`; when `squash-sign merge` makes the
+merge, the landed commit's `Signed-commit:` line names it. A fork's branch
+isn't rewritten, because its owner can push to it at any time. Once a pull
+request from a fork is reviewed, a maintainer pushes its commits to a branch
+in this repository, opens a pull request from that branch, lands that one as
+above, and closes the fork's pull request with a link to it.
 [CONTRIBUTING.md](../../CONTRIBUTING.md#commit-messages) has the contributor's
 side of this.
 
@@ -48,10 +56,21 @@ open pull request usually means it hasn't been squashed and signed yet. If its
 message says it could not check, do what the message says, which is usually to
 re-run it. GitHub's signature rule can't tell that by itself, because it
 accepts any verified signature, GitHub's own included, such as on a web edit
-or an "Update branch" merge. A pull request from `1.x.x` or `main` merges as
-it is, and passes without being judged. That goes by the name alone, and only
-for a branch in this repository: whoever can create a branch with such a name
-can open a pull request that isn't judged, so keep those names for that use.
+or an "Update branch" merge. A pull request from `1.x.x` or `main` of this
+repository merges as it is, with any number of commits, and the check passes
+it without reading its head commit when GitHub's rules for that branch require
+`signed-landing` from GitHub Actions and a pull request, and forbid creating,
+deleting and force-pushing it, as `main-protection.json` and
+`1.x.x-integration.json` do. The branch then gains commits only through pull
+requests the check passed, and can't be made, or made again, at another
+commit. The check can't see who may bypass a ruleset, so keep these two free
+of bypass actors. If one of those rules is missing on GitHub, the check says
+which, and
+passes the pull request only if a person signed its head commit with an
+OpenPGP key that is on their own GitHub account. The head of `1.x.x` or `main`
+is usually a commit GitHub made when it merged a pull request, so the pull
+request then fails until an admin applies the missing rules. A fork's branch
+never merges as it is.
 The check is required by a ruleset with no bypass actors, so the merge button
 works only once it is green. It always runs from the default branch's copy of
 the workflow, `main`'s, whatever branch the pull request targets, so a pull
@@ -65,22 +84,24 @@ seconds after its event, and until then the commit keeps the result it had. A
 change that a workflow makes with its own token starts no run at all. It
 guards against landing a pull request by mistake, not against someone set on
 getting round it: a pull request could still add a workflow of its own that
-reports a check of the same name. `1.x.x` requires no approval, so nothing
-catches that before the merge: the maintainers audit merged pull requests
-daily, from outside this repository, and report anything that got through.
+reports a check of the same name. On `main`, review catches that. `1.x.x`
+requires no approval, so nothing catches it there before the merge: the
+maintainers audit merged pull requests daily, from outside this repository,
+and report anything that got through.
 
 If the check stops reporting, no pull request can merge into a branch that
 requires it, and that includes the pull request that fixes the workflow,
 because it too is judged by `main`'s copy. GitHub blocks `pull_request_target`
 workflows in public repositories unless an Actions policy allows them. If that
 policy names this file by its path, renaming the file stops the check. To get
-out, merge the fix straight into `main`, which doesn't require
-`signed-landing`: a fix merged into `1.x.x` does nothing until it is promoted.
-If `1.x.x` has to merge something meanwhile, a repository admin removes only
-the `signed-landing` entry from the `1.x.x-integration` ruleset on GitHub
-(Settings → Rules → Rulesets), and applies the file again afterwards. Don't
-disable that ruleset: it also holds the signature and pull-request rules. Each
-open pull request then needs a push or an edit to be judged by the fixed copy.
+out, a repository admin removes only the `signed-landing` entry from the
+`main-protection` ruleset on GitHub (Settings → Rules → Rulesets), merges the
+fix straight into `main`, and applies the file again afterwards: a fix merged
+into `1.x.x` does nothing until it is promoted. If `1.x.x` has to merge
+something meanwhile, the admin does the same with the `1.x.x-integration`
+ruleset. Don't disable either ruleset: each also holds the signature and
+pull-request rules. Each open pull request then needs a push or an edit to be
+judged by the fixed copy.
 The same way out serves when another required check can't run. A run that
 stays queued, as can happen after an Actions incident, leaves the commit's
 last result in place too: cancel it, and edit the pull request's description
@@ -89,10 +110,14 @@ run in the repository draws on that token's hourly allowance of requests. A
 flood of pull request events can use it up, and the check then fails for every
 pull request until the hour is over.
 
-The repository's settings allow merge commits only (Settings → General → Pull
-Requests). GitHub's squash merge would make the commit itself and sign it with
-GitHub's key, so no person's signature would reach the branch. Its rebase
-merge makes commits with no signature, which the rule refuses.
+The repository's settings allow squash merges and merge commits (Settings →
+General → Pull Requests). An ordinary pull request is squash-merged. GitHub
+signs the commit its squash merge makes, so GitHub's own signature satisfies
+the signature rule on the branch. What requires a person's signature is the
+`signed-landing` check, which a ruleset nobody can bypass requires on each
+branch. A pull request from `1.x.x` or `main` lands as it is, with a merge
+commit, because squashing it would lose its history. GitHub's rebase merge
+makes commits with no signature, which the rule refuses.
 
 ## Apply a change
 
@@ -114,7 +139,15 @@ apply() {
 
 Don't apply a file that requires `signed-landing` until `signed-landing.yml`
 is on `main` and the Actions policy allows it: until then nothing reports the
-check, and no pull request into a branch that requires it can merge.
+check, and no pull request into a branch that requires it can merge. It is on
+`main` now, and the check reports on every pull request.
+
+Apply `1.x.x-integration.json` and `main-protection.json` together, right
+after the promotion that brings the copy of the workflow listing `1.x.x` and
+`main` in `AS_IS_LINES` to `main`. Until that promotion `main` runs the
+previous copy, which passes `1.x.x` and `main` by name, so nothing fails; from
+the promotion on, the new copy judges a pull request from either branch, and
+it fails until both files are applied.
 
 Then run `apply` once for each ruleset file that changed. It updates the
 ruleset of that name, or creates it when GitHub has none. For example:
@@ -128,20 +161,20 @@ apply the file. When a required check moves from one ruleset to another, apply
 the one that gains it first.
 
 The merge-method setting isn't a ruleset. To set a repository up from these
-files, allow merge commits, apply the files, then turn squash and rebase
-merges off. No step leaves the repository unable to merge. The chain stops at
-the first step that fails. Fix that step and run the chain again: applying a
-file twice is harmless. Run it only once `signed-landing.yml` is on `main`,
-the default branch, and the Actions policy allows it. A pull request that is
-already open shows the check as expected until its next push or edit: edit its
-title or description to start a run.
+files, allow merge commits, apply the files, then allow squash merges and turn
+rebase merges off. No step leaves the repository unable to merge. The chain
+stops at the first step that fails. Fix that step and run the chain again:
+applying a file twice is harmless. Run it only once `signed-landing.yml` is on
+`main`, the default branch, and the Actions policy allows it. A pull request
+that is already open shows the check as expected until its next push or edit:
+edit its title or description to start a run.
 
 ```bash
 gh api -X PATCH "$repo" -F allow_merge_commit=true --silent &&
   apply .github/rulesets/main-protection.json &&
   apply .github/rulesets/1.x.x-integration.json &&
   apply .github/rulesets/release-tags.json &&
-  gh api -X PATCH "$repo" -F allow_merge_commit=true -F allow_squash_merge=false -F allow_rebase_merge=false --silent
+  gh api -X PATCH "$repo" -F allow_merge_commit=true -F allow_squash_merge=true -F allow_rebase_merge=false --silent
 ```
 
 ## Rename a required check
@@ -210,5 +243,5 @@ fi
 ```
 
 Every line should say `matches`, and the settings should show merge commits
-only. `includes_parents=false` leaves out organization rulesets, which these
-files don't hold.
+and squash merges, and no rebase merges. `includes_parents=false` leaves out
+organization rulesets, which these files don't hold.
