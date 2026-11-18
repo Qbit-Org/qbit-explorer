@@ -516,6 +516,8 @@ require('@angular/compiler');
     ['a P2MR Inscription without a content type', pinsLeaf('text').replace('00630470696e73' + '5118' + Buffer.from('text/plain;charset=utf-8').toString('hex'), '00630470696e73'), 'Unknown | 5'],
     ['an opaque one and one without a content type, apart', pinsLeaf('text').replace('00630470696e73', '00630470696e730104' + '0101') + '00630470696e7300026869' + '68', 'Unknown | 2 | Opaque | 5'],
     ['a P2MR Inscription with an encoded body', pinsLeaf('text').replace('00630470696e73', '00630470696e73' + '5902' + Buffer.from('br').toString('hex')), 'text/plain;charset=utf-8 | 5 | br'],
+    // an encoded body is its own group: its encoding is never shown on a plain body of the same content type
+    ['a plain and an encoded P2MR Inscription of one content type, apart', pinsLeaf('text') + '00630470696e73' + '5118' + Buffer.from('text/plain;charset=utf-8').toString('hex') + '5902' + Buffer.from('br').toString('hex') + '0003' + '0b0280' + '68', 'text/plain;charset=utf-8 | 5 | hello | text/plain;charset=utf-8 | 3 | br'],
   ]) {
     const shown = inscriptionsShown(leafScriptHex);
     assert(shown === text, `${name}: ${JSON.stringify(shown)}`);

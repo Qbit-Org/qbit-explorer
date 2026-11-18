@@ -34,8 +34,8 @@
 @if (inscriptions?.length && type === 'vin') {
   <div *ngFor="let contentType of inscriptionsData | keyvalue">
     <div>
-      @if (contentType.key !== 'undefined') {
-        <span class="badge badge-ord mr-1">{{ contentType.value.count > 1 ? contentType.value.count + " " : "" }}{{ contentType.value?.tag || contentType.key }}</span>
+      @if (contentType.value.type !== 'undefined') {
+        <span class="badge badge-ord mr-1">{{ contentType.value.count > 1 ? contentType.value.count + " " : "" }}{{ contentType.value?.tag || contentType.value.type }}</span>
       } @else {
         <span class="badge badge-ord mr-1" i18n="unknown">Unknown</span>
       }

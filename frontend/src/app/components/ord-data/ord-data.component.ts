@@ -19,7 +19,7 @@ export class OrdDataComponent implements OnChanges {
   toNumber = (value: bigint): number => Number(value);
 
   // Inscriptions
-  inscriptionsData: { [key: string]: { count: number, totalSize: number, text?: string; json?: JSON; tag?: string; delegate?: string; encoding?: string } };
+  inscriptionsData: { [key: string]: { type: string; count: number, totalSize: number, text?: string; json?: JSON; tag?: string; delegate?: string; encoding?: string } };
   // P2MR Inscriptions with an unknown even tag (PINS-1 section 5.4): counted apart, their content is not read
   opaqueData: { count: number, totalSize: number } | null = null;
   // Rune mints
@@ -51,7 +51,7 @@ export class OrdDataComponent implements OnChanges {
     if (changes.inscriptions && this.inscriptions) {
 
       if (this.inscriptions?.length) {
-        // keyed by content type, which is any string a transaction writes, "__proto__" included
+        // one group for each content type and encoding; both are any string a transaction writes, "__proto__" included
         this.inscriptionsData = Object.create(null);
         this.opaqueData = null;
         this.inscriptions.forEach((inscription) => {
@@ -63,23 +63,25 @@ export class OrdDataComponent implements OnChanges {
           }
 
           // General: count, total size, delegate
-          const key = inscription.content_type_str || 'undefined';
+          const type = inscription.content_type_str || 'undefined';
+          // a P2MR Inscription's encoded body (content_encoding, PINS-1 section 8) is not decoded here, so it is kept apart
+          // from plain bodies of the same content type and is not shown as text
+          const key = JSON.stringify([type, inscription.content_encoding || '']);
           if (!this.inscriptionsData[key]) {
-            this.inscriptionsData[key] = { count: 0, totalSize: 0 };
+            this.inscriptionsData[key] = { type, count: 0, totalSize: 0 };
           }
           this.inscriptionsData[key].count++;
           this.inscriptionsData[key].totalSize += inscription.body_length;
           if (inscription.delegate_txid && !this.inscriptionsData[key].delegate) {
             this.inscriptionsData[key].delegate = inscription.delegate_txid;
           }
-          // a P2MR Inscription's encoded body (content_encoding, PINS-1 section 8) is not decoded here, so it is not shown as text
           if (inscription.content_encoding) {
-            this.inscriptionsData[key].encoding = this.inscriptionsData[key].encoding || inscription.content_encoding;
+            this.inscriptionsData[key].encoding = inscription.content_encoding;
             return;
           }
 
           // Text / JSON data
-          if ((key.includes('text') || key.includes('json')) && !inscription.is_cropped && !this.inscriptionsData[key].text && !this.inscriptionsData[key].json) {
+          if ((type.includes('text') || type.includes('json')) && !inscription.is_cropped && !this.inscriptionsData[key].text && !this.inscriptionsData[key].json) {
             const decoder = new TextDecoder('utf-8');
             const text = decoder.decode(inscription.body);
             try {
