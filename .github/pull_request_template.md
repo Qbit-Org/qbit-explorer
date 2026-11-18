@@ -4,7 +4,7 @@
 
 ## Validation
 
-<!-- List the commands you ran and their results. Delete the items that do not apply. -->
+<!-- List the commands you ran and their results as list items, not as a code block under a list item: this description becomes the landed commit's message, and the landing tool refuses that shape. Delete the items that do not apply. -->
 
 - [ ] I ran the checks that AGENTS.md "Test Mapping by Area" lists for the areas this pull request touches.
 - [ ] qbit evidence where relevant: regtest or testnet4 output, such as curl responses, logs, or screenshots.
