@@ -12,6 +12,7 @@ import { PriceService } from '@app/services/price.service';
 import { StorageService } from '@app/services/storage.service';
 import { OrdApiService } from '@app/services/ord-api.service';
 import { Inscription } from '@app/shared/ord/inscription.utils';
+import { hasPinsEnvelope, pinsLeafScript } from '@app/shared/ord/pins.utils';
 import { Etching, Runestone } from '@app/shared/ord/rune.utils';
 import { ADDRESS_SIMILARITY_THRESHOLD, AddressMatch, AddressSimilarity, AddressType, AddressTypeInfo, checkedCompareAddressStrings, detectAddressType } from '@app/shared/address-utils';
 import { processInputSignatures, Sighash, SigInfo, SighashLabels, parseTaproot, witnessToP2TRScript } from '@app/shared/transaction.utils';
@@ -312,6 +313,8 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
         // parse taproot spends
         for (const vin of tx.vin) {
           this.parseScriptPathSpend(tx, vin);
+          // a P2MR Inscription (PINS-1) has its own marker and its own button
+          this.detectPinsInscription(tx, vin);
         }
 
         tx.largeInput = tx.largeInput || tx.vin.some(vin => (vin?.prevout?.value > 1000000000));
@@ -510,9 +513,10 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
             newTx.vin[index].isInscription = vin.isInscription;
           }
           // the loaded inputs are new objects, and the ones that came without a prevout (lazyPrevouts) were not
-          // parsed yet, so taprootInfo and isInscription are set again for all of them
+          // parsed yet, so taprootInfo, isInscription and isPinsInscription are set again for all of them
           for (const vin of newTx.vin) {
             this.parseScriptPathSpend(tx, vin);
+            this.detectPinsInscription(tx, vin);
           }
           this.ref.markForCheck();
         });
@@ -606,6 +610,32 @@ export class TransactionsListComponent implements OnInit, OnChanges, OnDestroy {
         tx.largeInput = true;
       }
     }
+  }
+
+  /**
+   * Sets vin.isPinsInscription when the input's leaf script holds a P2MR Inscription (PINS-1), with the same
+   * instruction walk the panel decodes with, so the button and the panel agree.
+   */
+  detectPinsInscription(tx: Transaction, vin: Vin): void {
+    if (isP2mrType(vin.prevout?.scriptpubkey_type) && hasPinsEnvelope(pinsLeafScript(vin.witness))) {
+      vin.isPinsInscription = true;
+      tx.largeInput = true;
+    }
+  }
+
+  togglePinsData(txid: string, index: number): void {
+    const tx = this.transactions.find((tx) => tx.txid === txid);
+    if (!tx) {
+      return;
+    }
+
+    const key = tx.txid + '-pins-' + index;
+    this.showOrdData[key] = this.showOrdData[key] || { show: false };
+    if (!this.showOrdData[key].inscriptions) {
+      const script = pinsLeafScript(tx.vin[index].witness);
+      this.showOrdData[key].inscriptions = script ? this.ordApiService.decodePinsInscriptions(script) : [];
+    }
+    this.showOrdData[key].show = !this.showOrdData[key].show;
   }
 
   toggleOrdData(txid: string, type: 'vin' | 'vout', index: number) {

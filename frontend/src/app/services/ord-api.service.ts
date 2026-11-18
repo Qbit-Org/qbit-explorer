@@ -3,6 +3,7 @@ import { catchError, forkJoin, map, Observable, of, switchMap, tap } from 'rxjs'
 import { Inscription } from '@app/shared/ord/inscription.utils';
 import { Transaction } from '@interfaces/electrs.interface';
 import { getNextInscriptionMark, hexToBytes, extractInscriptionData } from '@app/shared/ord/inscription.utils';
+import { parsePinsEnvelopes, pinsEnvelopeToInscription } from '@app/shared/ord/pins.utils';
 import { decipherRunestone, Runestone, Etching } from '@app/shared/ord/rune.utils';
 import { ElectrsApiService } from '@app/services/electrs-api.service';
 
@@ -93,5 +94,14 @@ export class OrdApiService {
     }
 
     return inscriptions;
+  }
+
+  /**
+   * Reads the P2MR Inscriptions (PINS-1) of a leaf script, in order, by walking its instructions (PINS-1 section 4.3).
+   * A P2MR Inscription with an unknown even tag is returned as opaque: its size only, nothing of its content
+   * (PINS-1 section 5.4).
+   */
+  decodePinsInscriptions(script: string): Inscription[] {
+    return parsePinsEnvelopes(hexToBytes(script)).map(pinsEnvelopeToInscription);
   }
 }
