@@ -765,6 +765,36 @@ require('@angular/compiler');
     quiet.showMoreInputs(unread);
     assert(unread._interestingSignatures === false && unread._showSignatures === false, `signature column after loading ordinary signatures: ${unread._interestingSignatures}`);
   }
+
+  // The lookalike-address warning compares outputs with the prevouts of the first inputs. An input that came
+  // without a prevout is compared once "show more inputs" has loaded it.
+  {
+    const { of } = require('rxjs');
+    const { TransactionsListComponent } = require('../src/app/components/transactions-list/transactions-list.component.ts');
+    const { OrdApiService } = require('../src/app/services/ord-api.service.ts');
+    const clone = (tx) => JSON.parse(JSON.stringify(tx));
+    const full = clone(mint);
+    full.vin = Array.from({ length: 14 }, () => clone(mint.vin[0]));
+    full.status = { confirmed: true, block_height: 10000, block_time: 1 };
+    const paidTo = full.vout.find((vout) => vout.scriptpubkey_address).scriptpubkey_address;
+    const middle = Math.floor(paidTo.length / 2);
+    const lookalike = paidTo.slice(0, middle - 6) + 'qpzr9y8gf2tv' + paidTo.slice(middle + 6);
+    full.vin[13].prevout.scriptpubkey_address = lookalike;
+    const lazy = clone(full);
+    lazy.fee = -1;
+    lazy.vin[13] = { ...lazy.vin[13], prevout: null, lazy: true };
+    const list = Object.assign(Object.create(TransactionsListComponent.prototype), {
+      transactions: [lazy], txPreview: true, blockTime: 1, similarityMatches: new Map(), showOrdData: {},
+      signaturesMode: 'all', rowLimit: 12, inputRowLimit: 12, showMoreIncrement: 1000, fakeScriptHashRegex: /(.+?)\1{11,}/,
+      stateService: { network: '' }, ordApiService: new OrdApiService({}), refreshOutspends$: { next: () => {} },
+    });
+    list.ngOnChanges({ transactions: {} });
+    assert(list.similarityMatches.get(lazy.txid)?.size === 0, `lookalike found before its input was loaded: ${list.similarityMatches.get(lazy.txid)?.size}`);
+    Object.assign(list, { txPreview: false, electrsApiService: { getTransaction$: () => of(clone(full)) }, ref: { markForCheck: () => {} } });
+    list.showMoreInputs(lazy);
+    const matches = list.similarityMatches.get(lazy.txid);
+    assert(matches?.has(paidTo) && matches?.has(lookalike) && matches.get(paidTo).group === matches.get(lookalike).group, `lookalike of a loaded input: ${JSON.stringify(Array.from(matches?.keys() ?? []))}`);
+  }
 }
 
 // HTTP/2 has no status text, so Angular's XHR backend fills in 'OK' and an error printed "400 OK"
