@@ -674,6 +674,71 @@ require('@angular/compiler');
       assert(entry.show && entry.inscriptions.length === 1 && entry.inscriptions[0].content_type_str === expected, `Qscription panel of loaded input ${index}: ${JSON.stringify(entry.inscriptions)}`);
     }
   }
+
+  // Inputs that came without a prevout are loaded only by "show more inputs". Its row is rendered while the list is
+  // cut short, so it stays when one of the last few inputs still has no prevout; loading them reads their signatures
+  // and sizes the amount column again.
+  {
+    const { of } = require('rxjs');
+    const { TransactionsListComponent } = require('../src/app/components/transactions-list/transactions-list.component.ts');
+    const { OrdApiService } = require('../src/app/services/ord-api.service.ts');
+    const clone = (tx) => JSON.parse(JSON.stringify(tx));
+    const withInputs = (count) => {
+      const tx = clone(mint);
+      tx.vin = Array.from({ length: count }, () => clone(mint.vin[0]));
+      tx.status = { confirmed: true, block_height: 10000, block_time: 1 };
+      return tx;
+    };
+    const listOf = (tx, signaturesMode = 'all') => {
+      const list = Object.assign(Object.create(TransactionsListComponent.prototype), {
+        transactions: [tx], txPreview: true, blockTime: 1, similarityMatches: new Map(), showOrdData: {},
+        signaturesMode, rowLimit: 12, inputRowLimit: 12, showMoreIncrement: 1000,
+        stateService: { network: '' }, ordApiService: new OrdApiService({}), updateAddressSimilarities: () => {}, refreshOutspends$: { next: () => {} },
+      });
+      list.ngOnChanges({ transactions: {} });
+      return list;
+    };
+    assert(listTemplate.includes('<tr *ngIf="tx.vin.length > getVinLimit(tx)">'), 'the "show more inputs" row follows getVinLimit');
+    // with every prevout there, up to 5 inputs past the first 12 are shown at once, as before
+    for (const [count, limit] of [[12, 12], [14, 14], [17, 17], [18, 12]]) {
+      const tx = withInputs(count);
+      assert(listOf(tx).getVinLimit(tx) === limit, `${count} inputs with prevouts: ${listOf(tx).getVinLimit(tx)} shown`);
+    }
+    const full = withInputs(14);
+    full.vin[13].prevout.value = 2_000_000_000;
+    const lazy = clone(full);
+    lazy.vin[13] = { ...lazy.vin[13], prevout: null, lazy: true };
+    const list = listOf(lazy);
+    assert(list.getVinLimit(lazy) === 12, `"show more inputs" row with an input left to load: ${list.getVinLimit(lazy)} of 14 shown`);
+    assert(list.getVinLimit(lazy, true) === 14, `the row's label counts what the click will show: ${list.getVinLimit(lazy, true)}`);
+    // 13 inputs all have their prevout, but the fee is only known once the transaction is loaded (-1 until then)
+    const noFee = withInputs(13);
+    noFee.fee = -1;
+    assert(listOf(noFee).getVinLimit(noFee) === 12 && listOf(noFee).getVinLimit(noFee, true) === 13, `13 inputs without a fee: ${listOf(noFee).getVinLimit(noFee)} shown`);
+    // past 1000 inputs the click shows 1000 and the last few with them, as before, whether or not they are loaded yet
+    const many = withInputs(1003);
+    many.fee = -1;
+    many.vin.slice(13).forEach((vin) => Object.assign(vin, { prevout: null, lazy: true }));
+    assert(listOf(many).getVinLimit(many) === 12 && listOf(many).getVinLimit(many, true) === 1003, `1003 inputs: ${listOf(many).getVinLimit(many, true)} after the click`);
+    assert(lazy._sigs[0].length === 1 && lazy._sigs[13].length === 0 && !lazy.largeInput, 'an input without a prevout has no signature yet');
+    Object.assign(list, { txPreview: false, electrsApiService: { getTransaction$: () => of(clone(full)) }, ref: { markForCheck: () => {} } });
+    list.showMoreInputs(lazy);
+    assert(lazy.vin.length === 14 && lazy.vin.every((vin) => !vin.lazy) && list.getVinLimit(lazy) === 14, `inputs shown after loading: ${list.getVinLimit(lazy)}`);
+    assert(lazy._sigs.every((sigs) => sigs.length === 1) && lazy._showSignatures === true, `signatures after loading: ${JSON.stringify(lazy._sigs.map((sigs) => sigs.length))}`);
+    assert(Object.values(lazy._sigmap).some(({ vindex }) => vindex === 13), 'signature map after loading');
+    assert(lazy.largeInput === true, 'amount column after loading an input of 20 QBT');
+    // in "interesting" mode the signature column follows the loaded inputs: with no readable signature before
+    // loading the transaction counts as interesting, and with an ordinary one on every input afterwards it does not
+    const plain = withInputs(14);
+    const unread = clone(plain);
+    unread.fee = -1;
+    unread.vin.forEach((vin) => Object.assign(vin, { prevout: null, lazy: true }));
+    const quiet = listOf(unread, 'interesting');
+    Object.assign(quiet, { txPreview: false, electrsApiService: { getTransaction$: () => of(clone(plain)) }, ref: { markForCheck: () => {} } });
+    assert(unread._interestingSignatures === true && unread._showSignatures === true, 'no readable signature counts as interesting');
+    quiet.showMoreInputs(unread);
+    assert(unread._interestingSignatures === false && unread._showSignatures === false, `signature column after loading ordinary signatures: ${unread._interestingSignatures}`);
+  }
 }
 
 // HTTP/2 has no status text, so Angular's XHR backend fills in 'OK' and an error printed "400 OK"
