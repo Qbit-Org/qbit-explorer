@@ -291,6 +291,25 @@ describe('Common', () => {
       expect(flags & TransactionFlags.inscription).toBe(0n);
     });
 
+    describe('P2MR Inscriptions', () => {
+      // regtest reveals of a PINS reference tool (qbit Core v1.0.1): an envelope with the marker "pins"
+      // (OP_0 OP_IF OP_PUSHBYTES_4 70696e73) in a P2MR leaf script
+      const { text, png, three } = require('./test-data/qbit-p2mr-pins-inscriptions.json');
+
+      test.each([
+        ['text', text.tx],
+        ['PNG', png.tx],
+        ['three envelopes', three.tx],
+      ])('flags a P2MR Inscription reveal (%s) as an envelope transaction, with and without prevouts', (_name, tx) => {
+        const flags = BigInt(Common.getTransactionFlags(tx));
+        const flagsWithoutPrevouts = BigInt(Common.getTransactionFlags(withoutPrevouts(tx)));
+
+        expect(flags & TransactionFlags.inscription).toBe(TransactionFlags.inscription);
+        expect(flags & TransactionFlags.p2mr).toBe(TransactionFlags.p2mr);
+        expect(flagsWithoutPrevouts & TransactionFlags.inscription).toBe(TransactionFlags.inscription);
+      });
+    });
+
     test('flags a P2MR leaf script that takes no arguments, without prevouts', () => {
       // a 65-byte leaf script as the first witness item makes the taproot heuristic read witness[2], which
       // does not exist, so the P2MR check must run first

@@ -324,6 +324,10 @@ export function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
 ////////////////////////////// Inscription ///////////////////////////
 
 export interface Inscription {
+  /** A P2MR Inscription with an unknown even tag: it is recognized, but its content is not to be read or shown (PINS-1 section 5.4). */
+  opaque?: boolean;
+  /** The `content_encoding` of a P2MR Inscription (PINS-1 section 8): its body is encoded and is not shown as text. */
+  content_encoding?: string;
   body?: Uint8Array;
   is_cropped?: boolean;
   body_length?: number;

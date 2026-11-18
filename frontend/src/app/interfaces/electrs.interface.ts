@@ -72,6 +72,7 @@ export interface Vin {
   lazy?: boolean;
   // Ord
   isInscription?: boolean;
+  isPinsInscription?: boolean;
   // temporary field for extracted raw simplicity scripts
   inner_simplicityscript?: string;
   // parsed taproot info

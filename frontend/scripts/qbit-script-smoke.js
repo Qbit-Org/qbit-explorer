@@ -260,6 +260,129 @@ assert(decoded.vout[0].scriptpubkey_asm === 'OP_CHECKSIGPQC', `0xb3 ASM mismatch
   assert(qscriptions[0].content_type_str === 'image/svg+xml', `qscription content type: ${qscriptions[0].content_type_str}`);
   assert(qscriptions[0].body_length === 525, `qscription body length: ${qscriptions[0].body_length}`);
 
+  // P2MR Inscriptions (PINS-1): an envelope with the marker `pins`, in P2MR leaf scripts.
+  // Regtest reveals of a PINS reference tool, mined by qbit Core v1.0.1, with what its indexer reported for each.
+  const pinsReveals = require('../../backend/src/__tests__/api/test-data/qbit-p2mr-pins-inscriptions.json');
+  const { createHash } = require('crypto');
+  const pinsScripts = {};
+  for (const [name, { tx: revealTx, expected }] of Object.entries(pinsReveals)) {
+    // the explorer API gives each input its leaf script as assembly; read it from the witness as for a decoded transaction
+    const tx = JSON.parse(JSON.stringify(revealTx));
+    tx.vin.forEach(addInnerScriptsToVin);
+    const pinsFlags = BigInt(getTransactionFlags(tx, undefined, false, undefined, ''));
+    assert((pinsFlags & TransactionFlags.inscription) === TransactionFlags.inscription, `${name}: P2MR Inscription reveal not flagged as an inscription`);
+    assert(!isNonStandard(tx, tx.status.block_height, ''), `${name}: P2MR Inscription reveal flagged as non-standard`);
+    const pinsLeaf = witnessToP2TRScript(tx.vin[0].witness);
+    pinsScripts[name] = pinsLeaf;
+    assert(pinsLeaf.includes('00630470696e73'), `${name}: P2MR Inscription mark`);
+    const decodedPins = ordApi.decodePinsInscriptions(pinsLeaf);
+    assert(decodedPins.length === expected.length, `${name}: expected ${expected.length} P2MR Inscriptions, got ${decodedPins.length}`);
+    expected.forEach((inscription, i) => {
+      const body = Buffer.from(decodedPins[i].body);
+      assert(!decodedPins[i].opaque, `${name} #${i}: opaque`);
+      assert(decodedPins[i].content_type_str === inscription.content_type, `${name} #${i}: content type ${decodedPins[i].content_type_str}`);
+      assert(decodedPins[i].body_length === inscription.body_bytes && body.length === inscription.body_bytes, `${name} #${i}: body length ${decodedPins[i].body_length}`);
+      assert(createHash('sha256').update(body).digest('hex') === inscription.body_sha256, `${name} #${i}: body hash`);
+    });
+  }
+  // two envelopes of one leaf script are read in order
+  assert(ordApi.decodePinsInscriptions(pinsScripts.three).length === pinsReveals.three.expected.length, 'envelopes of one leaf script');
+  // a marker of other bytes is not read: "pint" (00 63 04 70 69 6e 74)
+  assert(!ordApi.decodePinsInscriptions(pinsScripts.text.replace('00630470696e73', '00630470696e74')).length, 'a marker that is not pins was decoded');
+  // an unknown even tag makes a P2MR Inscription opaque: it keeps its size and shows no content
+  const opaqueScript = pinsScripts.text.replace('00630470696e73', '00630470696e73' + '0104' + '0101'); // tag 4, value 01
+  const opaque = ordApi.decodePinsInscriptions(opaqueScript);
+  assert(opaque.length === 1 && opaque[0].opaque === true && opaque[0].body.length === 0 && opaque[0].content_type_str === 'undefined' && opaque[0].body_length === 5, `opaque P2MR Inscription: ${JSON.stringify(opaque)}`);
+
+  // The PINS-1 envelope vectors (P2MR-Inscriptions/pins v1.0.1, docs/specs/vectors/envelope.json, CC0-1.0, copied
+  // verbatim): every leaf script gives exactly the envelopes the spec lists, and the button shows exactly when there
+  // is at least one
+  const { parsePinsEnvelopes, hasPinsEnvelope, pinsLeafScript, pinsDelegateTxid } = require('../src/app/shared/ord/pins.utils.ts');
+  const { hexToBytes } = require('../src/app/shared/ord/inscription.utils.ts');
+  const envelopeVectors = require('../../backend/src/__tests__/api/test-data/qbit-pins-envelope-vectors.json');
+  assert(envelopeVectors.cases.length === 20, `PINS-1 envelope vectors: ${envelopeVectors.cases.length}`);
+  for (const { name, script_hex: scriptHex, envelopes } of envelopeVectors.cases) {
+    const read = parsePinsEnvelopes(hexToBytes(scriptHex)).map((envelope) => ({
+      fields: envelope.fields.map(({ tag, value }) => ({ tag, value_hex: Buffer.from(value).toString('hex') })),
+      body_hex: Buffer.from(envelope.body).toString('hex'),
+      flags: envelope.flags,
+    }));
+    assert(JSON.stringify(read) === JSON.stringify(envelopes), `PINS-1 vector "${name}": ${JSON.stringify(read)}`);
+    assert(hasPinsEnvelope(scriptHex) === envelopes.length > 0, `PINS-1 vector "${name}": button`);
+    assert(ordApi.decodePinsInscriptions(scriptHex).length === envelopes.length, `PINS-1 vector "${name}": panel`);
+  }
+
+  // Crafted leaf scripts. Each starts with <32 bytes of 0x02> OP_CHECKSIGPQC, as the vectors do.
+  const leaf = (rest) => '20' + '02'.repeat(32) + 'b3' + rest;
+  const ascii = (text) => Buffer.from(text).toString('hex');
+  const decodeOne = (scriptHex) => {
+    const read = ordApi.decodePinsInscriptions(scriptHex);
+    assert(read.length === 1, `expected one P2MR Inscription in ${scriptHex.slice(0, 80)}…, got ${read.length}`);
+    return read[0];
+  };
+  // marker bytes inside a push are data: an image/png envelope whose body is one push of envelope bytes is one
+  // P2MR Inscription, and the same push dropped by OP_DROP, with no envelope around it, is none
+  const inner = '00630470696e73510a' + ascii('text/plain') + '0004' + ascii('FAKE') + '68';
+  const outer = decodeOne(leaf('00630470696e735109' + ascii('image/png') + '001a' + inner + '68'));
+  assert(outer.content_type_str === 'image/png' && Buffer.from(outer.body).toString('hex') === inner, `envelope bytes in a body push: ${JSON.stringify(outer)}`);
+  assert(!ordApi.decodePinsInscriptions(leaf('1a' + inner + '75')).length && !hasPinsEnvelope(leaf('1a' + inner + '75')), 'envelope bytes in a dropped push were read');
+  // the marker shifted by one nibble inside a push gives no button
+  assert(!hasPinsEnvelope(leaf('08f00630470696e73075')), 'marker at a nibble offset gives a button');
+  // a body separator written as OP_PUSHDATA1 with length 0 reads like OP_0 (PINS-1 section 4.3)
+  const pushdataSeparator = decodeOne(leaf('00630470696e73510a' + ascii('text/plain') + '4c0005' + ascii('hello') + '68'));
+  assert(pushdataSeparator.content_type_str === 'text/plain' && Buffer.from(pushdataSeparator.body).toString() === 'hello', `OP_PUSHDATA1 separator: ${JSON.stringify(pushdataSeparator)}`);
+  // a tag of more than one byte is an unknown tag with the parity of its first byte (PINS-1 section 5.1): 0200 and
+  // 0200000001 are even, so the P2MR Inscription is opaque; 0100 is odd and ignored, so it has no content type
+  for (const tag of ['0200', '0200000001']) {
+    const multiByte = decodeOne(leaf('00630470696e73510a' + ascii('text/plain') + (tag.length / 2).toString(16).padStart(2, '0') + tag + '010100' + '06' + ascii('secret') + '68'));
+    assert(multiByte.opaque === true && multiByte.body.length === 0 && multiByte.body_length === 6, `even tag ${tag}: ${JSON.stringify(multiByte)}`);
+  }
+  const oddTag = decodeOne(leaf('00630470696e730201000' + '9' + ascii('text/html') + '0005' + ascii('hello') + '68'));
+  assert(!oddTag.opaque && oddTag.content_type_str === 'undefined' && Buffer.from(oddTag.body).toString() === 'hello', `odd tag 0100: ${JSON.stringify(oddTag)}`);
+  // a negative-looking OP_PUSHDATA4 length (fbffffff) is a push past the end of the script: the script cannot be
+  // decoded and holds no envelope, alone or inside an ordinary data push
+  for (const scriptHex of [leaf('00630470696e734efbffffff'), leaf('0c00630470696e734efbffffff75'), leaf('00630470696e734effffffff00')]) {
+    assert(!ordApi.decodePinsInscriptions(scriptHex).length && !hasPinsEnvelope(scriptHex), `truncated OP_PUSHDATA4: ${scriptHex}`);
+  }
+  // a P2MR Inscription whose body is many pushes of envelope bytes is read once, in linear time
+  {
+    const pushes = 50_000;
+    const big = leaf('00630470696e735109' + ascii('image/png') + '00' + '0800630470696e7300'.repeat(pushes) + '68');
+    const started = Date.now();
+    const read = decodeOne(big);
+    const elapsed = Date.now() - started;
+    assert(big.length / 2 > 400_000 && read.body_length === 8 * pushes && read.is_cropped, `large body: ${read.body_length}`);
+    assert(hasPinsEnvelope(big) && elapsed < 2000, `large body read in ${elapsed} ms`);
+  }
+  // metadata (field 5) in many 1-byte chunks (OP_5 <01>) is joined once, in linear time
+  {
+    const chunks = 134_000;
+    const big = leaf('00630470696e73510a' + ascii('text/plain') + '550101'.repeat(chunks) + '0005' + ascii('hello') + '68');
+    const started = Date.now();
+    const [envelope] = parsePinsEnvelopes(hexToBytes(big));
+    const elapsed = Date.now() - started;
+    const metadata = envelope.fields.find(({ tag }) => tag === 5).value;
+    assert(big.length / 2 > 400_000 && metadata.length === chunks && metadata.every((byte) => byte === 1) && Buffer.from(envelope.body).toString() === 'hello', `large metadata: ${metadata.length}`);
+    assert(decodeOne(big).content_type_str === 'text/plain' && elapsed < 2000, `large metadata read in ${elapsed} ms`);
+  }
+  // content_encoding (field 9) is kept, so the panel does not show an encoded body as text (PINS-1 section 8)
+  const encoded = decodeOne(leaf('00630470696e73510a' + ascii('text/plain') + '5902' + ascii('br') + '0003' + '0b0280' + '68'));
+  assert(encoded.content_encoding === 'br' && encoded.content_type_str === 'text/plain', `content_encoding: ${JSON.stringify(encoded)}`);
+  // delegate (field 11): the txid of a binary P2MR Inscription ID, with or without an index (PINS-1 section 6.1)
+  const txid = 'ab'.repeat(31) + '01';
+  const internal = Buffer.from(txid, 'hex').reverse().toString('hex');
+  assert(pinsDelegateTxid(hexToBytes(internal)) === txid && pinsDelegateTxid(hexToBytes(internal + '01')) === txid && pinsDelegateTxid(hexToBytes(internal + 'ffffffff')) === txid, 'delegate txid');
+  for (const value of [internal.slice(2), internal + '00', internal + '0100', internal + '0102030405']) {
+    assert(pinsDelegateTxid(hexToBytes(value)) === null, `delegate ${value.length / 2} bytes is not a binary ID`);
+  }
+  const delegating = decodeOne(leaf('00630470696e735b21' + internal + '0268'));
+  assert(delegating.delegate_txid === txid, `delegate with index 2: ${delegating.delegate_txid}`);
+  // envelopes are looked for in the leaf script of leaf version 0xc0 only, after an annex is removed (PINS-1 section 4.2)
+  const pinsWitness = pinsReveals.text.tx.vin[0].witness;
+  const [, revealLeafScript, revealControl] = pinsWitness;
+  assert(pinsLeafScript(pinsWitness) === revealLeafScript && pinsLeafScript([...pinsWitness, '50']) === revealLeafScript, 'leaf script of a 0xc0 spend');
+  assert(pinsLeafScript(['00', revealLeafScript, 'c1' + revealControl.slice(2)]) === revealLeafScript, 'leaf version 0xc0 with the parity bit');
+  assert(pinsLeafScript(['00', revealLeafScript, 'c2' + revealControl.slice(2)]) === null && pinsLeafScript([revealLeafScript, '50']) === null && pinsLeafScript([revealControl]) === null, 'leaf script outside leaf version 0xc0');
   // push lengths are read unsigned, and a push past the end of the leaf script is a failed parse: an OP_PUSHDATA4
   // length of fbffffff (4294967291 bytes, -5 when read signed) returns at once, in a field or in the body, and a
   // truncated direct push gives no qscription
@@ -307,7 +430,7 @@ require('@angular/compiler');
 
   // Renders a copy of componentClass without its constructor's dependency injection: the copy takes its
   // fields from new componentClass(...args) and its methods from the class
-  const render = (componentClass, templateFile, args, imports, setup) => {
+  const render = (componentClass, templateFile, args, imports, setup, inlineTemplate) => {
     class Rendered {
       constructor() {
         Object.assign(this, new componentClass(...args));
@@ -316,7 +439,7 @@ require('@angular/compiler');
     for (const name of Object.getOwnPropertyNames(componentClass.prototype).filter((name) => name !== 'constructor')) {
       Rendered.prototype[name] = componentClass.prototype[name];
     }
-    const template = fs.readFileSync(path.join(frontendRoot, templateFile), 'utf8');
+    const template = inlineTemplate ?? fs.readFileSync(path.join(frontendRoot, templateFile), 'utf8');
     Component({ selector: 'qbit-smoke', template, imports: [CommonModule, ...imports], schemas: [NO_ERRORS_SCHEMA] })(Rendered);
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideRouter([])] });
@@ -360,6 +483,8 @@ require('@angular/compiler');
   // A qrune's name links to its etching only when the etching's txid is known
   const { OrdDataComponent } = require('../src/app/components/ord-data/ord-data.component.ts');
   const { decipherRunestone } = require('../src/app/shared/ord/rune.utils.ts');
+  const { OrdApiService } = require('../src/app/services/ord-api.service.ts');
+  const { witnessToP2TRScript } = require('../src/app/shared/transaction.utils.ts');
   const passthrough = (name) => Pipe({ name })(class { transform(value) { return value; } });
   const ordData = (runestone, runeInfo) => {
     const element = render(OrdDataComponent, 'src/app/components/ord-data/ord-data.component.html', [],
@@ -372,6 +497,133 @@ require('@angular/compiler');
       links: Array.from(element.querySelectorAll('a')).map((link) => link.getAttribute('href')),
     };
   };
+  // what the ord-data component shows for the P2MR Inscriptions of a leaf script
+  const ordApi = new OrdApiService({});
+  const inscriptionsShown = (leafScriptHex) => {
+    const element = render(OrdDataComponent, 'src/app/components/ord-data/ord-data.component.html', [],
+      [RouterLink, passthrough('relativeUrl'), passthrough('amountShortener'), passthrough('bytes')], (ord) => {
+        Object.assign(ord, { inscriptions: ordApi.decodePinsInscriptions(leafScriptHex), type: 'vin' });
+        ord.ngOnChanges({ inscriptions: {} });
+      });
+    return [...Array.from(element.querySelectorAll('.badge, pre'), (node) => node.textContent.trim())].join(' | ');
+  };
+  const pinsReveals = require('../../backend/src/__tests__/api/test-data/qbit-p2mr-pins-inscriptions.json');
+  const pinsLeaf = (name) => witnessToP2TRScript(pinsReveals[name].tx.vin[0].witness);
+  for (const [name, leafScriptHex, text] of [
+    ['a P2MR Inscription with text', pinsLeaf('text'), 'text/plain;charset=utf-8 | 5 | hello'],
+    ['a P2MR Inscription with a PNG', pinsLeaf('png'), 'image/png | 97'],
+    ['an opaque P2MR Inscription', pinsLeaf('text').replace('00630470696e73', '00630470696e730104' + '0101'), 'Opaque | 5'],
+    ['a P2MR Inscription without a content type', pinsLeaf('text').replace('00630470696e73' + '5118' + Buffer.from('text/plain;charset=utf-8').toString('hex'), '00630470696e73'), 'Unknown | 5'],
+    ['an opaque one and one without a content type, apart', pinsLeaf('text').replace('00630470696e73', '00630470696e730104' + '0101') + '00630470696e7300026869' + '68', 'Unknown | 2 | Opaque | 5'],
+    ['a P2MR Inscription with an encoded body', pinsLeaf('text').replace('00630470696e73', '00630470696e73' + '5902' + Buffer.from('br').toString('hex')), 'text/plain;charset=utf-8 | 5 | br'],
+    // an encoded body is its own group: its encoding is never shown on a plain body of the same content type
+    ['a plain and an encoded P2MR Inscription of one content type, apart', pinsLeaf('text') + '00630470696e73' + '5118' + Buffer.from('text/plain;charset=utf-8').toString('hex') + '5902' + Buffer.from('br').toString('hex') + '0003' + '0b0280' + '68', 'text/plain;charset=utf-8 | 5 | hello | text/plain;charset=utf-8 | 3 | br'],
+  ]) {
+    const shown = inscriptionsShown(leafScriptHex);
+    assert(shown === text, `${name}: ${JSON.stringify(shown)}`);
+  }
+
+  // a content type "__proto__" is a group like any other and writes nothing to Object.prototype
+  {
+    const protoHex = Buffer.from('__proto__').toString('hex');
+    const delegateHex = '20' + 'ab'.repeat(32);
+    const shownProto = inscriptionsShown('20' + '02'.repeat(32) + 'b3' + '00630470696e735109' + protoHex + '5b' + delegateHex + '00017868');
+    assert(shownProto === '__proto__ | 1', `__proto__ content type: ${JSON.stringify(shownProto)}`);
+    const ordProto = new OrdApiService({}).decodeInscriptions('20' + '02'.repeat(32) + 'b3' + '0063036f7264' + '010109' + protoHex + '01' + '0b' + delegateHex + '00017868');
+    assert(ordProto.length === 1 && ordProto[0].content_type_str === '__proto__', `ord __proto__ envelope: ${JSON.stringify(ordProto)}`);
+    const element = render(OrdDataComponent, 'src/app/components/ord-data/ord-data.component.html', [],
+      [RouterLink, passthrough('relativeUrl'), passthrough('amountShortener'), passthrough('bytes')], (ord) => {
+        Object.assign(ord, { inscriptions: ordProto, type: 'vin' });
+        ord.ngOnChanges({ inscriptions: {} });
+      });
+    assert(element.querySelector('.badge')?.textContent.trim() === '__proto__', 'ord __proto__ group');
+    for (const name of ['count', 'totalSize', 'delegate']) {
+      assert(!Object.prototype.hasOwnProperty.call(Object.prototype, name), `Object.prototype.${name} was written`);
+    }
+    assert(inscriptionsShown(pinsLeaf('png')) === 'image/png | 97', 'a later panel inherits a delegate');
+  }
+
+  // a delegate link reads "Source qscription" as before, and "Source inscription" next to a P2MR Inscription
+  const delegateLink = (pins) => {
+    const element = render(OrdDataComponent, 'src/app/components/ord-data/ord-data.component.html', [],
+      [RouterLink, passthrough('relativeUrl'), passthrough('amountShortener'), passthrough('bytes')], (ord) => {
+        const delegated = { content_type_str: 'text/plain', body: new Uint8Array(), is_cropped: false, body_length: 5, delegate_txid: '11'.repeat(32) };
+        Object.assign(ord, pins ? { inscriptions: [delegated], type: 'vin', pins } : { inscriptions: [delegated], type: 'vin' });
+        ord.ngOnChanges({ inscriptions: {} });
+      });
+    return element.querySelector('a')?.textContent.trim();
+  };
+  assert(delegateLink(false) === 'Source qscription' && delegateLink(true) === 'Source inscription', `delegate links: ${delegateLink(false)} / ${delegateLink(true)}`);
+
+  // the input buttons of the transaction list, on the list component's own code and template: a P2MR Inscription
+  // input gets the PINS button, an ord input the Qscription button as before, any other input none
+  const { TransactionsListComponent } = require('../src/app/components/transactions-list/transactions-list.component.ts');
+  const { addInnerScriptsToVin } = require('../src/app/shared/transaction.utils.ts');
+  const listTemplate = fs.readFileSync(path.join(frontendRoot, 'src/app/components/transactions-list/transactions-list.component.html'), 'utf8');
+  const buttonLines = listTemplate.split('\n').filter((line) => /<button \*ngIf="vin\.(isInscription|isPinsInscription)"/.test(line));
+  assert(buttonLines.length === 2 && /Qscription<\/button>/.test(buttonLines[0]) && />PINS<\/button>/.test(buttonLines[1]), 'input buttons in the list template');
+  const clone = (tx) => JSON.parse(JSON.stringify(tx));
+  const listTx = (tx) => {
+    const copy = clone(tx);
+    copy.status = { confirmed: true, block_height: 10000, block_time: 1 };
+    copy.vin.forEach(addInnerScriptsToVin);
+    const list = Object.assign(Object.create(TransactionsListComponent.prototype), {
+      transactions: [copy], txPreview: true, blockTime: 1, similarityMatches: new Map(), showOrdData: {},
+      stateService: { network: '' }, ordApiService: ordApi, updateAddressSimilarities: () => {}, refreshOutspends$: { next: () => {} },
+    });
+    list.ngOnChanges({ transactions: {} });
+    return { list, tx: copy };
+  };
+  const inputButtons = (vin) => {
+    const template = buttonLines.join('\n');
+    const element = render(class {}, null, [], [], (host) => { host.vin = vin; }, template);
+    return Array.from(element.querySelectorAll('button'), (button) => button.textContent.trim());
+  };
+  const plainSpend = clone(mint);
+  for (const [name, source, buttons] of [
+    ['a P2MR Inscription reveal', pinsReveals.text.tx, ['PINS']],
+    ['an ord qscription reveal', etching, ['Qscription']],
+    ['a spend without an envelope', plainSpend, []],
+  ]) {
+    const { tx } = listTx(source);
+    const shown = inputButtons(tx.vin[0]);
+    assert(JSON.stringify(shown) === JSON.stringify(buttons), `${name}: buttons ${JSON.stringify(shown)}`);
+  }
+  // inputs past the first ones can come without a prevout (lazyPrevouts); the PINS button is set once
+  // "show more inputs" has loaded them
+  {
+    const { of } = require('rxjs');
+    const full = clone(pinsReveals.text.tx);
+    full.vin = [...Array(13).fill(clone(mint).vin[0]), full.vin[0]];
+    const lazy = clone(full);
+    lazy.vin[13] = { ...lazy.vin[13], prevout: null, lazy: true };
+    const { list, tx } = listTx(lazy);
+    assert(!tx.vin[13].isPinsInscription, 'PINS button on an input without a prevout');
+    Object.assign(list, { txPreview: false, electrsApiService: { getTransaction$: () => of(clone(full)) }, ref: { markForCheck: () => {} } });
+    list.loadMoreInputs(tx);
+    assert(tx.vin[13].isPinsInscription === true && tx.vin.slice(0, 13).every((vin) => !vin.isPinsInscription), 'PINS button after the inputs are loaded');
+    assert(JSON.stringify(inputButtons(tx.vin[13])) === JSON.stringify(['PINS']), 'PINS button on a loaded input');
+  }
+  // the PINS panel row is highlighted with its input, as the Qscription panel row is
+  {
+    const rowClasses = (key) => listTemplate.match(new RegExp(`<tr \\*ngIf="showOrdData\\[tx\\.txid \\+ '-${key}-' \\+ vindex\\]\\?\\.show" (\\[ngClass\\]="[^"]*")`))?.[1];
+    assert(rowClasses('vin') && rowClasses('pins') === rowClasses('vin'), 'PINS panel row classes');
+  }
+  // the PINS button opens the P2MR Inscriptions of its input in the panel; the Qscription button still opens the ord ones
+  {
+    const { list, tx } = listTx(pinsReveals.text.tx);
+    list.togglePinsData(tx.txid, 0);
+    const entry = list.showOrdData[`${tx.txid}-pins-0`];
+    assert(entry.show && entry.inscriptions.length === 1 && entry.inscriptions[0].content_type_str === 'text/plain;charset=utf-8', `PINS panel: ${JSON.stringify(entry)}`);
+    list.togglePinsData(tx.txid, 0);
+    assert(entry.show === false, 'PINS button does not close its panel');
+    assert(!Object.keys(list.showOrdData).some((key) => key.endsWith('-vin-0')), 'PINS button opened the Qscription panel');
+    const ord = listTx(etching);
+    ord.list.toggleOrdData(ord.tx.txid, 'vin', 0);
+    const ordEntry = ord.list.showOrdData[`${ord.tx.txid}-vin-0`];
+    assert(ordEntry.show && ordEntry.inscriptions.length === 1 && ordEntry.inscriptions[0].content_type_str === 'image/svg+xml', `Qscription panel: ${JSON.stringify(ordEntry)}`);
+  }
+
   const mintRunestone = decipherRunestone(mint);
   const etched = decipherRunestone(etching).etching;
   const transfer = { edicts: [{ id: { toString: () => '163891:2' }, amount: 1n, output: 1 }] };

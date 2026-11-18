@@ -34,19 +34,30 @@
 @if (inscriptions?.length && type === 'vin') {
   <div *ngFor="let contentType of inscriptionsData | keyvalue">
     <div>
-      @if (contentType.key !== 'undefined') {
-        <span class="badge badge-ord mr-1">{{ contentType.value.count > 1 ? contentType.value.count + " " : "" }}{{ contentType.value?.tag || contentType.key }}</span>
+      @if (contentType.value.type !== 'undefined') {
+        <span class="badge badge-ord mr-1">{{ contentType.value.count > 1 ? contentType.value.count + " " : "" }}{{ contentType.value?.tag || contentType.value.type }}</span>
       } @else {
         <span class="badge badge-ord mr-1" i18n="unknown">Unknown</span>
       }
       <span class="badge badge-ord" *ngIf="contentType.value.totalSize > 0">{{ contentType.value.totalSize | bytes:2:'B':undefined:true }}</span>
+      <span class="badge badge-ord ml-1" *ngIf="contentType.value.encoding">{{ contentType.value.encoding }}</span>
       <a *ngIf="contentType.value.delegate" [routerLink]="['/tx' | relativeUrl, contentType.value.delegate]">
-        <span i18n="ord.source-inscription">Source qscription</span>
+        @if (pins) {
+          <span i18n="ord.source-pins">Source inscription</span>
+        } @else {
+          <span i18n="ord.source-inscription">Source qscription</span>
+        }
       </a>
     </div>
     <pre *ngIf="contentType.value.json" class="name" style="white-space: pre-wrap; word-break: break-word;">{{ contentType.value.json | json }}</pre>
     <pre *ngIf="contentType.value.text" class="name" style="white-space: pre-wrap; word-break: break-word;">{{ contentType.value.text }}</pre>
     </div>
+  @if (opaqueData) {
+    <div>
+      <span class="badge badge-ord mr-1">{{ opaqueData.count > 1 ? opaqueData.count + " " : "" }}<ng-container i18n="ord.opaque">Opaque</ng-container></span>
+      <span class="badge badge-ord" *ngIf="opaqueData.totalSize > 0">{{ opaqueData.totalSize | bytes:2:'B':undefined:true }}</span>
+    </div>
+  }
 }
 
 @if (!runestone && type === 'vout') {
