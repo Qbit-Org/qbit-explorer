@@ -26,17 +26,19 @@ signature. Commits already on the branch aren't checked again, but an old
 unsigned commit that a push or merge brings into an existing branch from
 another one is refused like a new one. Commits on a pull request's branch
 don't need one while it is open. Before it merges, a maintainer rewrites the
-branch as one commit, signs that commit with their own key and pushes it. For
-a pull request from a fork, that push needs "Allow edits by maintainers".
-Without it, a maintainer opens the same change from a branch in this
-repository. Once `signed-landing` passes, the pull request is squash-merged:
-GitHub makes one commit on the target branch, carrying the signed commit's
-message, and signs it itself. So the target branch gains that one commit, and
-no merge commit. The commit the maintainer signed stays as the pull request's
-head, which GitHub keeps as `refs/pull/<number>/head`; when
-`squash-sign merge` makes the merge, the landed commit's `Signed-commit:` line
-names it. [CONTRIBUTING.md](../../CONTRIBUTING.md#commit-messages) has the
-contributor's side of this.
+branch as one commit, signs that commit with their own key and pushes it. Once
+`signed-landing` passes, the pull request is squash-merged: GitHub makes one
+commit on the target branch, carrying the signed commit's message, and signs
+it itself. So the target branch gains that one commit, and no merge commit.
+The commit the maintainer signed stays as the pull request's head, which
+GitHub keeps as `refs/pull/<number>/head`; when `squash-sign merge` makes the
+merge, the landed commit's `Signed-commit:` line names it. A fork's branch
+isn't rewritten, because its owner can push to it at any time. Once a pull
+request from a fork is reviewed, a maintainer pushes its commits to a branch
+in this repository, opens a pull request from that branch, lands that one as
+above, and closes the fork's pull request with a link to it.
+[CONTRIBUTING.md](../../CONTRIBUTING.md#commit-messages) has the contributor's
+side of this.
 
 A pull request that promotes `1.x.x` into `main` is the exception. `1.x.x`
 can't be rewritten, so it merges as it is, with a merge commit, and every
