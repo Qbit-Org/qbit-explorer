@@ -65,13 +65,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: qbit-explorer
           persist-credentials: false
 
       - name: Checkout qbit-electrs
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: Qbit-Org/qbit-electrs
           ref: ${{ env.QBIT_ELECTRS_SHA }}
@@ -91,7 +91,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "26.13.1"
           registry-url: "https://registry.npmjs.org"
@@ -106,7 +106,7 @@ jobs:
       # One cache holds the crates both Rust builds download; the caches below
       # hold only each build's target directory.
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -117,14 +117,14 @@ jobs:
             ${{ runner.os }}-cargo-registry-regtest-
 
       - name: Cache rust/gbt build
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: qbit-explorer/rust/gbt/target/
           # Exact key only, so old artifacts don't pile up in the cache.
           key: ${{ runner.os }}-gbt-target-${{ steps.gettoolchain.outputs.gbt }}-${{ hashFiles('qbit-explorer/rust/gbt/**/Cargo.lock') }}
 
       - name: Install ${{ steps.gettoolchain.outputs.gbt }} Rust toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ steps.gettoolchain.outputs.gbt }}
 
@@ -156,7 +156,7 @@ jobs:
       # builds from scratch and saves right away, even if a later step fails.
       - name: Restore qbit-electrs binary
         id: electrs-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: qbit-electrs/target/release/electrs
           key: ${{ runner.os }}-glibc${{ steps.gettoolchain.outputs.glibc }}-qbit-electrs-bin-${{ steps.gettoolchain.outputs.electrs }}-${{ env.QBIT_ELECTRS_SHA }}
@@ -170,7 +170,7 @@ jobs:
 
       - name: Install ${{ steps.gettoolchain.outputs.electrs }} Rust toolchain for qbit-electrs
         if: steps.electrs-cache.outputs.cache-hit != 'true'
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ steps.gettoolchain.outputs.electrs }}
 
@@ -181,7 +181,7 @@ jobs:
 
       - name: Save qbit-electrs binary
         if: steps.electrs-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: qbit-electrs/target/release/electrs
           key: ${{ steps.electrs-cache.outputs.cache-primary-key }}
@@ -209,7 +209,7 @@ jobs:
         working-directory: qbit-explorer/backend
 
       - name: Cache the Cypress binary
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/Cypress
           key: ${{ runner.os }}-cypress-${{ hashFiles('qbit-explorer/frontend/package-lock.json') }}
@@ -247,7 +247,7 @@ jobs:
 
       - name: Upload regtest logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: qbit-regtest-logs
           path: ${{ env.QBIT_REGTEST_DIR }}/logs/
@@ -256,7 +256,7 @@ jobs:
 
       - name: Upload browser test screenshots
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: qbit-regtest-screenshots
           path: qbit-explorer/frontend/cypress/screenshots/

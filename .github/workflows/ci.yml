@@ -26,13 +26,13 @@ jobs:
     name: Backend (${{ matrix.flavor }}) - node ${{ matrix.node }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: ${{ matrix.node }}/${{ matrix.flavor }}
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           registry-url: "https://registry.npmjs.org"
@@ -43,7 +43,7 @@ jobs:
         run: npm install -g npm@11.12.0
 
       - name: Cache node modules
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ matrix.node }}/${{ matrix.flavor }}/backend/node_modules
           key: ${{ runner.os }}-backend-${{ matrix.flavor }}-node-${{ matrix.node }}-${{ hashFiles(format('{0}/{1}/backend/package-lock.json', matrix.node, matrix.flavor)) }}
@@ -59,7 +59,7 @@ jobs:
         working-directory: ${{ matrix.node }}/${{ matrix.flavor }}
 
       - name: Cache Rust dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/bin/
@@ -73,7 +73,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Install ${{ steps.gettoolchain.outputs.toolchain }} Rust toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ steps.gettoolchain.outputs.toolchain }}
 
@@ -116,7 +116,7 @@ jobs:
       CARGO_AUDIT_SHA256: 7fb9497f8594b389e5fce5ef9b92db08432996895b2e0c5a0167a69ed445c428
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
@@ -132,7 +132,7 @@ jobs:
       # Only the downloaded crates. The tests build from scratch in under a
       # minute, so there's no target/ to go stale under an unchanged key.
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -143,7 +143,7 @@ jobs:
             ${{ runner.os }}-cargo-registry-gbt-test-
 
       - name: Install ${{ steps.gettoolchain.outputs.toolchain }} Rust toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: ${{ steps.gettoolchain.outputs.toolchain }}
 
@@ -184,13 +184,13 @@ jobs:
     name: Frontend (${{ matrix.flavor }}) - node ${{ matrix.node }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: ${{ matrix.node }}/${{ matrix.flavor }}
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           registry-url: "https://registry.npmjs.org"
@@ -201,7 +201,7 @@ jobs:
         run: npm install -g npm@11.12.0
 
       - name: Cache node modules
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ matrix.node }}/${{ matrix.flavor }}/frontend/node_modules
           key: ${{ runner.os }}-frontend-${{ matrix.flavor }}-node-${{ matrix.node }}-${{ hashFiles(format('{0}/{1}/frontend/package-lock.json', matrix.node, matrix.flavor)) }}
@@ -277,7 +277,7 @@ jobs:
 
     steps: 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           path: docker
           persist-credentials: false
@@ -309,12 +309,12 @@ jobs:
     name: Repository checks
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "26.13.1"
 
